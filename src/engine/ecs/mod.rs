@@ -30,13 +30,10 @@ impl World {
     /// Replaces any existing entity with the same id.
     pub fn add_entity(&mut self, mut e: Entity) {
         let id = e.id;
-
-        // Keep ids monotonic if user supplies explicit ids.
         self.next_id = self.next_id.max(id.saturating_add(1));
 
-        // Run component init hooks before storing.
         for c in e.components.iter_mut() {
-            c.init(self, id);
+            c.init(self, id); // &mut World -> &World coercion
         }
 
         self.entities.insert(id, e);
@@ -60,8 +57,10 @@ impl World {
 
     /// Add a component to an already-registered entity (runs `init()` immediately).
     pub fn add_component(&mut self, id: EntityId, mut c: Box<dyn Component>) {
+        // init only needs read access to the world, so do it before borrowing the entity mutably
+        c.init(&*self, id);
+
         if let Some(e) = self.entities.get_mut(&id) {
-            c.init(self, id);
             e.components.push(c);
         }
     }

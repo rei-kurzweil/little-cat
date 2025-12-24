@@ -9,7 +9,6 @@ use std::any::Any;
 pub trait Component: Any + 'static + Send + Sync {
     /// Lifecycle hook: called when the component is registered with the world.
     ///
-    /// Default is intentionally a no-op so most components don't need to implement it.
-    /// Override this only if the component needs to register resources/state into `World`.
-    fn init(&mut self, _world: &mut crate::engine::ecs::World, _entity: EntityId) {}
+    /// Use this only for reading world state / other components. No world mutation.
+    fn init(&mut self, _world: &crate::engine::ecs::World, _entity: EntityId) {}
 }

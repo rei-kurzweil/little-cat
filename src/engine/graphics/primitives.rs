@@ -19,12 +19,11 @@ impl Default for Transform {
     }
 }
 
-/// Renderer-owned resource handles live in `engine::graphics`.
-use crate::engine::graphics::{MaterialHandle, MeshHandle};
+
 
 /// Renderable component: references renderer-managed resources.
 /// Vulkan-minded: mesh -> vertex/index buffers; material -> pipeline/layout + descriptors.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Renderable {
     pub mesh: MeshHandle,
     pub material: MaterialHandle,
@@ -69,4 +68,42 @@ pub struct Mesh {
     pub index_buffer: BufferHandle,
     pub index_count: u32,
     pub vertex_layout: &'static VertexLayout,
+}
+
+
+
+/// Renderer-owned resource handles (lightweight ids into renderer/asset tables).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct MeshHandle(pub u32);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct MaterialHandle(pub u32);
+
+/// Renderer-owned material definition (API-agnostic placeholder).
+/// For now we reference shaders by name/path; later this becomes pipeline state + descriptor layouts.
+#[derive(Debug, Clone)]
+pub struct Material {
+    pub vertex_shader: &'static str,
+    pub fragment_shader: &'static str,
+
+    // Later:
+    // pub pipeline_config: PipelineConfig,
+    // pub uniforms: MaterialUniforms,
+}
+
+// Optional convenience: built-in material names/paths.
+impl Material {
+    pub const UNLIT_FULLSCREEN: Material = Material {
+        vertex_shader: "engine/graphics/shaders/vertex/fullscreen-triangle.glsl",
+        fragment_shader: "engine/graphics/shaders/fragment/unlit-shader.glsl",
+    };
+}
+
+impl MeshHandle {
+    pub const CUBE: MeshHandle = MeshHandle(0);
+    pub const TETRAHEDRON: MeshHandle = MeshHandle(1);
+}
+
+impl MaterialHandle {
+    pub const UNLIT_FULLSCREEN: MaterialHandle = MaterialHandle(0);
 }

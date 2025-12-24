@@ -2,7 +2,8 @@ pub mod primitives;
 pub mod renderer;
 pub mod visual_world;
 
-pub use renderer::{MaterialHandle, MeshHandle, Renderer};
+pub use primitives::{Material, MaterialHandle, MeshHandle, Renderable, Transform};
+pub use renderer::Renderer;
 pub use visual_world::{Instance, VisualWorld};
 
 /// Graphics/Vulkan placeholder.

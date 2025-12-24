@@ -5,6 +5,9 @@ edition = "2024"
 
 [dependencies]
 ash = "0.38"
+ash-window = "0.13"
+raw-window-handle = "0.6"
+
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 openxr = "0.19"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2", "json"] }
