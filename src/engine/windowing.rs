@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crate::engine::{EngineError, EngineResult};
+use crate::engine::user_input::UserInput;
 
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, KeyEvent, WindowEvent};
@@ -14,8 +15,9 @@ pub struct Windowing;
 
 impl Windowing {
     pub fn run_app(
-        mut universe: crate::engine::Universe,
-        mut renderer: crate::engine::graphics::Renderer,
+        universe: crate::engine::Universe,
+        renderer: crate::engine::graphics::Renderer,
+        user_input: UserInput,
     ) -> EngineResult<()> {
         let event_loop = EventLoop::new().map_err(|_| EngineError::NotImplemented)?;
         event_loop.set_control_flow(ControlFlow::Wait);
@@ -25,6 +27,7 @@ impl Windowing {
             universe: Some(universe),
             renderer: Some(renderer),
             last_frame: None,
+            user_input,
         };
 
         event_loop
@@ -40,6 +43,7 @@ struct App {
     universe: Option<crate::engine::Universe>,
     renderer: Option<crate::engine::graphics::Renderer>,
     last_frame: Option<Instant>,
+    user_input: UserInput,
 }
 
 impl ApplicationHandler for App {
@@ -49,7 +53,7 @@ impl ApplicationHandler for App {
         }
 
         let attrs: WindowAttributes = Window::default_attributes()
-            .with_title("rvx")
+            .with_title("Little Cat Engine")
             .with_inner_size(winit::dpi::LogicalSize::new(1024.0, 768.0));
 
         let window = event_loop
@@ -73,6 +77,10 @@ impl ApplicationHandler for App {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        // Feed input events into our input handler, but keep window lifecycle/render events here.
+        // This intentionally ignores resize/draw.
+        let _was_input_event = self.user_input.handle_window_event(&event);
+
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
 
@@ -96,6 +104,9 @@ impl ApplicationHandler for App {
             }
 
             WindowEvent::RedrawRequested => {
+                // Start of our "frame" from an input perspective: clear edge-triggered sets.
+                self.user_input.begin_frame();
+
                 let now = Instant::now();
                 let dt = self
                     .last_frame
@@ -106,8 +117,7 @@ impl ApplicationHandler for App {
                 let universe = self.universe.as_mut().expect("universe missing");
                 let renderer = self.renderer.as_mut().expect("renderer missing");
 
-                universe.update(dt);
-                universe.sync_visuals();
+                universe.update(dt, self.user_input.state());
 
                 renderer.draw_frame(&universe.visuals).expect("draw failed");
 

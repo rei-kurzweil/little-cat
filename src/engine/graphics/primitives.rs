@@ -79,6 +79,9 @@ pub struct MeshHandle(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MaterialHandle(pub u32);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct InstanceHandle(pub u32);
+
 /// Renderer-owned material definition (API-agnostic placeholder).
 /// For now we reference shaders by name/path; later this becomes pipeline state + descriptor layouts.
 #[derive(Debug, Clone)]

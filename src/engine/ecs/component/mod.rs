@@ -1,14 +1,27 @@
 pub mod renderable;
 pub mod transform;
+pub mod cursor;
+pub mod instance;
+
+pub use renderable::RenderableComponent;
+pub use transform::TransformComponent;
+pub use cursor::CursorComponent;
+pub use instance::InstanceComponent;
 
 use crate::engine::ecs::entity::EntityId;
-use std::any::Any;
+use crate::engine::ecs::entity::ComponentId;
+use crate::engine::ecs::system::SystemWorld;
+use crate::engine::ecs::World;
 
 /// Component interface.
 /// `init` runs when the component is registered on an entity that is registered with the world.
-pub trait Component: Any + 'static + Send + Sync {
-    /// Lifecycle hook: called when the component is registered with the world.
-    ///
-    /// Use this only for reading world state / other components. No world mutation.
-    fn init(&mut self, _world: &crate::engine::ecs::World, _entity: EntityId) {}
+pub trait Component: std::any::Any {
+    fn as_any(&self) -> &dyn std::any::Any;
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
+
+    /// Called when component is added to an entity in the world.
+    fn init(&mut self, _world: &World, _systems: &mut SystemWorld, _entity: EntityId, _component: ComponentId) {}
+
+    /// Called when component is removed from an entity.
+    fn cleanup(&mut self, _world: &World, _systems: &mut SystemWorld, _entity: EntityId, _component: ComponentId) {}
 }

@@ -4,14 +4,14 @@ pub mod system;
 
 use std::collections::HashMap;
 
-use crate::engine::ecs::component::Component;
-use crate::engine::ecs::component::renderable::RenderableComponent;
-use crate::engine::ecs::component::transform::TransformComponent;
 use crate::engine::ecs::entity::{Entity, EntityId};
+use crate::engine::ecs::system::SystemWorld as EcsSystemWorld;
 
 // Re-export these so other modules can use `crate::engine::ecs::Transform`
 // and `crate::engine::ecs::Renderable` consistently.
 pub use crate::engine::graphics::primitives::{Renderable, Transform};
+
+pub use system::{CursorSystem, System, SystemWorld};
 
 /// Extremely small world placeholder (Entity store).
 #[derive(Default)]
@@ -28,13 +28,11 @@ impl World {
 
     /// Register an entity with the world and run `init()` for all its components.
     /// Replaces any existing entity with the same id.
-    pub fn add_entity(&mut self, mut e: Entity) {
+    pub fn add_entity(&mut self, systems: &mut EcsSystemWorld, mut e: Entity) {
         let id = e.id;
         self.next_id = self.next_id.max(id.saturating_add(1));
 
-        for c in e.components.iter_mut() {
-            c.init(self, id); // &mut World -> &World coercion
-        }
+        e.init_all(self, systems);
 
         self.entities.insert(id, e);
     }
@@ -55,35 +53,6 @@ impl World {
         self.entities.values().collect()
     }
 
-    /// Add a component to an already-registered entity (runs `init()` immediately).
-    pub fn add_component(&mut self, id: EntityId, mut c: Box<dyn Component>) {
-        // init only needs read access to the world, so do it before borrowing the entity mutably
-        c.init(&*self, id);
-
-        if let Some(e) = self.entities.get_mut(&id) {
-            e.components.push(c);
-        }
-    }
-
-    /// Temporary render query placeholder.
-    /// TODO: once components actually register into world storage, query from that storage.
-    pub fn query_renderables(&self) -> Vec<(EntityId, Transform, Renderable)> {
-        let mut out = Vec::new();
-
-        for entity in self.entities.values() {
-            let t = entity.get_component::<TransformComponent>().map(|c| c.transform);
-            let r = entity
-                .get_component::<RenderableComponent>()
-                .map(|c| c.renderable);
-
-            if let (Some(t), Some(r)) = (t, r) {
-                out.push((entity.id, t, r));
-            }
-        }
-
-        out
-    }
-
     /// Spawn a new entity id and return an `Entity` with that id (not yet registered).
     pub fn spawn_entity(&mut self) -> Entity {
         let id = self.next_id;
@@ -95,7 +64,9 @@ impl World {
     /// This is just `add_entity`, but reads nicely at call sites that "spawn then add".
     pub fn spawn_and_add(&mut self, e: Entity) -> EntityId {
         let id = e.id;
-        self.add_entity(e);
+        // If you want system registration during init, call `Universe::spawn_and_add` instead.
+        // This method exists for low-level storage only.
+        self.entities.insert(id, e);
         id
     }
 }
