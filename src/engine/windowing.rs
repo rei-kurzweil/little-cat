@@ -119,7 +119,7 @@ impl ApplicationHandler for App {
 
                 universe.update(dt, self.user_input.state());
 
-                renderer.draw_frame(&universe.visuals).expect("draw failed");
+                universe.render(renderer);
 
                 if let Some(w) = &self.window {
                     w.pre_present_notify();

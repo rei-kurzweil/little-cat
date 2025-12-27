@@ -36,7 +36,14 @@ impl Component for InstanceComponent {
         self
     }
 
-    fn init(&mut self, _world: &World, _systems: &mut SystemWorld, _entity: EntityId, _component: ComponentId) {
+    fn init(
+        &mut self,
+        _world: &mut World,
+        _systems: &mut SystemWorld,
+        _visuals: &mut crate::engine::graphics::VisualWorld,
+        _entity: EntityId,
+        _component: ComponentId,
+    ) {
         // Initialization logic can be added here if needed
         // For now, InstanceComponent doesn't auto-register with VisualWorld
         // Systems like RenderableSystem will handle registration

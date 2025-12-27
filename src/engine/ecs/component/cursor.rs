@@ -30,7 +30,14 @@ impl Component for CursorComponent {
         self
     }
 
-    fn init(&mut self, world: &World, systems: &mut SystemWorld, entity: EntityId, component: ComponentId) {
+    fn init(
+        &mut self,
+        world: &mut World,
+        systems: &mut SystemWorld,
+        visuals: &mut crate::engine::graphics::VisualWorld,
+        entity: EntityId,
+        component: ComponentId,
+    ) {
         systems.register_cursor(entity, component);
 
         // Initialize all child components.
@@ -40,7 +47,7 @@ impl Component for CursorComponent {
         for child in &mut self.children {
             let cid = next_child_id;
             next_child_id = next_child_id.wrapping_add(1);
-            child.init(world, systems, entity, cid);
+            child.init(world, systems, visuals, entity, cid);
         }
     }
 }

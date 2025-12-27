@@ -19,9 +19,32 @@ pub trait Component: std::any::Any {
     fn as_any(&self) -> &dyn std::any::Any;
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
 
+    /// Called immediately after the component is assigned an `(EntityId, ComponentId)`.
+    ///
+    /// Components can override this to store identity internally so their mutation APIs
+    /// don't need to take `entity`/`component` parameters.
+    fn set_ids(&mut self, _entity: EntityId, _component: ComponentId) {
+    }
+
     /// Called when component is added to an entity in the world.
-    fn init(&mut self, _world: &World, _systems: &mut SystemWorld, _entity: EntityId, _component: ComponentId) {}
+    fn init(
+        &mut self,
+        _world: &mut World,
+        _systems: &mut SystemWorld,
+        _visuals: &mut crate::engine::graphics::VisualWorld,
+        _entity: EntityId,
+        _component: ComponentId,
+    ) {
+    }
 
     /// Called when component is removed from an entity.
-    fn cleanup(&mut self, _world: &World, _systems: &mut SystemWorld, _entity: EntityId, _component: ComponentId) {}
+    fn cleanup(
+        &mut self,
+        _world: &mut World,
+        _systems: &mut SystemWorld,
+        _visuals: &mut crate::engine::graphics::VisualWorld,
+        _entity: EntityId,
+        _component: ComponentId,
+    ) {
+    }
 }

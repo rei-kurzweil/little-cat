@@ -9,6 +9,7 @@ use crate::engine::ecs::component::Component;
 use crate::engine::ecs::component::InstanceComponent;
 use crate::engine::ecs::system::SystemWorld;
 use crate::engine::ecs::World;
+use crate::engine::graphics::VisualWorld;
 
 struct ComponentNode {
     component: Box<dyn Component>,
@@ -67,10 +68,12 @@ impl Entity {
     /// Add a new root component. Returns its ComponentId and makes it the active root.
     pub fn add_root(&mut self, c: impl Component + 'static) -> ComponentId {
         let cid = self.alloc_component_id();
+        let mut boxed: Box<dyn Component> = Box::new(c);
+        boxed.set_ids(self.id, cid);
         self.nodes.insert(
             cid,
             ComponentNode {
-                component: Box::new(c),
+                component: boxed,
                 parent: None,
                 children: Vec::new(),
             },
@@ -93,10 +96,13 @@ impl Entity {
     pub fn add_child(&mut self, parent: ComponentId, c: impl Component + 'static) -> ComponentId {
         let cid = self.alloc_component_id();
 
+        let mut boxed: Box<dyn Component> = Box::new(c);
+        boxed.set_ids(self.id, cid);
+
         self.nodes.insert(
             cid,
             ComponentNode {
-                component: Box::new(c),
+                component: boxed,
                 parent: Some(parent),
                 children: Vec::new(),
             },
@@ -132,6 +138,9 @@ impl Entity {
         c: Box<dyn Component>,
     ) -> (ComponentId, &mut Box<dyn Component>) {
         let cid = self.alloc_component_id();
+
+        let mut c = c;
+        c.set_ids(self.id, cid);
 
         self.nodes.insert(
             cid,
@@ -239,7 +248,7 @@ impl Entity {
     }
 
     /// Initialize all components in root->child order.
-    pub fn init_all(&mut self, world: &World, systems: &mut SystemWorld) {
+    pub fn init_all(&mut self, world: &mut World, systems: &mut SystemWorld, visuals: &mut VisualWorld) {
         // Build a stable init order by walking from roots down.
         let mut order = Vec::<ComponentId>::new();
         let mut stack = Vec::<ComponentId>::new();
@@ -259,13 +268,19 @@ impl Entity {
 
         for cid in order {
             if let Some(node) = self.nodes.get_mut(&cid) {
-                node.component.init(world, systems, self.id, cid);
+                node.component.init(world, systems, visuals, self.id, cid);
             }
         }
     }
 
     /// Add a component as a child of the active root and initialize it immediately.
-    pub fn add_component(&mut self, world: &World, systems: &mut SystemWorld, c: impl Component + 'static) -> ComponentId {
+    pub fn add_component(
+        &mut self,
+        world: &mut World,
+        systems: &mut SystemWorld,
+        visuals: &mut VisualWorld,
+        c: impl Component + 'static,
+    ) -> ComponentId {
         let parent = self
             .active_root
             .or_else(|| self.roots.first().copied())
@@ -275,20 +290,27 @@ impl Entity {
         
         // Initialize the component immediately
         if let Some(node) = self.nodes.get_mut(&cid) {
-            node.component.init(world, systems, self.id, cid);
+            node.component.set_ids(self.id, cid);
+            node.component.init(world, systems, visuals, self.id, cid);
         }
         
         cid
     }
 
     /// Remove a component and call its cleanup.
-    pub fn remove_component(&mut self, cid: ComponentId, world: &World, systems: &mut SystemWorld) -> bool {
+    pub fn remove_component(
+        &mut self,
+        cid: ComponentId,
+        world: &mut World,
+        systems: &mut SystemWorld,
+        visuals: &mut VisualWorld,
+    ) -> bool {
         let Some(mut node) = self.nodes.remove(&cid) else {
             return false;
         };
 
         // Call cleanup on the component before removing
-        node.component.cleanup(world, systems, self.id, cid);
+    node.component.cleanup(world, systems, visuals, self.id, cid);
 
         // Remove from parent's children list
         if let Some(parent_id) = node.parent {
@@ -303,7 +325,7 @@ impl Entity {
         // Recursively remove all children
         let children = node.children.clone();
         for child_id in children {
-            self.remove_component(child_id, world, systems);
+            self.remove_component(child_id, world, systems, visuals);
         }
 
         true

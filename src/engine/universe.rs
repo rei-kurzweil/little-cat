@@ -16,6 +16,11 @@ impl Universe {
         }
     }
 
+    /// Convenience: borrow world + systems + visuals together as a single context.
+    pub fn ctx(&mut self) -> ecs::WorldContext<'_> {
+        ecs::WorldContext::new(&mut self.world, &mut self.systems, &mut self.visuals)
+    }
+
     /// Game/update step (placeholder).
     pub fn update(&mut self, _dt_sec: f32, _input: &InputState) {
         // 1) Refresh visuals from ECS state.
@@ -27,16 +32,8 @@ impl Universe {
         self.systems.tick(&mut self.world, &mut self.visuals, _input);
     }
 
-    /// Bridge ECS -> renderer-friendly cache.
-    /// For now: rebuild each frame (simple, correct). Later: events/dirty tracking.
-    /// TODO: This should be replaced by RenderableSystem/InstanceSystem that populate
-    /// the VisualWorld during component init().
-    pub fn sync_visuals(&mut self) {
-        // self.visuals.clear();
-        // Replaced by systems-based approach
-    }
-
     pub fn render(&mut self, renderer: &mut graphics::Renderer) {
-        renderer.render_visual_world(&mut self.visuals);
+        renderer.render_visual_world(&mut self.visuals)
+                .expect("render failed");
     }
 }

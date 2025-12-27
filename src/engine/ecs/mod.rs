@@ -6,12 +6,33 @@ use std::collections::HashMap;
 
 use crate::engine::ecs::entity::{Entity, EntityId};
 use crate::engine::ecs::system::SystemWorld as EcsSystemWorld;
+use crate::engine::graphics::VisualWorld;
 
 // Re-export these so other modules can use `crate::engine::ecs::Transform`
 // and `crate::engine::ecs::Renderable` consistently.
 pub use crate::engine::graphics::primitives::{Renderable, Transform};
 
 pub use system::{CursorSystem, System, SystemWorld};
+
+/// Bundle of mutable engine state passed to component mutation APIs.
+///
+/// This exists to avoid threading `&mut World`, `&mut SystemWorld`, and `&mut VisualWorld`
+/// through every component call.
+pub struct WorldContext<'a> {
+    pub world: &'a mut World,
+    pub systems: &'a mut SystemWorld,
+    pub visuals: &'a mut VisualWorld,
+}
+
+impl<'a> WorldContext<'a> {
+    pub fn new(world: &'a mut World, systems: &'a mut SystemWorld, visuals: &'a mut VisualWorld) -> Self {
+        Self {
+            world,
+            systems,
+            visuals,
+        }
+    }
+}
 
 /// Extremely small world placeholder (Entity store).
 #[derive(Default)]
@@ -28,11 +49,11 @@ impl World {
 
     /// Register an entity with the world and run `init()` for all its components.
     /// Replaces any existing entity with the same id.
-    pub fn add_entity(&mut self, systems: &mut EcsSystemWorld, mut e: Entity) {
+    pub fn add_entity(&mut self, systems: &mut EcsSystemWorld, visuals: &mut VisualWorld, mut e: Entity) {
         let id = e.id;
         self.next_id = self.next_id.max(id.saturating_add(1));
 
-        e.init_all(self, systems);
+        e.init_all(self, systems, visuals);
 
         self.entities.insert(id, e);
     }

@@ -1,5 +1,6 @@
 use crate::engine::ecs::entity::{EntityId, ComponentId};
-use crate::engine::ecs::{Renderable, Transform};
+use crate::engine::ecs::Transform;
+use crate::engine::graphics::GpuRenderable;
 use crate::engine::graphics::primitives::InstanceHandle;
 
 #[derive(Debug, Clone, Copy)]
@@ -24,7 +25,7 @@ pub struct DrawBatch {
 
 #[derive(Default)]
 pub struct VisualWorld {
-    instances: Vec<(Renderable, Instance)>,
+    instances: Vec<(GpuRenderable, Instance)>,
 
     next_handle: u32,
     handle_to_index: std::collections::HashMap<InstanceHandle, usize>,
@@ -52,7 +53,7 @@ impl VisualWorld {
         self.draw_batches.clear();
     }
 
-    pub fn instances(&self) -> &[(Renderable, Instance)] {
+    pub fn instances(&self) -> &[(GpuRenderable, Instance)] {
         &self.instances
     }
 
@@ -72,7 +73,7 @@ impl VisualWorld {
         }
 
         self.draw_order.clear();
-        self.draw_order.extend((0..self.instances.len() as u32));
+    self.draw_order.extend(0..self.instances.len() as u32);
 
         // Sort by (material, mesh). Stable sort keeps relative order for identical keys.
         self.draw_order.sort_by_key(|&i| {
@@ -117,7 +118,7 @@ impl VisualWorld {
         &mut self,
         id: EntityId,
         cid: ComponentId,
-        renderable: Renderable,
+        renderable: GpuRenderable,
         instance: Instance,
     ) -> InstanceHandle {
         let handle = InstanceHandle(self.next_handle);
@@ -166,7 +167,17 @@ impl VisualWorld {
         }
     }
 
-    pub fn update(&mut self, handle: InstanceHandle, renderable: Renderable, instance: Instance) -> bool {
+    pub fn update_model(&mut self, handle: InstanceHandle, model: [[f32; 4]; 4]) -> bool {
+        if let Some(&idx) = self.handle_to_index.get(&handle) {
+            self.instances[idx].1.transform.model = model;
+            // model-only doesn’t affect batching by (material, mesh)
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn update(&mut self, handle: InstanceHandle, renderable: GpuRenderable, instance: Instance) -> bool {
         if let Some(&idx) = self.handle_to_index.get(&handle) {
             self.instances[idx] = (renderable, instance);
             self.dirty_draw_cache = true; // renderable changes likely affect sort/batch

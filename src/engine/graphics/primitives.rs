@@ -7,15 +7,72 @@ pub struct Transform {
     pub translation: [f32; 3],
     pub rotation: [f32; 4], // quat xyzw
     pub scale: [f32; 3],
+
+    /// Cached model matrix (column-major). Keep this in sync with TRS.
+    pub model: [[f32; 4]; 4],
 }
 
 impl Default for Transform {
     fn default() -> Self {
+        let translation = [0.0; 3];
+        let rotation = [0.0, 0.0, 0.0, 1.0];
+        let scale = [1.0; 3];
         Self {
-            translation: [0.0; 3],
-            rotation: [0.0, 0.0, 0.0, 1.0], // identity quat
-            scale: [1.0; 3],
+            translation,
+            rotation,
+            scale,
+            model: [
+                [scale[0], 0.0, 0.0, 0.0],
+                [0.0, scale[1], 0.0, 0.0],
+                [0.0, 0.0, scale[2], 0.0],
+                [translation[0], translation[1], translation[2], 1.0],
+            ],
         }
+    }
+}
+
+impl Transform {
+    /// Recompute `self.model` from translation/rotation/scale.
+    pub fn recompute_model(&mut self) {
+        let [tx, ty, tz] = self.translation;
+        let [sx, sy, sz] = self.scale;
+        let [x, y, z, w] = self.rotation;
+
+        // Normalize quat defensively.
+        let len2 = x * x + y * y + z * z + w * w;
+        let inv_len = if len2 > 0.0 { len2.sqrt().recip() } else { 1.0 };
+        let (x, y, z, w) = (x * inv_len, y * inv_len, z * inv_len, w * inv_len);
+
+        // Quaternion to rotation matrix (column-major).
+        let xx = x * x;
+        let yy = y * y;
+        let zz = z * z;
+        let xy = x * y;
+        let xz = x * z;
+        let yz = y * z;
+        let wx = w * x;
+        let wy = w * y;
+        let wz = w * z;
+
+        let r00 = 1.0 - 2.0 * (yy + zz);
+        let r01 = 2.0 * (xy + wz);
+        let r02 = 2.0 * (xz - wy);
+
+        let r10 = 2.0 * (xy - wz);
+        let r11 = 1.0 - 2.0 * (xx + zz);
+        let r12 = 2.0 * (yz + wx);
+
+        let r20 = 2.0 * (xz + wy);
+        let r21 = 2.0 * (yz - wx);
+        let r22 = 1.0 - 2.0 * (xx + yy);
+
+        // Apply scale by scaling the rotation columns.
+        let c0 = [r00 * sx, r01 * sx, r02 * sx, 0.0];
+        let c1 = [r10 * sy, r11 * sy, r12 * sy, 0.0];
+        let c2 = [r20 * sz, r21 * sz, r22 * sz, 0.0];
+        let c3 = [tx, ty, tz, 1.0];
+
+        self.model = [c0, c1, c2, c3];
     }
 }
 
@@ -30,6 +87,22 @@ pub struct Renderable {
 }
 
 impl Renderable {
+    pub fn new(mesh: MeshHandle, material: MaterialHandle) -> Self {
+        Self { mesh, material }
+    }
+}
+
+/// GPU-facing renderable record stored in `VisualWorld`.
+///
+/// This is intentionally a thin, renderer-ready version of `Renderable`.
+/// It avoids pulling any ECS concepts into `VisualWorld`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct GpuRenderable {
+    pub mesh: MeshHandle,
+    pub material: MaterialHandle,
+}
+
+impl GpuRenderable {
     pub fn new(mesh: MeshHandle, material: MaterialHandle) -> Self {
         Self { mesh, material }
     }
@@ -107,6 +180,9 @@ impl Material {
 }
 
 impl MeshHandle {
+    pub const TRIANGLE: MeshHandle = MeshHandle(2);
+    pub const SQUARE: MeshHandle = MeshHandle(3);
+
     pub const CUBE: MeshHandle = MeshHandle(0);
     pub const TETRAHEDRON: MeshHandle = MeshHandle(1);
 }
