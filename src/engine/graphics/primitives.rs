@@ -61,9 +61,9 @@ pub enum VertexFormat {
     Uint32,
 }
 
-/// Renderer-owned mesh resource (looked up by `MeshHandle`).
+/// Renderer-owned GPU mesh resource (looked up by `MeshHandle`).
 #[derive(Debug, Clone, Copy)]
-pub struct Mesh {
+pub struct GpuMesh {
     pub vertex_buffer: BufferHandle,
     pub index_buffer: BufferHandle,
     pub index_count: u32,
@@ -97,8 +97,12 @@ pub struct Material {
 // Optional convenience: built-in material names/paths.
 impl Material {
     pub const UNLIT_FULLSCREEN: Material = Material {
-        vertex_shader: "engine/graphics/shaders/vertex/fullscreen-triangle.glsl",
-        fragment_shader: "engine/graphics/shaders/fragment/unlit-shader.glsl",
+        vertex_shader: "engine/graphics/shaders/triangle.vert",
+        fragment_shader: "engine/graphics/shaders/triangle.frag",
+    };
+    pub const GRADIENT_BG_XY: Material = Material {
+        vertex_shader: "engine/graphics/shaders/vertex/triangle.vert",
+        fragment_shader: "engine/graphics/shaders/fragment/gradient-triangle.frag",
     };
 }
 
@@ -109,4 +113,5 @@ impl MeshHandle {
 
 impl MaterialHandle {
     pub const UNLIT_FULLSCREEN: MaterialHandle = MaterialHandle(0);
+    pub const GRADIENT_BG_XY: MaterialHandle = MaterialHandle(1);
 }

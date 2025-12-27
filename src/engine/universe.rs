@@ -37,6 +37,6 @@ impl Universe {
     }
 
     pub fn render(&mut self, renderer: &mut graphics::Renderer) {
-        renderer.render_visual_world(&self.visuals);
+        renderer.render_visual_world(&mut self.visuals);
     }
 }

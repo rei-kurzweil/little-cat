@@ -21,6 +21,13 @@ impl RenderableComponent {
             renderable: Renderable::new(MeshHandle::TETRAHEDRON, MaterialHandle::UNLIT_FULLSCREEN),
         }
     }
+
+    /// Predefined renderable: tetrahedron with a screen-space XY gradient material.
+    pub fn color_tetrahedron() -> Self {
+        Self {
+            renderable: Renderable::new(MeshHandle::TETRAHEDRON, MaterialHandle::GRADIENT_BG_XY),
+        }
+    }
 }
 
 impl Component for RenderableComponent {
