@@ -5,8 +5,7 @@ pub mod system;
 use std::collections::HashMap;
 
 use crate::engine::ecs::entity::{Entity, EntityId};
-use crate::engine::ecs::system::SystemWorld as EcsSystemWorld;
-use crate::engine::graphics::VisualWorld;
+use crate::engine::graphics::{RenderAssets, VisualWorld};
 
 // Re-export these so other modules can use `crate::engine::ecs::Transform`
 // and `crate::engine::ecs::Renderable` consistently.
@@ -22,14 +21,21 @@ pub struct WorldContext<'a> {
     pub world: &'a mut World,
     pub systems: &'a mut SystemWorld,
     pub visuals: &'a mut VisualWorld,
+    pub render_assets: &'a mut RenderAssets,
 }
 
 impl<'a> WorldContext<'a> {
-    pub fn new(world: &'a mut World, systems: &'a mut SystemWorld, visuals: &'a mut VisualWorld) -> Self {
+    pub fn new(
+        world: &'a mut World,
+        systems: &'a mut SystemWorld,
+        visuals: &'a mut VisualWorld,
+        render_assets: &'a mut RenderAssets,
+    ) -> Self {
         Self {
             world,
             systems,
             visuals,
+            render_assets,
         }
     }
 }
@@ -47,16 +53,8 @@ impl World {
         self.spawn_entity().id
     }
 
-    /// Register an entity with the world and run `init()` for all its components.
-    /// Replaces any existing entity with the same id.
-    pub fn add_entity(&mut self, systems: &mut EcsSystemWorld, visuals: &mut VisualWorld, mut e: Entity) {
-        let id = e.id;
-        self.next_id = self.next_id.max(id.saturating_add(1));
-
-        e.init_all(self, systems, visuals);
-
-        self.entities.insert(id, e);
-    }
+    // NOTE: We intentionally do NOT provide a renderer-dependent add_entity anymore.
+    // Renderer work gets deferred to the per-frame render preparation step.
 
     pub fn remove_entity(&mut self, id: EntityId) -> Option<Entity> {
         self.entities.remove(&id)
@@ -81,12 +79,18 @@ impl World {
         Entity::new(id)
     }
 
-    /// Convenience: register an entity builder immediately.
-    /// This is just `add_entity`, but reads nicely at call sites that "spawn then add".
-    pub fn spawn_and_add(&mut self, e: Entity) -> EntityId {
+    /// Ensure `next_id` is at least `id + 1`.
+    ///
+    /// Useful when inserting externally-constructed entities with explicit ids.
+    pub fn reserve_entity_id(&mut self, id: EntityId) {
+        self.next_id = self.next_id.max(id.saturating_add(1));
+    }
+
+    /// Insert an entity into storage without running init hooks.
+    ///
+    /// This is a low-level API. Prefer `Universe::add_entity` for normal gameplay usage.
+    pub fn insert_entity_raw(&mut self, e: Entity) -> EntityId {
         let id = e.id;
-        // If you want system registration during init, call `Universe::spawn_and_add` instead.
-        // This method exists for low-level storage only.
         self.entities.insert(id, e);
         id
     }

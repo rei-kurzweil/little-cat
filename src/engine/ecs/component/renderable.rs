@@ -2,48 +2,50 @@ use crate::engine::ecs::component::Component;
 use crate::engine::ecs::entity::{ComponentId, EntityId};
 use crate::engine::ecs::system::SystemWorld;
 use crate::engine::ecs::World;
-use crate::engine::graphics::primitives::{MaterialHandle, MeshHandle, Renderable};
+use crate::engine::graphics::mesh::MeshFactory;
+use crate::engine::graphics::primitives::{MaterialHandle, Renderable};
 
 /// Renderable component.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct RenderableComponent {
     pub renderable: Renderable,
 }
 
 impl RenderableComponent {
-    /// Predefined renderable: 2D triangle (placeholder handle).
-    pub fn triangle() -> Self {
+    fn from_cpu_mesh_handle(h: crate::engine::graphics::primitives::CpuMeshHandle, material: MaterialHandle) -> Self {
         Self {
-            renderable: Renderable::new(MeshHandle::TRIANGLE, MaterialHandle::UNLIT_FULLSCREEN),
+            renderable: Renderable::new(h, material),
         }
+    }
+
+    /// Predefined renderable: 2D triangle (placeholder handle).
+    pub fn triangle(mesh: crate::engine::graphics::primitives::CpuMeshHandle) -> Self {
+        let _ = MeshFactory::triangle_2d();
+        Self::from_cpu_mesh_handle(mesh, MaterialHandle::UNLIT_MESH)
     }
 
     /// Predefined renderable: 2D square/quad (placeholder handle).
-    pub fn square() -> Self {
-        Self {
-            renderable: Renderable::new(MeshHandle::SQUARE, MaterialHandle::UNLIT_FULLSCREEN),
-        }
+    pub fn square(mesh: crate::engine::graphics::primitives::CpuMeshHandle) -> Self {
+        let _ = MeshFactory::quad_2d();
+        Self::from_cpu_mesh_handle(mesh, MaterialHandle::UNLIT_MESH)
     }
 
     /// Predefined renderable: cube primitive (placeholder handles for now).
-    pub fn cube() -> Self {
-        Self {
-            renderable: Renderable::new(MeshHandle::CUBE, MaterialHandle::UNLIT_FULLSCREEN),
-        }
+    pub fn cube(mesh: crate::engine::graphics::primitives::CpuMeshHandle) -> Self {
+        let _ = MeshFactory::cube();
+        Self::from_cpu_mesh_handle(mesh, MaterialHandle::UNLIT_MESH)
     }
 
     /// Predefined renderable: tetrahedron primitive (placeholder handles for now).
-    pub fn tetrahedron() -> Self {
-        Self {
-            renderable: Renderable::new(MeshHandle::TETRAHEDRON, MaterialHandle::UNLIT_FULLSCREEN),
-        }
+    pub fn tetrahedron(mesh: crate::engine::graphics::primitives::CpuMeshHandle) -> Self {
+        let _ = MeshFactory::tetrahedron();
+        Self::from_cpu_mesh_handle(mesh, MaterialHandle::UNLIT_MESH)
     }
 
     /// Predefined renderable: tetrahedron with a screen-space XY gradient material.
-    pub fn color_tetrahedron() -> Self {
-        Self {
-            renderable: Renderable::new(MeshHandle::TETRAHEDRON, MaterialHandle::GRADIENT_BG_XY),
-        }
+    pub fn color_tetrahedron(mesh: crate::engine::graphics::primitives::CpuMeshHandle) -> Self {
+        let _ = MeshFactory::tetrahedron();
+        Self::from_cpu_mesh_handle(mesh, MaterialHandle::GRADIENT_BG_XY)
     }
 }
 
@@ -64,6 +66,9 @@ impl Component for RenderableComponent {
         entity: EntityId,
         component: ComponentId,
     ) {
-        systems.register_renderable(world, visuals, entity, component);
+        // NOTE: Renderable registration now requires renderer-side uploads.
+        // This `Component::init` signature doesn't have access to a renderer, so the engine
+        // will call a separate init path that provides it.
+        let _ = (world, systems, visuals, entity, component);
     }
 }

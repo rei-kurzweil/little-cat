@@ -79,15 +79,18 @@ impl Transform {
 
 
 /// Renderable component: references renderer-managed resources.
-/// Vulkan-minded: mesh -> vertex/index buffers; material -> pipeline/layout + descriptors.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// Vulkan-minded: material -> pipeline/layout + descriptors.
+///
+/// The mesh here is a *CPU-side* asset handle. `RenderAssets` stores the actual `CpuMesh`
+/// and uploads it to the renderer on demand.
+#[derive(Debug, Clone)]
 pub struct Renderable {
-    pub mesh: MeshHandle,
+    pub mesh: CpuMeshHandle,
     pub material: MaterialHandle,
 }
 
 impl Renderable {
-    pub fn new(mesh: MeshHandle, material: MaterialHandle) -> Self {
+    pub fn new(mesh: CpuMeshHandle, material: MaterialHandle) -> Self {
         Self { mesh, material }
     }
 }
@@ -149,6 +152,10 @@ pub struct GpuMesh {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MeshHandle(pub u32);
 
+/// CPU-side mesh identity (owned by `RenderAssets`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct CpuMeshHandle(pub u32);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MaterialHandle(pub u32);
 
@@ -173,6 +180,12 @@ impl Material {
         vertex_shader: "engine/graphics/shaders/triangle.vert",
         fragment_shader: "engine/graphics/shaders/triangle.frag",
     };
+
+    /// Unlit material intended for normal mesh rendering (vertex/index buffers + transforms).
+    pub const UNLIT_MESH: Material = Material {
+        vertex_shader: "engine/graphics/shaders/unlit-mesh.vert",
+        fragment_shader: "engine/graphics/shaders/unlit-mesh.frag",
+    };
     pub const GRADIENT_BG_XY: Material = Material {
         vertex_shader: "engine/graphics/shaders/vertex/triangle.vert",
         fragment_shader: "engine/graphics/shaders/fragment/gradient-triangle.frag",
@@ -190,4 +203,7 @@ impl MeshHandle {
 impl MaterialHandle {
     pub const UNLIT_FULLSCREEN: MaterialHandle = MaterialHandle(0);
     pub const GRADIENT_BG_XY: MaterialHandle = MaterialHandle(1);
+
+    /// Unlit mesh material (see `Material::UNLIT_MESH`).
+    pub const UNLIT_MESH: MaterialHandle = MaterialHandle(2);
 }

@@ -2,7 +2,8 @@
 // NOTE: Handle types live in `graphics/primitives.rs` now.
 
 use crate::engine::graphics::{Material, MaterialHandle, VisualWorld};
-use crate::engine::graphics::primitives::{GpuMesh, MeshHandle};
+use crate::engine::graphics::mesh::{CpuMesh, CpuVertex};
+use crate::engine::graphics::primitives::{BufferHandle, GpuMesh, MeshHandle};
 use winit::window::Window;
 use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use std::sync::Arc;
@@ -16,6 +17,7 @@ pub struct Renderer {
 
     /// Renderer-owned resource tables. Handles are lightweight indices into these vecs.
     /// (Eventually these become GPU buffers/pipelines and should use a generational handle scheme.)
+    buffers: Vec<GpuBuffer>,
     meshes: Vec<GpuMesh>,
     materials: Vec<Material>,
 
@@ -49,6 +51,13 @@ pub struct Renderer {
     max_frames_in_flight: usize,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct GpuBuffer {
+    buffer: vk::Buffer,
+    memory: vk::DeviceMemory,
+    size: vk::DeviceSize,
+}
+
 impl Renderer {
     fn ensure_pipeline_cache_len(&mut self, n: usize) {
         if self.material_pipelines.len() < n {
@@ -62,8 +71,13 @@ impl Renderer {
     pub fn new() -> Self {
         Self {
             debug_draw_hardcoded_triangle: true,
+            buffers: Vec::new(),
             meshes: Vec::new(),
-            materials: vec![Material::UNLIT_FULLSCREEN, Material::GRADIENT_BG_XY],
+            materials: vec![
+                Material::UNLIT_FULLSCREEN,
+                Material::GRADIENT_BG_XY,
+                Material::UNLIT_MESH,
+            ],
             entry: None,
             instance: None,
             surface: None,
@@ -92,6 +106,130 @@ impl Renderer {
             current_frame: 0,
             max_frames_in_flight: 2,
         }
+    }
+
+    fn get_buffer(&self, h: BufferHandle) -> Option<&GpuBuffer> {
+        self.buffers.get(h.0 as usize)
+    }
+
+    fn find_memory_type(
+        instance: &ash::Instance,
+        physical_device: vk::PhysicalDevice,
+        type_filter: u32,
+        properties: vk::MemoryPropertyFlags,
+    ) -> Option<u32> {
+        let mem_properties = unsafe { instance.get_physical_device_memory_properties(physical_device) };
+        for i in 0..mem_properties.memory_type_count {
+            let supported = (type_filter & (1 << i)) != 0;
+            let has_props = mem_properties.memory_types[i as usize]
+                .property_flags
+                .contains(properties);
+            if supported && has_props {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    fn create_host_visible_buffer(
+        &mut self,
+        size: vk::DeviceSize,
+        usage: vk::BufferUsageFlags,
+    ) -> Result<BufferHandle, Box<dyn std::error::Error>> {
+        let device = self.device.as_ref().ok_or("Device not initialized")?;
+        let instance = self.instance.as_ref().ok_or("Instance not initialized")?;
+        let physical_device = self.physical_device.ok_or("Physical device not initialized")?;
+
+        let buffer_info = vk::BufferCreateInfo::default()
+            .size(size)
+            .usage(usage)
+            .sharing_mode(vk::SharingMode::EXCLUSIVE);
+
+        let buffer = unsafe { device.create_buffer(&buffer_info, None) }?;
+        let mem_requirements = unsafe { device.get_buffer_memory_requirements(buffer) };
+
+        let mem_type = Self::find_memory_type(
+            instance,
+            physical_device,
+            mem_requirements.memory_type_bits,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+        )
+        .ok_or("No suitable HOST_VISIBLE memory type")?;
+
+        let alloc_info = vk::MemoryAllocateInfo::default()
+            .allocation_size(mem_requirements.size)
+            .memory_type_index(mem_type);
+
+        let memory = unsafe { device.allocate_memory(&alloc_info, None) }?;
+        unsafe { device.bind_buffer_memory(buffer, memory, 0) }?;
+
+        let handle = BufferHandle(self.buffers.len() as u32);
+        self.buffers.push(GpuBuffer { buffer, memory, size });
+        Ok(handle)
+    }
+
+    fn write_buffer(&self, h: BufferHandle, bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+        let device = self.device.as_ref().ok_or("Device not initialized")?;
+        let b = self.get_buffer(h).ok_or("Invalid BufferHandle")?;
+        if bytes.len() as u64 > b.size {
+            return Err("write_buffer: source larger than buffer".into());
+        }
+
+        unsafe {
+            let ptr = device.map_memory(b.memory, 0, b.size, vk::MemoryMapFlags::empty())?;
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr as *mut u8, bytes.len());
+            device.unmap_memory(b.memory);
+        }
+        Ok(())
+    }
+
+    /// Upload a CPU mesh into GPU buffers and return a renderer-owned `MeshHandle`.
+    ///
+    /// Bring-up implementation: uses HOST_VISIBLE|HOST_COHERENT memory directly.
+    pub fn upload_mesh(&mut self, mesh: &CpuMesh) -> Result<MeshHandle, Box<dyn std::error::Error>> {
+        // Vertex data: we ignore UVs for now (per your request) and pack positions only.
+        let mut vertex_bytes: Vec<u8> = Vec::with_capacity(mesh.vertices.len() * 12);
+        for CpuVertex { pos, .. } in mesh.vertices.iter() {
+            for f in pos {
+                vertex_bytes.extend_from_slice(&f.to_ne_bytes());
+            }
+        }
+
+        let index_bytes: Vec<u8> = mesh
+            .indices_u32
+            .iter()
+            .flat_map(|i| i.to_ne_bytes())
+            .collect();
+
+        let vb = self.create_host_visible_buffer(
+            vertex_bytes.len() as u64,
+            vk::BufferUsageFlags::VERTEX_BUFFER,
+        )?;
+        self.write_buffer(vb, &vertex_bytes)?;
+
+        let ib = self.create_host_visible_buffer(
+            index_bytes.len() as u64,
+            vk::BufferUsageFlags::INDEX_BUFFER,
+        )?;
+        self.write_buffer(ib, &index_bytes)?;
+
+        // Vertex layout placeholder (positions only).
+        static POS_ONLY_LAYOUT: crate::engine::graphics::primitives::VertexLayout =
+            crate::engine::graphics::primitives::VertexLayout {
+                stride: 12,
+                attributes: &[],
+            };
+
+        let gpu_mesh = GpuMesh {
+            vertex_buffer: vb,
+            index_buffer: ib,
+            index_count: mesh.index_count(),
+            vertex_layout: &POS_ONLY_LAYOUT,
+        };
+
+        let h = MeshHandle(self.meshes.len() as u32);
+        self.meshes.push(gpu_mesh);
+        Ok(h)
     }
 
     pub fn material(&self, h: MaterialHandle) -> Option<&Material> {
@@ -135,6 +273,10 @@ impl Renderer {
             MaterialHandle::GRADIENT_BG_XY => (
                 include_bytes!("shaders/spv/triangle.vert.spv"),
                 include_bytes!("shaders/spv/gradient.frag.spv"),
+            ),
+            MaterialHandle::UNLIT_MESH => (
+                include_bytes!("shaders/spv/unlit-mesh.vert.spv"),
+                include_bytes!("shaders/spv/unlit-mesh.frag.spv"),
             ),
             _ => (
                 include_bytes!("shaders/spv/triangle.vert.spv"),
@@ -235,10 +377,7 @@ impl Renderer {
     }
 
     /// Render a frame given some view of world/scene state.
-    pub fn render_visual_world(
-        &mut self,
-        visual_world: &mut VisualWorld,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn render_visual_world(&mut self, visual_world: &mut VisualWorld,) -> Result<(), Box<dyn std::error::Error>> {
         // Ensure draw_order + batches are current if you’re using VisualWorld as a render snapshot.
         visual_world.prepare_draw_cache();
 

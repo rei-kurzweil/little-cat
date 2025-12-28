@@ -10,6 +10,7 @@ use crate::engine::ecs::component::InstanceComponent;
 use crate::engine::ecs::system::SystemWorld;
 use crate::engine::ecs::World;
 use crate::engine::graphics::VisualWorld;
+use crate::engine::graphics::{RenderAssets, Renderer};
 
 struct ComponentNode {
     component: Box<dyn Component>,
@@ -267,6 +268,48 @@ impl Entity {
         }
 
         for cid in order {
+            if let Some(node) = self.nodes.get_mut(&cid) {
+                node.component.init(world, systems, visuals, self.id, cid);
+            }
+        }
+    }
+
+    /// Initialize all components in root->child order, with access to renderer-side asset uploading.
+    pub fn init_all_with_renderer(
+        &mut self,
+        world: &mut World,
+        systems: &mut SystemWorld,
+        visuals: &mut VisualWorld,
+        _render_assets: &mut RenderAssets,
+        _renderer: &mut Renderer,
+    ) {
+        // Build a stable init order by walking from roots down.
+        let mut order = Vec::<ComponentId>::new();
+        let mut stack = Vec::<ComponentId>::new();
+
+        for &r in self.roots.iter().rev() {
+            stack.push(r);
+        }
+
+        while let Some(id) = stack.pop() {
+            order.push(id);
+            if let Some(node) = self.nodes.get(&id) {
+                for &ch in node.children.iter().rev() {
+                    stack.push(ch);
+                }
+            }
+        }
+
+        for cid in order {
+            // Special-case renderables so init can upload meshes (Renderer required).
+            if self
+                .get_component_by_id_as::<crate::engine::ecs::component::RenderableComponent>(cid)
+                .is_some()
+            {
+                systems.register_renderable(world, visuals, self.id, cid);
+                continue;
+            }
+
             if let Some(node) = self.nodes.get_mut(&cid) {
                 node.component.init(world, systems, visuals, self.id, cid);
             }

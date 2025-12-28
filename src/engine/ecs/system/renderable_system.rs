@@ -4,7 +4,10 @@ use crate::engine::ecs::entity::EntityId;
 use crate::engine::ecs::system::System;
 use crate::engine::ecs::World;
 use crate::engine::graphics::{GpuRenderable, Instance, VisualWorld};
+use crate::engine::graphics::{RenderAssets, Renderer};
 use crate::engine::user_input::InputState;
+use crate::engine::graphics::primitives::{CpuMeshHandle, MaterialHandle};
+use std::collections::HashMap;
 
 /// System that registers/updates renderables in the `VisualWorld`.
 ///
@@ -19,12 +22,25 @@ use crate::engine::user_input::InputState;
 #[derive(Debug, Default)]
 pub struct RenderableSystem {
     renderables: Vec<(EntityId, ComponentId)>,
+
+    /// Renderables that have been discovered/registered in ECS but not yet inserted into
+    /// VisualWorld because their GPU mesh isn't ready.
+    pending: HashMap<(EntityId, ComponentId), PendingRenderable>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct PendingRenderable {
+    cpu_mesh: CpuMeshHandle,
+    material: MaterialHandle,
+    instance_cid: ComponentId,
+    transform: crate::engine::graphics::primitives::Transform,
 }
 
 impl RenderableSystem {
     pub fn new() -> Self {
         Self {
             renderables: Vec::new(),
+            pending: HashMap::new(),
         }
     }
 
@@ -50,14 +66,6 @@ impl RenderableSystem {
             return;
         };
 
-        // Pull immutable data first.
-        let gpu_r = {
-            let Some(renderable_comp) = ent.get_component_by_id_as::<RenderableComponent>(component)
-            else {
-                return;
-            };
-            Self::to_gpu_renderable(*renderable_comp)
-        };
         // Each InstanceComponent (and its immediate children) defines a VisualWorld Instance.
         // Renderables may be nested under other components; we walk up to find the nearest
         // ancestor InstanceComponent.
@@ -91,19 +99,72 @@ impl RenderableSystem {
             return;
         };
 
-        // If it's already registered, nothing else to do.
+        // If it's already registered in VisualWorld, nothing else to do.
         if instance_comp.get_handle().is_some() {
             return;
         }
 
-        let handle = visuals.register(entity, instance_cid, gpu_r, inst);
-        instance_comp.handle = Some(handle);
+        // Defer insertion into VisualWorld until the GPU mesh exists.
+        let Some(renderable_comp) = ent.get_component_by_id_as::<RenderableComponent>(component) else {
+            return;
+        };
+
+        self.pending.insert(
+            (entity, component),
+            PendingRenderable {
+                cpu_mesh: renderable_comp.renderable.mesh,
+                material: renderable_comp.renderable.material,
+                instance_cid,
+                transform: inst.transform,
+            },
+        );
+
+        // Mark draw cache dirty only when we actually insert into visuals.
+        let _ = visuals;
     }
 
-    fn to_gpu_renderable(rc: RenderableComponent) -> GpuRenderable {
-        GpuRenderable {
-            mesh: rc.renderable.mesh,
-            material: rc.renderable.material,
+    /// Flush any pending renderables by uploading required meshes and inserting only
+    /// GPU-ready instances into `VisualWorld`.
+    pub fn flush_pending(
+        &mut self,
+        world: &mut World,
+        visuals: &mut VisualWorld,
+        render_assets: &mut RenderAssets,
+        renderer: &mut Renderer,
+    ) {
+        // Collect keys first to avoid borrow issues.
+        let keys: Vec<(EntityId, ComponentId)> = self.pending.keys().copied().collect();
+        for key in keys {
+            let Some(p) = self.pending.get(&key).copied() else {
+                continue;
+            };
+
+            // Upload/resolve GPU mesh.
+            let mesh = match render_assets.gpu_mesh_handle(renderer, p.cpu_mesh) {
+                Ok(h) => h,
+                Err(_) => continue,
+            };
+
+            // If the instance component already got a handle (maybe through another renderable), skip.
+            let (entity, _component) = key;
+            let Some(ent) = world.get_entity_mut(entity) else { continue; };
+            let Some(instance_comp) = ent.get_component_by_id_as_mut::<InstanceComponent>(p.instance_cid) else {
+                continue;
+            };
+            if instance_comp.get_handle().is_some() {
+                self.pending.remove(&key);
+                continue;
+            }
+
+            let gpu_r = GpuRenderable {
+                mesh,
+                material: p.material,
+            };
+            let inst = Instance { transform: p.transform };
+            let handle = visuals.register(entity, p.instance_cid, gpu_r, inst);
+            instance_comp.handle = Some(handle);
+
+            self.pending.remove(&key);
         }
     }
 }

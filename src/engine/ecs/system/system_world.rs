@@ -4,7 +4,7 @@ use crate::engine::ecs::system::CursorSystem;
 use crate::engine::ecs::system::RenderableSystem;
 use crate::engine::ecs::system::System;
 use crate::engine::ecs::system::TransformSystem;
-use crate::engine::graphics::VisualWorld;
+use crate::engine::graphics::{RenderAssets, Renderer, VisualWorld};
 use crate::engine::user_input::InputState;
 
 /// System world that holds and runs all registered systems.
@@ -35,6 +35,21 @@ impl SystemWorld {
     ) {
         self.renderable
             .register_renderable(world, visuals, entity, component);
+    }
+
+    /// Prepare render state before issuing a frame.
+    ///
+    /// This flushes any pending renderables by uploading meshes and inserting GPU-ready
+    /// instances into `VisualWorld`.
+    pub fn prepare_render(
+        &mut self,
+        world: &mut World,
+        visuals: &mut VisualWorld,
+        render_assets: &mut RenderAssets,
+        renderer: &mut Renderer,
+    ) {
+        self.renderable
+            .flush_pending(world, visuals, render_assets, renderer);
     }
 
     /// Called when a TransformComponent changes.
