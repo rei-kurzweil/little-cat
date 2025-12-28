@@ -3,6 +3,7 @@ use crate::engine::ecs::entity::ComponentId;
 use crate::engine::ecs::entity::EntityId;
 use crate::engine::ecs::system::System;
 use crate::engine::ecs::World;
+use crate::engine::ecs::entity::Entity;
 use crate::engine::graphics::{GpuRenderable, Instance, VisualWorld};
 use crate::engine::graphics::{RenderAssets, Renderer};
 use crate::engine::user_input::InputState;
@@ -54,6 +55,10 @@ impl RenderableSystem {
         entity: EntityId,
         component: ComponentId,
     ) {
+        println!(
+            "[RenderableSystem] register_renderable: entity={} component={}",
+            entity, component
+        );
         if !self
             .renderables
             .iter()
@@ -63,8 +68,21 @@ impl RenderableSystem {
         }
 
         let Some(ent) = world.get_entity_mut(entity) else {
+            println!("[RenderableSystem]  -> world entity not found");
             return;
         };
+
+        self.register_renderable_from_entity(visuals, ent, component);
+    }
+
+    /// Register a renderable when you already have access to the entity.
+    pub fn register_renderable_from_entity(
+        &mut self,
+        visuals: &mut VisualWorld,
+        ent: &mut Entity,
+        component: ComponentId,
+    ) {
+        let entity = ent.id;
 
         // Each InstanceComponent (and its immediate children) defines a VisualWorld Instance.
         // Renderables may be nested under other components; we walk up to find the nearest
@@ -73,6 +91,7 @@ impl RenderableSystem {
             let mut cur = component;
             loop {
                 let Some(parent) = ent.parent_of(cur) else {
+                    println!("[RenderableSystem]  -> no parent while walking to InstanceComponent (cur={})", cur);
                     return;
                 };
                 if ent.get_component_by_id_as::<InstanceComponent>(parent).is_some() {
@@ -81,6 +100,7 @@ impl RenderableSystem {
                 cur = parent;
             }
         };
+        println!("[RenderableSystem]  -> instance_cid={}", instance_cid);
 
         // First TransformComponent directly under the InstanceComponent (if present).
         let transform_comp = ent
@@ -101,11 +121,13 @@ impl RenderableSystem {
 
         // If it's already registered in VisualWorld, nothing else to do.
         if instance_comp.get_handle().is_some() {
+            println!("[RenderableSystem]  -> instance already has VisualWorld handle; skipping");
             return;
         }
 
         // Defer insertion into VisualWorld until the GPU mesh exists.
         let Some(renderable_comp) = ent.get_component_by_id_as::<RenderableComponent>(component) else {
+            println!("[RenderableSystem]  -> component is not RenderableComponent somehow");
             return;
         };
 
@@ -117,6 +139,12 @@ impl RenderableSystem {
                 instance_cid,
                 transform: inst.transform,
             },
+        );
+        println!(
+            "[RenderableSystem]  -> pending += 1 (pending_len={}) cpu_mesh={:?} material={:?}",
+            self.pending.len(),
+            renderable_comp.renderable.mesh,
+            renderable_comp.renderable.material
         );
 
         // Mark draw cache dirty only when we actually insert into visuals.
@@ -132,6 +160,11 @@ impl RenderableSystem {
         render_assets: &mut RenderAssets,
         renderer: &mut Renderer,
     ) {
+        println!(
+            "[RenderableSystem] flush_pending: pending_len={} visuals.instances={} ",
+            self.pending.len(),
+            visuals.instances().len()
+        );
         // Collect keys first to avoid borrow issues.
         let keys: Vec<(EntityId, ComponentId)> = self.pending.keys().copied().collect();
         for key in keys {
@@ -142,13 +175,20 @@ impl RenderableSystem {
             // Upload/resolve GPU mesh.
             let mesh = match render_assets.gpu_mesh_handle(renderer, p.cpu_mesh) {
                 Ok(h) => h,
-                Err(_) => continue,
+                Err(err) => {
+                    println!("[RenderableSystem]  -> gpu_mesh_handle failed for cpu_mesh={:?}: {:?}", p.cpu_mesh, err);
+                    continue;
+                }
             };
 
             // If the instance component already got a handle (maybe through another renderable), skip.
             let (entity, _component) = key;
-            let Some(ent) = world.get_entity_mut(entity) else { continue; };
+            let Some(ent) = world.get_entity_mut(entity) else {
+                println!("[RenderableSystem]  -> entity {} missing during flush", entity);
+                continue;
+            };
             let Some(instance_comp) = ent.get_component_by_id_as_mut::<InstanceComponent>(p.instance_cid) else {
+                println!("[RenderableSystem]  -> instance component {} missing during flush", p.instance_cid);
                 continue;
             };
             if instance_comp.get_handle().is_some() {
@@ -163,6 +203,15 @@ impl RenderableSystem {
             let inst = Instance { transform: p.transform };
             let handle = visuals.register(entity, p.instance_cid, gpu_r, inst);
             instance_comp.handle = Some(handle);
+
+            println!(
+                "[RenderableSystem]  -> registered VisualWorld instance: entity={} instance_cid={} handle={:?} mesh={:?} material={:?}",
+                entity,
+                p.instance_cid,
+                handle,
+                mesh,
+                p.material
+            );
 
             self.pending.remove(&key);
         }

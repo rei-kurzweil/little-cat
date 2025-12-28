@@ -6,6 +6,7 @@ use crate::engine::ecs::system::System;
 use crate::engine::ecs::system::TransformSystem;
 use crate::engine::graphics::{RenderAssets, Renderer, VisualWorld};
 use crate::engine::user_input::InputState;
+use crate::engine::ecs::entity::Entity;
 
 /// System world that holds and runs all registered systems.
 #[derive(Debug, Default)]
@@ -35,6 +36,19 @@ impl SystemWorld {
     ) {
         self.renderable
             .register_renderable(world, visuals, entity, component);
+    }
+
+    /// Register a RenderableComponent when you already have access to the `Entity`.
+    ///
+    /// This avoids needing the entity to already be inserted into `World`.
+    pub fn register_renderable_from_entity(
+        &mut self,
+        visuals: &mut VisualWorld,
+        ent: &mut Entity,
+        component: ComponentId,
+    ) {
+        self.renderable
+            .register_renderable_from_entity(visuals, ent, component);
     }
 
     /// Prepare render state before issuing a frame.

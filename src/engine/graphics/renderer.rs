@@ -9,6 +9,7 @@ use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use std::sync::Arc;
 
 use ash::vk;
+use crate::engine::rendering_inspector::RenderingInspector;
 
 
 pub struct Renderer {
@@ -27,6 +28,8 @@ pub struct Renderer {
     instance_buffer_capacity: usize,
     /// Cached packed instance data (column-major model matrix = 16 f32).
     cached_instance_data: Vec<f32>,
+
+    inspector: RenderingInspector,
 
     entry: Option<ash::Entry>,
     instance: Option<ash::Instance>,
@@ -77,7 +80,7 @@ impl Renderer {
 
     pub fn new() -> Self {
         Self {
-            debug_draw_hardcoded_triangle: true,
+            debug_draw_hardcoded_triangle: false,
             buffers: Vec::new(),
             meshes: Vec::new(),
             materials: vec![
@@ -89,6 +92,8 @@ impl Renderer {
             instance_buffer: None,
             instance_buffer_capacity: 0,
             cached_instance_data: Vec::new(),
+
+            inspector: RenderingInspector::new(),
 
             entry: None,
             instance: None,
@@ -180,6 +185,45 @@ impl Renderer {
         Ok(handle)
     }
 
+    fn create_host_visible_buffer_raw(
+        &self,
+        size: vk::DeviceSize,
+        usage: vk::BufferUsageFlags,
+    ) -> Result<GpuBuffer, Box<dyn std::error::Error>> {
+        let device = self.device.as_ref().ok_or("Device not initialized")?;
+        let instance = self.instance.as_ref().ok_or("Instance not initialized")?;
+        let physical_device = self.physical_device.ok_or("Physical device not initialized")?;
+
+        let buffer_info = vk::BufferCreateInfo::default()
+            .size(size)
+            .usage(usage)
+            .sharing_mode(vk::SharingMode::EXCLUSIVE);
+
+        let buffer = unsafe { device.create_buffer(&buffer_info, None) }?;
+        let mem_requirements = unsafe { device.get_buffer_memory_requirements(buffer) };
+
+        let mem_type = Self::find_memory_type(
+            instance,
+            physical_device,
+            mem_requirements.memory_type_bits,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+        )
+        .ok_or("No suitable HOST_VISIBLE memory type")?;
+
+        let alloc_info = vk::MemoryAllocateInfo::default()
+            .allocation_size(mem_requirements.size)
+            .memory_type_index(mem_type);
+
+        let memory = unsafe { device.allocate_memory(&alloc_info, None) }?;
+        unsafe { device.bind_buffer_memory(buffer, memory, 0) }?;
+
+        Ok(GpuBuffer {
+            buffer,
+            memory,
+            size,
+        })
+    }
+
     fn write_buffer(&self, h: BufferHandle, bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
         let device = self.device.as_ref().ok_or("Device not initialized")?;
         let b = self.get_buffer(h).ok_or("Invalid BufferHandle")?;
@@ -223,22 +267,11 @@ impl Renderer {
             self.destroy_gpu_buffer(&old);
         }
 
-        let vb_handle = self.create_host_visible_buffer(
+        let gpu = self.create_host_visible_buffer_raw(
             (new_cap * bytes_per_instance) as u64,
             vk::BufferUsageFlags::VERTEX_BUFFER,
         )?;
 
-        // Pull the created buffer out of the renderer-owned buffer table and keep it as a dedicated field.
-        // NOTE: This is a little hacky given the current buffer handle table; we treat the newest buffer
-        // as our instance buffer.
-        let gpu = *self
-            .buffers
-            .last()
-            .ok_or("instance buffer creation failed")?;
-        // Prevent the instance buffer from being double-freed via the handle table.
-        self.buffers.pop();
-
-        let _ = vb_handle; // handle is not used once we store the raw GPU buffer here.
         self.instance_buffer = Some(gpu);
         self.instance_buffer_capacity = new_cap;
         Ok(())
@@ -489,9 +522,12 @@ impl Renderer {
             .rasterizer_discard_enable(false)
             .polygon_mode(vk::PolygonMode::FILL)
             .line_width(1.0)
-            .cull_mode(vk::CullModeFlags::BACK)
-            // NOTE: winit coordinates / Vulkan Y flip etc may change this later.
-            .front_face(vk::FrontFace::CLOCKWISE)
+                .cull_mode(vk::CullModeFlags::BACK)
+                // MeshFactory returns CCW triangles as front faces.
+                // Vulkan defines front-face after the viewport transform. With a top-left
+                // origin (common in windowing) the Y axis is flipped, which flips winding.
+                // So for our current setup, treat CLOCKWISE as front-facing.
+                .front_face(vk::FrontFace::CLOCKWISE)
             .depth_bias_enable(false);
 
         let multisampling = vk::PipelineMultisampleStateCreateInfo::default()
@@ -543,11 +579,36 @@ impl Renderer {
         // Ensure draw_order + batches are current if you’re using VisualWorld as a render snapshot.
         let draw_cache_rebuilt = visual_world.prepare_draw_cache();
 
+        // Bring-up diagnostics: what are we about to draw?
+        self.inspector.print_visuals_only(
+            if draw_cache_rebuilt { "after prepare_draw_cache (rebuilt)" } else { "after prepare_draw_cache" },
+            visual_world,
+            self.cached_instance_data.len(),
+            self.instance_buffer_capacity,
+        );
+
         // Keep GPU instance buffer in sync with VisualWorld draw order + per-instance data.
         self.rebuild_instance_buffer(visual_world, draw_cache_rebuilt)?;
 
+        self.inspector.print_visuals_only(
+            "after rebuild_instance_buffer",
+            visual_world,
+            self.cached_instance_data.len(),
+            self.instance_buffer_capacity,
+        );
+
         // Delegate to the actual Vulkan work.
-        self.draw_frame(visual_world)
+        let r = self.draw_frame(visual_world);
+
+        // If we crash inside the driver, we won't see this. But it helps for non-fatal issues.
+        self.inspector.print_visuals_only(
+            "after draw_frame",
+            visual_world,
+            self.cached_instance_data.len(),
+            self.instance_buffer_capacity,
+        );
+
+        r
     }
 
     pub fn draw_frame(&mut self, visual_world: &VisualWorld) -> Result<(), Box<dyn std::error::Error>> {
@@ -636,6 +697,19 @@ impl Renderer {
                 let Some(inst_buf) = self.instance_buffer else {
                     continue;
                 };
+
+                // Debug safety: ensure we don't bind an out-of-bounds offset.
+                // Each instance is 64 bytes (mat4 of f32).
+                debug_assert!(
+                    (batch.start as u64) * 64u64 <= inst_buf.size,
+                    "instance buffer offset out of bounds: start={} size={}",
+                    batch.start,
+                    inst_buf.size
+                );
+                if (batch.start as u64) * 64u64 > inst_buf.size {
+                    // Avoid undefined behavior in release too.
+                    continue;
+                }
 
                 // Bind vertex buffers: binding 0 = positions, binding 1 = instance matrix.
                 let vbs = [vb.buffer, inst_buf.buffer];
@@ -959,7 +1033,7 @@ impl Renderer {
             .polygon_mode(vk::PolygonMode::FILL)
             .line_width(1.0)
             .cull_mode(vk::CullModeFlags::BACK)
-            .front_face(vk::FrontFace::CLOCKWISE)
+            .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
             .depth_bias_enable(false);
 
         let multisampling = vk::PipelineMultisampleStateCreateInfo::default()
@@ -1073,16 +1147,27 @@ impl Renderer {
     }
 
     fn create_shader_module(&self, device: &ash::Device, code: &[u8]) -> Result<vk::ShaderModule, vk::Result> {
-        let code = unsafe {
-            std::slice::from_raw_parts(
-                code.as_ptr() as *const u32,
-                code.len() / 4,
-            )
-        };
-        
-        let create_info = vk::ShaderModuleCreateInfo::default().code(code);
-        
-        unsafe { device.create_shader_module(&create_info, None) }
+        // Vulkan expects SPIR-V as a u32 slice. `include_bytes!` gives us bytes that are
+        // *not* guaranteed to be suitably aligned for `[u32]`, so we must handle alignment.
+        debug_assert!(code.len() % 4 == 0, "SPIR-V bytecode length must be a multiple of 4");
+
+        let word_count = code.len() / 4;
+        let aligned = (code.as_ptr() as usize) % std::mem::align_of::<u32>() == 0;
+
+        if aligned {
+            // Safe because we checked alignment and length.
+            let code_words = unsafe { std::slice::from_raw_parts(code.as_ptr() as *const u32, word_count) };
+            let create_info = vk::ShaderModuleCreateInfo::default().code(code_words);
+            unsafe { device.create_shader_module(&create_info, None) }
+        } else {
+            // Fall back to an aligned copy.
+            let mut words = Vec::<u32>::with_capacity(word_count);
+            for chunk in code.chunks_exact(4) {
+                words.push(u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
+            }
+            let create_info = vk::ShaderModuleCreateInfo::default().code(&words);
+            unsafe { device.create_shader_module(&create_info, None) }
+        }
     }
 
     pub fn resize(&mut self, _size: winit::dpi::PhysicalSize<u32>) {

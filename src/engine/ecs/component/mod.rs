@@ -19,6 +19,25 @@ pub trait Component: std::any::Any {
     fn as_any(&self) -> &dyn std::any::Any;
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
 
+    /// Concrete type name (for debugging / inspection).
+    fn type_name(&self) -> &'static str {
+        // Fast path for our known component set.
+        if self.as_any().is::<crate::engine::ecs::component::InstanceComponent>() {
+            return core::any::type_name::<crate::engine::ecs::component::InstanceComponent>();
+        }
+        if self.as_any().is::<crate::engine::ecs::component::TransformComponent>() {
+            return core::any::type_name::<crate::engine::ecs::component::TransformComponent>();
+        }
+        if self.as_any().is::<crate::engine::ecs::component::RenderableComponent>() {
+            return core::any::type_name::<crate::engine::ecs::component::RenderableComponent>();
+        }
+        if self.as_any().is::<crate::engine::ecs::component::CursorComponent>() {
+            return core::any::type_name::<crate::engine::ecs::component::CursorComponent>();
+        }
+
+        "<unknown component>"
+    }
+
     /// Called immediately after the component is assigned an `(EntityId, ComponentId)`.
     ///
     /// Components can override this to store identity internally so their mutation APIs
