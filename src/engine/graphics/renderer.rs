@@ -21,6 +21,13 @@ pub struct Renderer {
     meshes: Vec<GpuMesh>,
     materials: Vec<Material>,
 
+    // --- Instancing (per-instance data buffer) ---
+    instance_buffer: Option<GpuBuffer>,
+    /// Capacity of `instance_buffer` in number of instances (mat4 per instance).
+    instance_buffer_capacity: usize,
+    /// Cached packed instance data (column-major model matrix = 16 f32).
+    cached_instance_data: Vec<f32>,
+
     entry: Option<ash::Entry>,
     instance: Option<ash::Instance>,
     surface: Option<vk::SurfaceKHR>,
@@ -78,6 +85,11 @@ impl Renderer {
                 Material::GRADIENT_BG_XY,
                 Material::UNLIT_MESH,
             ],
+
+            instance_buffer: None,
+            instance_buffer_capacity: 0,
+            cached_instance_data: Vec::new(),
+
             entry: None,
             instance: None,
             surface: None,
@@ -179,6 +191,103 @@ impl Renderer {
             let ptr = device.map_memory(b.memory, 0, b.size, vk::MemoryMapFlags::empty())?;
             std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr as *mut u8, bytes.len());
             device.unmap_memory(b.memory);
+        }
+        Ok(())
+    }
+
+    fn destroy_gpu_buffer(&self, b: &GpuBuffer) {
+        // Safe to call with an uninitialized renderer? We'll only call this after init.
+        let Some(device) = self.device.as_ref() else { return; };
+        unsafe {
+            device.destroy_buffer(b.buffer, None);
+            device.free_memory(b.memory, None);
+        }
+    }
+
+    fn ensure_instance_buffer_capacity(&mut self, instance_count: usize) -> Result<(), Box<dyn std::error::Error>> {
+        // Each instance is a 4x4 f32 matrix.
+        let bytes_per_instance = 16usize * std::mem::size_of::<f32>();
+
+        if self.instance_buffer_capacity >= instance_count && self.instance_buffer.is_some() {
+            return Ok(());
+        }
+
+        // Grow with slack to avoid reallocating every time (simple doubling).
+        let mut new_cap = self.instance_buffer_capacity.max(1);
+        while new_cap < instance_count {
+            new_cap *= 2;
+        }
+
+        // Recreate buffer.
+        if let Some(old) = self.instance_buffer.take() {
+            self.destroy_gpu_buffer(&old);
+        }
+
+        let vb_handle = self.create_host_visible_buffer(
+            (new_cap * bytes_per_instance) as u64,
+            vk::BufferUsageFlags::VERTEX_BUFFER,
+        )?;
+
+        // Pull the created buffer out of the renderer-owned buffer table and keep it as a dedicated field.
+        // NOTE: This is a little hacky given the current buffer handle table; we treat the newest buffer
+        // as our instance buffer.
+        let gpu = *self
+            .buffers
+            .last()
+            .ok_or("instance buffer creation failed")?;
+        // Prevent the instance buffer from being double-freed via the handle table.
+        self.buffers.pop();
+
+        let _ = vb_handle; // handle is not used once we store the raw GPU buffer here.
+        self.instance_buffer = Some(gpu);
+        self.instance_buffer_capacity = new_cap;
+        Ok(())
+    }
+
+    fn rebuild_instance_buffer(
+        &mut self,
+        visual_world: &mut VisualWorld,
+        draw_cache_rebuilt: bool,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let needs_rebuild = draw_cache_rebuilt || visual_world.instance_data_dirty();
+        if !needs_rebuild {
+            return Ok(());
+        }
+
+        // Consume dirty flag (even if empty world).
+        let _ = visual_world.take_instance_data_dirty();
+
+        let instance_count = visual_world.draw_order().len();
+        self.ensure_instance_buffer_capacity(instance_count)?;
+
+        // Pack model matrices in draw_order.
+        self.cached_instance_data.clear();
+        self.cached_instance_data.reserve(instance_count * 16);
+
+        for &idx in visual_world.draw_order() {
+            let (_r, inst) = visual_world.instances()[idx as usize];
+            for col in inst.transform.model {
+                self.cached_instance_data.extend_from_slice(&col);
+            }
+        }
+
+        let Some(gpu) = self.instance_buffer else {
+            return Ok(());
+        };
+
+        // Upload as raw bytes.
+        let bytes: &[u8] = unsafe {
+            std::slice::from_raw_parts(
+                self.cached_instance_data.as_ptr() as *const u8,
+                self.cached_instance_data.len() * std::mem::size_of::<f32>(),
+            )
+        };
+
+        let device = self.device.as_ref().ok_or("Device not initialized")?;
+        unsafe {
+            let ptr = device.map_memory(gpu.memory, 0, gpu.size, vk::MemoryMapFlags::empty())?;
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr as *mut u8, bytes.len());
+            device.unmap_memory(gpu.memory);
         }
         Ok(())
     }
@@ -299,7 +408,60 @@ impl Renderer {
                 .name(main_name),
         ];
 
-        let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::default();
+        // Vertex input:
+        // - binding 0: position (vec3) per-vertex
+        // - binding 1: model matrix columns (4x vec4) per-instance
+        let vertex_bindings: [vk::VertexInputBindingDescription; 2] = [
+            vk::VertexInputBindingDescription {
+                binding: 0,
+                stride: 12,
+                input_rate: vk::VertexInputRate::VERTEX,
+            },
+            vk::VertexInputBindingDescription {
+                binding: 1,
+                stride: 64,
+                input_rate: vk::VertexInputRate::INSTANCE,
+            },
+        ];
+
+        let vertex_attributes: [vk::VertexInputAttributeDescription; 5] = [
+            // location 0: in_pos
+            vk::VertexInputAttributeDescription {
+                location: 0,
+                binding: 0,
+                format: vk::Format::R32G32B32_SFLOAT,
+                offset: 0,
+            },
+            // locations 1..4: mat4 columns
+            vk::VertexInputAttributeDescription {
+                location: 1,
+                binding: 1,
+                format: vk::Format::R32G32B32A32_SFLOAT,
+                offset: 0,
+            },
+            vk::VertexInputAttributeDescription {
+                location: 2,
+                binding: 1,
+                format: vk::Format::R32G32B32A32_SFLOAT,
+                offset: 16,
+            },
+            vk::VertexInputAttributeDescription {
+                location: 3,
+                binding: 1,
+                format: vk::Format::R32G32B32A32_SFLOAT,
+                offset: 32,
+            },
+            vk::VertexInputAttributeDescription {
+                location: 4,
+                binding: 1,
+                format: vk::Format::R32G32B32A32_SFLOAT,
+                offset: 48,
+            },
+        ];
+
+        let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::default()
+            .vertex_binding_descriptions(&vertex_bindings)
+            .vertex_attribute_descriptions(&vertex_attributes);
         let input_assembly = vk::PipelineInputAssemblyStateCreateInfo::default()
             .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
             .primitive_restart_enable(false);
@@ -379,7 +541,10 @@ impl Renderer {
     /// Render a frame given some view of world/scene state.
     pub fn render_visual_world(&mut self, visual_world: &mut VisualWorld,) -> Result<(), Box<dyn std::error::Error>> {
         // Ensure draw_order + batches are current if you’re using VisualWorld as a render snapshot.
-        visual_world.prepare_draw_cache();
+        let draw_cache_rebuilt = visual_world.prepare_draw_cache();
+
+        // Keep GPU instance buffer in sync with VisualWorld draw order + per-instance data.
+        self.rebuild_instance_buffer(visual_world, draw_cache_rebuilt)?;
 
         // Delegate to the actual Vulkan work.
         self.draw_frame(visual_world)
@@ -460,11 +625,28 @@ impl Renderer {
                 // Bind pipeline per material.
                 device.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
 
-                // TODO: bind vertex/index buffers for batch.mesh once GPU buffers exist.
-                // TODO: use push constants or an instance buffer for per-instance transforms.
+                // Mesh buffers.
+                let Some(mesh) = self.meshes.get(batch.mesh.0 as usize) else {
+                    continue;
+                };
+                let Some(vb) = self.get_buffer(mesh.vertex_buffer) else { continue; };
+                let Some(ib) = self.get_buffer(mesh.index_buffer) else { continue; };
 
-                // For now: hardcoded triangle shader; instance_count comes from the batch.
-                device.cmd_draw(command_buffer, 3, batch.count as u32, 0, 0);
+                // Instance buffer (mat4 per instance, stored in draw_order order).
+                let Some(inst_buf) = self.instance_buffer else {
+                    continue;
+                };
+
+                // Bind vertex buffers: binding 0 = positions, binding 1 = instance matrix.
+                let vbs = [vb.buffer, inst_buf.buffer];
+                let offsets = [0u64, (batch.start as u64) * 64u64];
+                device.cmd_bind_vertex_buffers(command_buffer, 0, &vbs, &offsets);
+
+                // Bind index buffer.
+                device.cmd_bind_index_buffer(command_buffer, ib.buffer, 0, vk::IndexType::UINT32);
+
+                // Indexed instanced draw.
+                device.cmd_draw_indexed(command_buffer, mesh.index_count, batch.count as u32, 0, 0, 0);
                 drew_any = true;
             }
 

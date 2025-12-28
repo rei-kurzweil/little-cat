@@ -33,6 +33,9 @@ pub struct VisualWorld {
 
     // Cached draw data (rebuilt when dirty)
     dirty_draw_cache: bool,
+    /// True when per-instance data (e.g. model matrices) changed and any cached GPU instance
+    /// buffer should be rebuilt/uploaded.
+    dirty_instance_data: bool,
     draw_order: Vec<u32>,     // indices into `instances`
     draw_batches: Vec<DrawBatch>,
 }
@@ -49,8 +52,21 @@ impl VisualWorld {
         self.next_handle = 0;
 
         self.dirty_draw_cache = true;
+        self.dirty_instance_data = true;
         self.draw_order.clear();
         self.draw_batches.clear();
+    }
+
+    /// Returns whether any per-instance data has changed since the last time it was consumed.
+    pub fn instance_data_dirty(&self) -> bool {
+        self.dirty_instance_data
+    }
+
+    /// Consume the instance-data dirty flag.
+    pub fn take_instance_data_dirty(&mut self) -> bool {
+        let v = self.dirty_instance_data;
+        self.dirty_instance_data = false;
+        v
     }
 
     pub fn instances(&self) -> &[(GpuRenderable, Instance)] {
@@ -67,9 +83,11 @@ impl VisualWorld {
     }
 
     /// Call once per frame before rendering. Cheap if nothing changed.
-    pub fn prepare_draw_cache(&mut self) {
+    ///
+    /// Returns `true` if the cached draw order/batches were rebuilt this call.
+    pub fn prepare_draw_cache(&mut self) -> bool {
         if !self.dirty_draw_cache {
-            return;
+            return false;
         }
 
         self.draw_order.clear();
@@ -112,6 +130,7 @@ impl VisualWorld {
         }
 
         self.dirty_draw_cache = false;
+        true
     }
 
     pub fn register(
@@ -130,6 +149,7 @@ impl VisualWorld {
         self.component_to_handle.insert((id, cid), handle);
 
         self.dirty_draw_cache = true;
+        self.dirty_instance_data = true;
         handle
     }
 
@@ -151,6 +171,7 @@ impl VisualWorld {
             self.component_to_handle.retain(|_, &mut h| h != handle);
 
             self.dirty_draw_cache = true;
+            self.dirty_instance_data = true;
             true
         } else {
             false
@@ -160,6 +181,7 @@ impl VisualWorld {
     pub fn update_transform(&mut self, handle: InstanceHandle, transform: Transform) -> bool {
         if let Some(&idx) = self.handle_to_index.get(&handle) {
             self.instances[idx].1.transform = transform;
+            self.dirty_instance_data = true;
             // transform-only doesn’t affect batching by (material, mesh)
             true
         } else {
@@ -170,6 +192,7 @@ impl VisualWorld {
     pub fn update_model(&mut self, handle: InstanceHandle, model: [[f32; 4]; 4]) -> bool {
         if let Some(&idx) = self.handle_to_index.get(&handle) {
             self.instances[idx].1.transform.model = model;
+            self.dirty_instance_data = true;
             // model-only doesn’t affect batching by (material, mesh)
             true
         } else {
@@ -181,6 +204,7 @@ impl VisualWorld {
         if let Some(&idx) = self.handle_to_index.get(&handle) {
             self.instances[idx] = (renderable, instance);
             self.dirty_draw_cache = true; // renderable changes likely affect sort/batch
+            self.dirty_instance_data = true;
             true
         } else {
             false
