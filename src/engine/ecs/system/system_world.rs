@@ -38,17 +38,6 @@ impl SystemWorld {
             .register_renderable(world, visuals, component);
     }
 
-    /// Register a RenderableComponent when you already have access to the `Entity`.
-    ///
-    /// This avoids needing the entity to already be inserted into `World`.
-    pub fn register_renderable_from_entity(
-        &mut self,
-        visuals: &mut VisualWorld,
-        component: ComponentId,
-    ) {
-        self.renderable
-            .register_renderable_from_entity(visuals, component);
-    }
 
     /// Prepare render state before issuing a frame.
     ///

@@ -55,7 +55,7 @@ impl Component for CameraComponent {
         cid: ComponentId,
     ) {
         // New registration becomes the active camera by default.
-        let h = systems.camera.register_camera(world, visuals, entity_id, cid);
+        let h = systems.camera.register_camera(world, visuals, cid);
         self.handle = Some(h);
     }
 }

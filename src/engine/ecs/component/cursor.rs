@@ -1,5 +1,5 @@
 use super::Component;
-
+use crate::engine::ecs::ComponentId;
 use crate::engine::ecs::system::SystemWorld;
 use crate::engine::ecs::World;
 
@@ -46,7 +46,7 @@ impl Component for CursorComponent {
         for child in &mut self.children {
             let cid = next_child_id;
             next_child_id = next_child_id.wrapping_add(1);
-            child.init(world, systems, visuals, entity, cid);
+            child.init(world, systems, visuals, cid);
         }
     }
 }

@@ -1,3 +1,4 @@
+use crate::engine::ecs::ComponentId;
 use crate::engine::{ecs, graphics};
 use crate::engine::user_input::InputState;
 

@@ -24,8 +24,8 @@ impl CursorSystem {
     /// For now this stores just the entity id. Later this can store component pointers/handles
     /// once ECS storage is component-centric.
     pub fn register_cursor(&mut self, component: ComponentId) {
-        if !self.cursors.iter().any(|(e, c)| *c == component) {
-            self.cursors.push(( component));
+        if !self.cursors.iter().any(|c| *c == component) {
+            self.cursors.push(component);
         }
     }
 
@@ -54,9 +54,7 @@ impl System for CursorSystem {
         // For each registered cursor component, find its parent InstanceComponent
         // and update the transform in the visual world.
         for (component_id, cursor_cid) in self.cursors.iter().copied() {
-            let Some(entity) = world.get_entity_mut(entity_id) else {
-                continue;
-            };
+
 
             // Get the parent component and verify it's an InstanceComponent
             if let Some((_parent_cid, instance_comp)) = entity.get_parent_as::<InstanceComponent>(cursor_cid) {

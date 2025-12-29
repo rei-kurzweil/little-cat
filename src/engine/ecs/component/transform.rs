@@ -55,11 +55,11 @@ impl TransformComponent {
         self.transform.translation = [x, y, z];
         self.recompute_model();
         ctx.systems
-            .transform_changed(ctx.world, ctx.visuals, self.entity, self.component);
+            .transform_changed(ctx.world, ctx.visuals,  self.component);
 
         // If this transform is part of an active camera (Camera2D/Camera), let CameraSystem react.
         ctx.systems
-            .camera_transform_changed(ctx.world, ctx.visuals, self.entity, self.component);
+            .camera_transform_changed(ctx.world, ctx.visuals,  self.component);
     }
 
     /// Set non-uniform scale and notify `TransformSystem`.
@@ -73,10 +73,10 @@ impl TransformComponent {
         self.transform.scale = [x, y, z];
         self.recompute_model();
         ctx.systems
-            .transform_changed(ctx.world, ctx.visuals, self.entity, self.component);
+            .transform_changed(ctx.world, ctx.visuals,  self.component);
 
         ctx.systems
-            .camera_transform_changed(ctx.world, ctx.visuals, self.entity, self.component);
+            .camera_transform_changed(ctx.world, ctx.visuals,  self.component);
     }
 
     /// Set rotation from Euler angles (radians), XYZ order, and notify `TransformSystem`.

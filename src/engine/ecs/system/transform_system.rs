@@ -29,9 +29,6 @@ impl TransformSystem {
         visuals: &mut VisualWorld,
         component: ComponentId,
     ) {
-        let Some(ent) = world.get_entity_mut(entity) else {
-            return;
-        };
 
         // Each InstanceComponent (and its immediate children) defines a VisualWorld Instance.
         // TransformComponents may be nested under other components; we walk up to find the nearest
@@ -39,7 +36,7 @@ impl TransformSystem {
         let instance_cid = {
             let mut cur = component;
             loop {
-                let Some(parent) = ent.parent_of(cur) else {
+                let Some(parent) = world.parent_of(cur) else {
                     return;
                 };
                 if ent.get_component_by_id_as::<InstanceComponent>(parent).is_some() {

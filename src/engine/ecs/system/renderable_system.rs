@@ -62,11 +62,6 @@ impl RenderableSystem {
             self.renderables.push(component);
         }
 
-        let Some(ent) = world.get_entity_mut(entity) else {
-            println!("[RenderableSystem]  -> world entity not found");
-            return;
-        };
-
         self.register_renderable_from_entity(visuals, ent, component);
     }
 
@@ -177,10 +172,7 @@ impl RenderableSystem {
 
             // If the instance component already got a handle (maybe through another renderable), skip.
             let _component = key;
-            let Some(ent) = world.get_entity_mut(entity) else {
-                println!("[RenderableSystem]  -> entity {} missing during flush", entity);
-                continue;
-            };
+            
             let Some(instance_comp) = ent.get_component_by_id_as_mut::<InstanceComponent>(p.instance_cid) else {
                 println!("[RenderableSystem]  -> instance component {} missing during flush", p.instance_cid);
                 continue;
