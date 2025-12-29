@@ -73,4 +73,41 @@ impl World {
     pub fn get_component_record_mut(&mut self, id: ComponentId) -> Option<&mut crate::engine::ecs::component::ComponentNode> {
         self.components.get_mut(id)
     }
+
+    // --- Topology helpers (component-graph) ---
+    pub fn parent_of(&self, c: ComponentId) -> Option<ComponentId> {
+        self.get_component_record(c)?.parent
+    }
+
+    pub fn children_of(&self, c: ComponentId) -> &[ComponentId] {
+        static EMPTY: [ComponentId; 0] = [];
+        self.get_component_record(c)
+            .map(|n| n.children.as_slice())
+            .unwrap_or(&EMPTY)
+    }
+
+    // --- Typed component access ---
+    pub fn get_component_by_id_as<T: 'static>(&self, c: ComponentId) -> Option<&T> {
+        let node = self.get_component_record(c)?;
+        node.component.as_any().downcast_ref::<T>()
+    }
+
+    pub fn get_component_by_id_as_mut<T: 'static>(&mut self, c: ComponentId) -> Option<&mut T> {
+        let node = self.get_component_record_mut(c)?;
+        node.component.as_any_mut().downcast_mut::<T>()
+    }
+
+    pub fn get_parent_as<T: 'static>(&self, c: ComponentId) -> Option<(ComponentId, &T)> {
+        let parent = self.parent_of(c)?;
+        let typed = self.get_component_by_id_as::<T>(parent)?;
+        Some((parent, typed))
+    }
+
+    pub fn get_parent_as_mut<T: 'static>(&mut self, c: ComponentId) -> Option<(ComponentId, &mut T)> {
+        let parent = self.parent_of(c)?;
+        // Avoid borrowing self twice by doing the downcast via the node.
+        let node = self.get_component_record_mut(parent)?;
+        let typed = node.component.as_any_mut().downcast_mut::<T>()?;
+        Some((parent, typed))
+    }
 }

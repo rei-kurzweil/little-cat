@@ -53,11 +53,9 @@ impl System for CursorSystem {
 
         // For each registered cursor component, find its parent InstanceComponent
         // and update the transform in the visual world.
-        for (component_id, cursor_cid) in self.cursors.iter().copied() {
-
-
+        for cursor_cid in self.cursors.iter().copied() {
             // Get the parent component and verify it's an InstanceComponent
-            if let Some((_parent_cid, instance_comp)) = entity.get_parent_as::<InstanceComponent>(cursor_cid) {
+            if let Some((_parent_cid, instance_comp)) = world.get_parent_as::<InstanceComponent>(cursor_cid) {
                 // Get the instance handle from the parent InstanceComponent
                 if let Some(handle) = instance_comp.get_handle() {
                     // Update the transform in the visual world using the handle

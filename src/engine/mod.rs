@@ -1,6 +1,5 @@
 pub mod ecs;
 pub mod graphics;
-pub mod rendering_inspector;
 pub mod networking;
 pub mod user_input;
 pub mod windowing;

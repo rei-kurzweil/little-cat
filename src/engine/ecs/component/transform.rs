@@ -10,7 +10,7 @@ pub struct TransformComponent {
     /// Engine-wide transform type (also used by renderer/VisualWorld).
     pub transform: Transform,
 
-    component: ComponentId,
+    component: Option<ComponentId>,
 }
 
 impl TransformComponent {
@@ -18,7 +18,7 @@ impl TransformComponent {
         let transform = Transform::default();
         Self {
             transform,
-            component: 0,
+            component: None,
         }
     }
 
@@ -54,12 +54,13 @@ impl TransformComponent {
     ) {
         self.transform.translation = [x, y, z];
         self.recompute_model();
+        let Some(cid) = self.component else { return; };
         ctx.systems
-            .transform_changed(ctx.world, ctx.visuals,  self.component);
+            .transform_changed(ctx.world, ctx.visuals, cid);
 
         // If this transform is part of an active camera (Camera2D/Camera), let CameraSystem react.
         ctx.systems
-            .camera_transform_changed(ctx.world, ctx.visuals,  self.component);
+            .camera_transform_changed(ctx.world, ctx.visuals, cid);
     }
 
     /// Set non-uniform scale and notify `TransformSystem`.
@@ -72,11 +73,12 @@ impl TransformComponent {
     ) {
         self.transform.scale = [x, y, z];
         self.recompute_model();
+        let Some(cid) = self.component else { return; };
         ctx.systems
-            .transform_changed(ctx.world, ctx.visuals,  self.component);
+            .transform_changed(ctx.world, ctx.visuals, cid);
 
         ctx.systems
-            .camera_transform_changed(ctx.world, ctx.visuals,  self.component);
+            .camera_transform_changed(ctx.world, ctx.visuals, cid);
     }
 
     /// Set rotation from Euler angles (radians), XYZ order, and notify `TransformSystem`.
@@ -117,17 +119,18 @@ impl TransformComponent {
         self.transform.rotation = q;
         self.recompute_model();
 
+        let Some(cid) = self.component else { return; };
         ctx.systems
-            .transform_changed(ctx.world, ctx.visuals, self.component);
+            .transform_changed(ctx.world, ctx.visuals, cid);
 
         ctx.systems
-            .camera_transform_changed(ctx.world, ctx.visuals, self.component);
+            .camera_transform_changed(ctx.world, ctx.visuals, cid);
     }
 }
 
 impl Component for TransformComponent {
     fn set_id(&mut self, component: ComponentId) {
-        self.component = component;
+        self.component = Some(component);
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

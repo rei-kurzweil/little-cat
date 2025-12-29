@@ -39,14 +39,14 @@ impl TransformSystem {
                 let Some(parent) = world.parent_of(cur) else {
                     return;
                 };
-                if ent.get_component_by_id_as::<InstanceComponent>(parent).is_some() {
+                if world.get_component_by_id_as::<InstanceComponent>(parent).is_some() {
                     break parent;
                 }
                 cur = parent;
             }
         };
 
-        let Some(instance_comp) = ent.get_component_by_id_as::<InstanceComponent>(instance_cid) else {
+        let Some(instance_comp) = world.get_component_by_id_as::<InstanceComponent>(instance_cid) else {
             return;
         };
 
@@ -55,7 +55,7 @@ impl TransformSystem {
             return;
         };
 
-        let Some(transform_comp) = ent.get_component_by_id_as::<TransformComponent>(component) else {
+        let Some(transform_comp) = world.get_component_by_id_as::<TransformComponent>(component) else {
             return;
         };
 

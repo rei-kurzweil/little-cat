@@ -9,7 +9,6 @@ use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use std::sync::Arc;
 
 use ash::vk;
-use crate::engine::rendering_inspector::RenderingInspector;
 
 // Push constants for camera (view/proj) plus a simple global translation in NDC.
 // Layout here must match the shader push-constant block.
@@ -81,8 +80,6 @@ pub struct Renderer {
     /// Cached packed instance data (column-major model matrix = 16 f32).
     cached_instance_data: Vec<f32>,
 
-    inspector: RenderingInspector,
-
     // --- Camera push constants ---
     cached_camera_view: [[f32; 4]; 4],
     cached_camera_proj: [[f32; 4]; 4],
@@ -149,8 +146,6 @@ impl Renderer {
             instance_buffer: None,
             instance_buffer_capacity: 0,
             cached_instance_data: Vec::new(),
-
-            inspector: RenderingInspector::new(),
 
             cached_camera_view: [
                 [1.0, 0.0, 0.0, 0.0],
@@ -659,34 +654,11 @@ impl Renderer {
         // Ensure draw_order + batches are current if you’re using VisualWorld as a render snapshot.
         let draw_cache_rebuilt = visual_world.prepare_draw_cache();
 
-        // Bring-up diagnostics: what are we about to draw?
-        self.inspector.print_visuals_only(
-            if draw_cache_rebuilt { "after prepare_draw_cache (rebuilt)" } else { "after prepare_draw_cache" },
-            visual_world,
-            self.cached_instance_data.len(),
-            self.instance_buffer_capacity,
-        );
-
         // Keep GPU instance buffer in sync with VisualWorld draw order + per-instance data.
         self.rebuild_instance_buffer(visual_world, draw_cache_rebuilt)?;
 
-        self.inspector.print_visuals_only(
-            "after rebuild_instance_buffer",
-            visual_world,
-            self.cached_instance_data.len(),
-            self.instance_buffer_capacity,
-        );
-
         // Delegate to the actual Vulkan work.
         let r = self.draw_frame(visual_world);
-
-        // If we crash inside the driver, we won't see this. But it helps for non-fatal issues.
-        self.inspector.print_visuals_only(
-            "after draw_frame",
-            visual_world,
-            self.cached_instance_data.len(),
-            self.instance_buffer_capacity,
-        );
 
         r
     }

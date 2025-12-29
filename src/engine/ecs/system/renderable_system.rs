@@ -53,7 +53,7 @@ impl RenderableSystem {
         visuals: &mut VisualWorld,
         component: ComponentId,
     ) {
-        println!("[RenderableSystem] register_renderable: component={}", component);
+        println!("[RenderableSystem] register_renderable: component={:?}", component);
         if !self
             .renderables
             .iter()
@@ -62,16 +62,16 @@ impl RenderableSystem {
             self.renderables.push(component);
         }
 
-        self.register_renderable_from_entity(visuals, ent, component);
+        self.register_renderable_from_world(world, visuals, component);
     }
 
-    /// Register a renderable when you already have access to the entity.
-    pub fn register_renderable_from_entity(
+    /// Register a renderable by walking the component graph in `World`.
+    pub fn register_renderable_from_world(
         &mut self,
+        world: &mut World,
         visuals: &mut VisualWorld,
         component: ComponentId,
     ) {
-        let entity = ent.id;
 
         // Each InstanceComponent (and its immediate children) defines a VisualWorld Instance.
         // Renderables may be nested under other components; we walk up to find the nearest
@@ -79,23 +79,26 @@ impl RenderableSystem {
         let instance_cid = {
             let mut cur = component;
             loop {
-                let Some(parent) = ent.parent_of(cur) else {
-                    println!("[RenderableSystem]  -> no parent while walking to InstanceComponent (cur={})", cur);
+                let Some(parent) = world.parent_of(cur) else {
+                    println!(
+                        "[RenderableSystem]  -> no parent while walking to InstanceComponent (cur={:?})",
+                        cur
+                    );
                     return;
                 };
-                if ent.get_component_by_id_as::<InstanceComponent>(parent).is_some() {
+                if world.get_component_by_id_as::<InstanceComponent>(parent).is_some() {
                     break parent;
                 }
                 cur = parent;
             }
         };
-        println!("[RenderableSystem]  -> instance_cid={}", instance_cid);
+        println!("[RenderableSystem]  -> instance_cid={:?}", instance_cid);
 
         // First TransformComponent directly under the InstanceComponent (if present).
-        let transform_comp = ent
+        let transform_comp = world
             .children_of(instance_cid)
             .iter()
-            .find_map(|&cid| ent.get_component_by_id_as::<TransformComponent>(cid));
+            .find_map(|&cid| world.get_component_by_id_as::<TransformComponent>(cid));
         let transform = if let Some(t) = transform_comp {
             t.transform
         } else {
@@ -104,7 +107,7 @@ impl RenderableSystem {
         let inst = Instance { transform };
 
         // Now mutably borrow the InstanceComponent to store the handle.
-        let Some(instance_comp) = ent.get_component_by_id_as_mut::<InstanceComponent>(instance_cid) else {
+        let Some(instance_comp) = world.get_component_by_id_as_mut::<InstanceComponent>(instance_cid) else {
             return;
         };
 
@@ -115,13 +118,13 @@ impl RenderableSystem {
         }
 
         // Defer insertion into VisualWorld until the GPU mesh exists.
-        let Some(renderable_comp) = ent.get_component_by_id_as::<RenderableComponent>(component) else {
+        let Some(renderable_comp) = world.get_component_by_id_as::<RenderableComponent>(component) else {
             println!("[RenderableSystem]  -> component is not RenderableComponent somehow");
             return;
         };
 
         self.pending.insert(
-            (entity, component),
+            component,
             PendingRenderable {
                 cpu_mesh: renderable_comp.renderable.mesh,
                 material: renderable_comp.renderable.material,
@@ -171,10 +174,11 @@ impl RenderableSystem {
             };
 
             // If the instance component already got a handle (maybe through another renderable), skip.
-            let _component = key;
-            
-            let Some(instance_comp) = ent.get_component_by_id_as_mut::<InstanceComponent>(p.instance_cid) else {
-                println!("[RenderableSystem]  -> instance component {} missing during flush", p.instance_cid);
+            let Some(instance_comp) = world.get_component_by_id_as_mut::<InstanceComponent>(p.instance_cid) else {
+                println!(
+                    "[RenderableSystem]  -> instance component {:?} missing during flush",
+                    p.instance_cid
+                );
                 continue;
             };
             if instance_comp.get_handle().is_some() {
@@ -190,23 +194,7 @@ impl RenderableSystem {
             let handle = visuals.register(p.instance_cid, gpu_r, inst);
             instance_comp.handle = Some(handle);
 
-            // println!(
-            //     "[RenderableSystem]  -> registered VisualWorld instance:  instance_cid={} handle={:?} mesh={:?} material={:?}",
-
-            //     p.instance_cid,
-            //     handle,
-            //     mesh,
-            //     p.material
-            // );
-            /**
-             * `ComponentId` doesn't implement `std::fmt::Display`
-in format strings you may be able to use `{:?}` (or {:#?} for pretty-print) insteadrustcClick for full compiler diagnostic
-macros.rs(143, 28): Actual error occurred here
-macros.rs(143, 28): Error originated from macro call here
-renderable_system.rs(205, 13): Error originated from macro call here
-renderable_system.rs(206, 88): required by this formatting parameter
-lib.rs(452, 9): the trait `std::fmt::Display` is not implemented for `ComponentId` 
-             */
+            // (If you log ComponentId in a format string, use {:?}.)
             self.pending.remove(&key);
         }
     }

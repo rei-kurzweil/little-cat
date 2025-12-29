@@ -39,15 +39,8 @@ impl Component for CursorComponent {
     ) {
         systems.register_cursor(component);
 
-        // Initialize all child components.
-        // Child component ids are allocated locally here for now; later we'll integrate
-        // child registration into Entity/World so ids are stable and addressable.
-        let mut next_child_id: ComponentId = 0;
-        for child in &mut self.children {
-            let cid = next_child_id;
-            next_child_id = next_child_id.wrapping_add(1);
-            child.init(world, systems, visuals, cid);
-        }
+        // NOTE: Child components will be handled once World owns parent/child insertion APIs.
+        let _ = (world, visuals);
     }
 }
 

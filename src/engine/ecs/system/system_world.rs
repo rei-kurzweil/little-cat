@@ -75,7 +75,7 @@ impl SystemWorld {
         visuals: &mut VisualWorld,
         component: ComponentId,
     ) {
-        self.camera.transform_changed(world, visuals, component);
+        let _ = (world, visuals, component);
     }
     
     pub fn tick(&mut self, world: &mut World, visuals: &mut VisualWorld, input: &InputState) {

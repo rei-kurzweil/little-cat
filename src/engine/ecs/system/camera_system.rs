@@ -1,5 +1,6 @@
 
 use crate::engine::ecs::system::System;
+use crate::engine::ecs::ComponentId;
 use crate::engine::ecs::{World};
 use crate::engine::graphics::VisualWorld;
 

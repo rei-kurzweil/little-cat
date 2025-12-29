@@ -1,6 +1,6 @@
 use super::Component;
 
-
+use crate::engine::ecs::ComponentId;
 use crate::engine::ecs::system::SystemWorld;
 use crate::engine::ecs::World;
 use crate::engine::graphics::primitives::InstanceHandle;
