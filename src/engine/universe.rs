@@ -1,5 +1,9 @@
+use crate::engine::ecs::Transform;
 use crate::engine::{ecs, graphics};
 use crate::engine::user_input::InputState;
+use crate::engine::ecs::component::{InstanceComponent, RenderableComponent, TransformComponent};
+use crate::engine::graphics::mesh::MeshFactory;
+use crate::engine::graphics::primitives::MaterialHandle;
 
 
 pub struct Universe {
@@ -12,12 +16,66 @@ pub struct Universe {
 
 impl Universe {
     pub fn new(world: ecs::World) -> Self {
-        Self {
+        let mut u = Self {
             world,
             visuals: graphics::VisualWorld::new(),
             render_assets: graphics::RenderAssets::new(),
             systems: ecs::SystemWorld::new(),
-        }
+        };
+
+        // Temporary: rebuild a demo scene directly in Universe creation.
+        // This keeps runtime visuals alive while we finalize a proper scene/level layer.
+        u.build_demo_scene_7_shapes();
+
+        u
+    }
+
+    fn build_demo_scene_7_shapes(&mut self) {
+        // Register CPU meshes once and reuse handles.
+        let tri_mesh = self.render_assets.register_mesh(MeshFactory::triangle_2d());
+        let square_mesh = self.render_assets.register_mesh(MeshFactory::quad_2d());
+        
+
+        // Helper to spawn a single rendered shape.
+        let mut spawn = |mesh, x: f32, y: f32, s: f32, r: f32| {
+            
+
+            let instance = self.world.add_component(InstanceComponent::new());
+            let transform = self.world.add_component(
+                TransformComponent::new()
+                    .with_position(x, y, 0.0)
+                    .with_scale(s, s, 1.0)
+                    .with_rotation_euler(0.0, 0.0, r)
+            );
+            let renderable = self.world.add_component(RenderableComponent {
+                renderable: crate::engine::graphics::primitives::Renderable::new(
+                                mesh, MaterialHandle::UNLIT_MESH
+                            ),
+            });
+
+            
+            // Attach under the InstanceComponent (RenderableSystem expects this topology).
+            let _ = self.world.add_child(instance, transform);
+            let _ = self.world.add_child(instance, renderable);
+            
+
+            // Kick renderable registration so it gets queued in RenderableSystem (and then flushed during render()).
+            self.systems
+                .register_renderable(&mut self.world, &mut self.visuals, renderable);
+            
+
+        };
+
+        // 5 squares
+        spawn(square_mesh, -0.80, -0.30, 0.25, 0.0);
+        spawn(square_mesh, -0.40, -0.30, 0.25, 0.0);
+        spawn(square_mesh, 0.00, -0.30, 0.25, 0.0);
+        spawn(square_mesh, 0.40, -0.30, 0.25, 0.0);
+        spawn(square_mesh, 0.80, -0.30, 0.25, 0.0);
+
+        // 2 triangles
+        spawn(tri_mesh, -0.20, 0.35, 0.30, 3.14159 / 2.0);
+        spawn(tri_mesh, 0.30, 0.35, 0.30, -3.14159);
     }
 
     /// Game/update step (placeholder).

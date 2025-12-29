@@ -38,10 +38,57 @@ impl TransformComponent {
         self
     }
 
-    pub fn with_rotation_xyzw(mut self, x: f32, y: f32, z: f32, w: f32) -> Self {
-        self.transform.rotation = [x, y, z, w];
+    /// Private helper: computes and sets quaternion from euler angles, then recomputes model.
+    fn set_rotation_euler_internal(&mut self, pitch_x: f32, yaw_y: f32, roll_z: f32) {
+        // Minimal Euler->quat (XYZ intrinsic) implementation.
+        let (sx, cx) = (0.5 * pitch_x).sin_cos();
+        let (sy, cy) = (0.5 * yaw_y).sin_cos();
+        let (sz, cz) = (0.5 * roll_z).sin_cos();
+
+        // q = qx * qy * qz
+        let qx = [sx, 0.0, 0.0, cx];
+        let qy = [0.0, sy, 0.0, cy];
+        let qz = [0.0, 0.0, sz, cz];
+
+        fn quat_mul(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
+            let (ax, ay, az, aw) = (a[0], a[1], a[2], a[3]);
+            let (bx, by, bz, bw) = (b[0], b[1], b[2], b[3]);
+            [
+                aw * bx + ax * bw + ay * bz - az * by,
+                aw * by - ax * bz + ay * bw + az * bx,
+                aw * bz + ax * by - ay * bx + az * bw,
+                aw * bw - ax * bx - ay * by - az * bz,
+            ]
+        }
+
+        let qxy = quat_mul(qx, qy);
+        let q = quat_mul(qxy, qz);
+        self.transform.rotation = q;
         self.recompute_model();
+    }
+
+    /// Builder-style: set rotation from Euler angles (radians), returns Self.
+    pub fn with_rotation_euler(mut self, pitch_x: f32, yaw_y: f32, roll_z: f32) -> Self {
+        self.set_rotation_euler_internal(pitch_x, yaw_y, roll_z);
         self
+    }
+
+    /// Set rotation from Euler angles (radians), XYZ order, and notify systems.
+    pub fn set_rotation_euler(
+        &mut self,
+        ctx: &mut WorldContext,
+        pitch_x: f32,
+        yaw_y: f32,
+        roll_z: f32,
+    ) {
+        self.set_rotation_euler_internal(pitch_x, yaw_y, roll_z);
+
+        let Some(cid) = self.component else { return; };
+        ctx.systems
+            .transform_changed(ctx.world, ctx.visuals, cid);
+
+        ctx.systems
+            .camera_transform_changed(ctx.world, ctx.visuals, cid);
     }
 
     /// Set translation and notify `TransformSystem`.
@@ -73,52 +120,6 @@ impl TransformComponent {
     ) {
         self.transform.scale = [x, y, z];
         self.recompute_model();
-        let Some(cid) = self.component else { return; };
-        ctx.systems
-            .transform_changed(ctx.world, ctx.visuals, cid);
-
-        ctx.systems
-            .camera_transform_changed(ctx.world, ctx.visuals, cid);
-    }
-
-    /// Set rotation from Euler angles (radians), XYZ order, and notify `TransformSystem`.
-    ///
-    /// API matches your sketch:
-    /// `transformComponent.setRotation(PI / 2, 0, 0)`.
-    pub fn set_rotation_euler(
-        &mut self,
-        ctx: &mut WorldContext,
-        pitch_x: f32,
-        yaw_y: f32,
-        roll_z: f32,
-    ) {
-        // Minimal Euler->quat (XYZ intrinsic) implementation.
-        // We'll eventually replace this with glam.
-        let (sx, cx) = (0.5 * pitch_x).sin_cos();
-        let (sy, cy) = (0.5 * yaw_y).sin_cos();
-        let (sz, cz) = (0.5 * roll_z).sin_cos();
-
-        // q = qx * qy * qz
-        let qx = [sx, 0.0, 0.0, cx];
-        let qy = [0.0, sy, 0.0, cy];
-        let qz = [0.0, 0.0, sz, cz];
-
-        fn quat_mul(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
-            let (ax, ay, az, aw) = (a[0], a[1], a[2], a[3]);
-            let (bx, by, bz, bw) = (b[0], b[1], b[2], b[3]);
-            [
-                aw * bx + ax * bw + ay * bz - az * by,
-                aw * by - ax * bz + ay * bw + az * bx,
-                aw * bz + ax * by - ay * bx + az * bw,
-                aw * bw - ax * bx - ay * by - az * bz,
-            ]
-        }
-
-        let qxy = quat_mul(qx, qy);
-        let q = quat_mul(qxy, qz);
-        self.transform.rotation = q;
-        self.recompute_model();
-
         let Some(cid) = self.component else { return; };
         ctx.systems
             .transform_changed(ctx.world, ctx.visuals, cid);
