@@ -2,6 +2,7 @@ pub mod primitives;
 pub mod mesh;
 pub mod render_assets;
 pub mod renderer;
+pub mod spirv_reflect;
 pub mod visual_world;
 
 pub use primitives::{GpuRenderable, Material, MaterialHandle, MeshHandle, Renderable, Transform};

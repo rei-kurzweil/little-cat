@@ -11,11 +11,63 @@ use std::sync::Arc;
 use ash::vk;
 use crate::engine::rendering_inspector::RenderingInspector;
 
+// Push constants for camera (view/proj) plus a simple global translation in NDC.
+// Layout here must match the shader push-constant block.
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct CameraPushConstants {
+    view: [[f32; 4]; 4],
+    proj: [[f32; 4]; 4],
+    // NDC-space translation applied in the vertex shader.
+    // We keep this as vec2 and add explicit padding so the overall layout is well-defined.
+    global_translation: [f32; 2],
+    _pad0: [f32; 2],
+}
+
+fn print_mat4(label: &str, m: &[[f32; 4]; 4]) {
+    // Keep it very explicit to avoid any row/column-major confusion in debugging.
+    println!("{label}:");
+    for r in 0..4 {
+        println!(
+            "  [{:>9.4}, {:>9.4}, {:>9.4}, {:>9.4}]",
+            m[r][0], m[r][1], m[r][2], m[r][3]
+        );
+    }
+}
+
+fn bytes_of<T>(v: &T) -> &[u8] {
+    unsafe { std::slice::from_raw_parts((v as *const T) as *const u8, std::mem::size_of::<T>()) }
+}
+
+fn debug_handle_u64<T: vk::Handle>(h: T) -> u64 {
+    h.as_raw()
+}
+
+unsafe extern "system" fn vulkan_debug_callback(
+    message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
+    message_types: vk::DebugUtilsMessageTypeFlagsEXT,
+    p_callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT,
+    _p_user_data: *mut std::ffi::c_void,
+) -> vk::Bool32 {
+    let callback_data = unsafe { &*p_callback_data };
+    let message = if callback_data.p_message.is_null() {
+        std::borrow::Cow::Borrowed("<no message>")
+    } else {
+        unsafe { std::ffi::CStr::from_ptr(callback_data.p_message) }.to_string_lossy()
+    };
+
+    eprintln!(
+        "[VULKAN][{:?}][{:?}] {}",
+        message_severity,
+        message_types,
+        message
+    );
+
+    vk::FALSE
+}
+
 
 pub struct Renderer {
-    /// Bring-up / debugging: if true, draw a hardcoded triangle even when the scene is empty.
-    pub debug_draw_hardcoded_triangle: bool,
-
     /// Renderer-owned resource tables. Handles are lightweight indices into these vecs.
     /// (Eventually these become GPU buffers/pipelines and should use a generational handle scheme.)
     buffers: Vec<GpuBuffer>,
@@ -31,10 +83,16 @@ pub struct Renderer {
 
     inspector: RenderingInspector,
 
+    // --- Camera push constants ---
+    cached_camera_view: [[f32; 4]; 4],
+    cached_camera_proj: [[f32; 4]; 4],
+
     entry: Option<ash::Entry>,
     instance: Option<ash::Instance>,
     surface: Option<vk::SurfaceKHR>,
     surface_loader: Option<ash::khr::surface::Instance>,
+    debug_utils_loader: Option<ash::ext::debug_utils::Instance>,
+    debug_messenger: Option<vk::DebugUtilsMessengerEXT>,
     physical_device: Option<vk::PhysicalDevice>,
     device: Option<ash::Device>,
     graphics_queue: Option<vk::Queue>,
@@ -80,7 +138,6 @@ impl Renderer {
 
     pub fn new() -> Self {
         Self {
-            debug_draw_hardcoded_triangle: false,
             buffers: Vec::new(),
             meshes: Vec::new(),
             materials: vec![
@@ -95,10 +152,25 @@ impl Renderer {
 
             inspector: RenderingInspector::new(),
 
+            cached_camera_view: [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+            cached_camera_proj: [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+
             entry: None,
             instance: None,
             surface: None,
             surface_loader: None,
+            debug_utils_loader: None,
+            debug_messenger: None,
             physical_device: None,
             device: None,
             graphics_queue: None,
@@ -124,6 +196,7 @@ impl Renderer {
             max_frames_in_flight: 2,
         }
     }
+
 
     fn get_buffer(&self, h: BufferHandle) -> Option<&GpuBuffer> {
         self.buffers.get(h.0 as usize)
@@ -542,7 +615,14 @@ impl Renderer {
             .logic_op_enable(false)
             .attachments(std::slice::from_ref(&color_blend_attachment));
 
-        let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default();
+        // Push constants: view + proj (2x mat4 = 128 bytes).
+        let push_constant_range = vk::PushConstantRange::default()
+            .stage_flags(vk::ShaderStageFlags::VERTEX)
+            .offset(0)
+            .size(std::mem::size_of::<CameraPushConstants>() as u32);
+
+        let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default()
+            .push_constant_ranges(std::slice::from_ref(&push_constant_range));
         let pipeline_layout = unsafe { device.create_pipeline_layout(&pipeline_layout_info, None) }?;
 
         let pipeline_info = vk::GraphicsPipelineCreateInfo::default()
@@ -620,11 +700,7 @@ impl Renderer {
         for b in visual_world.draw_batches() {
             batch_pipelines.push(self.ensure_material_pipeline(b.material)?);
         }
-        let fallback_pipeline = if self.debug_draw_hardcoded_triangle {
-            Some(self.ensure_material_pipeline(MaterialHandle::UNLIT_FULLSCREEN)?)
-        } else {
-            None
-        };
+        // No fallback debug-draw triangle path.
 
         // Now pull out the Vulkan handles we need for the rest of the frame.
         let swapchain = self.swapchain.ok_or("Swapchain not initialized")?;
@@ -648,6 +724,33 @@ impl Renderer {
 
         unsafe {
             device.reset_fences(&[self.in_flight_fences[self.current_frame]])?;
+        }
+
+        // Camera push constants: just refresh from the snapshot every frame.
+        // This is tiny (128 bytes) and simpler than threading mutability for a dirty flag.
+        self.cached_camera_view = visual_world.camera_view();
+        self.cached_camera_proj = visual_world.camera_proj();
+        // Global translation from the active 2D camera (NDC pan).
+        let global_translation = visual_world.camera_translation();
+
+        let cam_pc = CameraPushConstants {
+            view: self.cached_camera_view,
+            proj: self.cached_camera_proj,
+            global_translation,
+            _pad0: [0.0, 0.0],
+        };
+
+        // Debug: print the exact matrices that will be pushed to the GPU.
+        // Enable with: LC_PRINT_CAMERA_MATRICES=1
+        // Printed once per run to keep output readable.
+        static PRINTED_CAMERA_MATRICES: std::sync::atomic::AtomicBool =
+            std::sync::atomic::AtomicBool::new(false);
+        if std::env::var("LC_PRINT_CAMERA_MATRICES").ok().as_deref() == Some("1")
+            && !PRINTED_CAMERA_MATRICES.swap(true, std::sync::atomic::Ordering::Relaxed)
+        {
+            println!("[Renderer] Camera push constants (view/proj) about to be pushed:");
+            print_mat4("view", &cam_pc.view);
+            print_mat4("proj", &cam_pc.proj);
         }
 
         // Record command buffer
@@ -678,13 +781,62 @@ impl Renderer {
 
             let mut drew_any = false;
 
-            for (batch, &pipeline) in visual_world.draw_batches().iter().zip(batch_pipelines.iter()) {
+            let batch_len = visual_world.draw_batches().len();
+            for (i, (batch, &pipeline)) in visual_world
+                .draw_batches()
+                .iter()
+                .zip(batch_pipelines.iter())
+                .enumerate()
+            {
                 if batch.count == 0 {
                     continue;
                 }
 
+                // One-time debug print to verify that the pipeline layout used for push constants
+                // matches the pipeline we bind for this material.
+                // Print per-batch info for the first frame only, when enabled.
+                if std::env::var("LC_PRINT_PIPELINE_LAYOUTS").ok().as_deref() == Some("1")
+                    && self.current_frame == 0
+                {
+                    let layout_opt = self.material_pipeline_layouts.get(batch.material.0 as usize).and_then(|v| *v);
+                    println!(
+                        "[Renderer] pipeline/layout debug: material={:?} mesh={:?} pipeline=0x{:x} layout={}",
+                        batch.material,
+                        batch.mesh,
+                        debug_handle_u64(pipeline),
+                        layout_opt
+                            .map(|l| format!("0x{:x}", debug_handle_u64(l)))
+                            .unwrap_or_else(|| "<missing>".to_string()),
+                    );
+                    println!(
+                        "[Renderer] expected push-constant range: stage=VERTEX offset=0 size={} bytes",
+                        std::mem::size_of::<CameraPushConstants>()
+                    );
+                    println!(
+                        "[Renderer] batch idx {}/{} start={} count={}",
+                        i,
+                        batch_len,
+                        batch.start,
+                        batch.count
+                    );
+                }
+
                 // Bind pipeline per material.
                 device.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
+
+                // Push camera constants for UNLIT_MESH only. Other pipelines (fullscreen triangle)
+                // don't declare this push constant range.
+                if batch.material == MaterialHandle::UNLIT_MESH {
+                    let layout = self.material_pipeline_layouts[batch.material.0 as usize]
+                        .expect("pipeline layout missing for material");
+                    device.cmd_push_constants(
+                        command_buffer,
+                        layout,
+                        vk::ShaderStageFlags::VERTEX,
+                        0,
+                        bytes_of(&cam_pc),
+                    );
+                }
 
                 // Mesh buffers.
                 let Some(mesh) = self.meshes.get(batch.mesh.0 as usize) else {
@@ -724,13 +876,7 @@ impl Renderer {
                 drew_any = true;
             }
 
-            // Bring-up fallback: draw 1 triangle if the scene is empty.
-            if !drew_any && self.debug_draw_hardcoded_triangle {
-                if let Some(pipeline) = fallback_pipeline {
-                    device.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
-                }
-                device.cmd_draw(command_buffer, 3, 1, 0, 0);
-            }
+            let _ = drew_any;
 
             device.cmd_end_render_pass(command_buffer);
             device.end_command_buffer(command_buffer)?;
@@ -777,6 +923,16 @@ impl Renderer {
     pub fn init_for_window(&mut self, window: &Arc<Window>) -> Result<(), Box<dyn std::error::Error>> {
         // 1. Create Vulkan entry and instance
         let entry = unsafe { ash::Entry::load()? };
+
+        if std::env::var("LC_LIST_VK_LAYERS").ok().as_deref() == Some("1") {
+            let layers = unsafe { entry.enumerate_instance_layer_properties()? };
+            println!("[Renderer] Available Vulkan instance layers ({}):", layers.len());
+            for lp in layers {
+                let name = unsafe { std::ffi::CStr::from_ptr(lp.layer_name.as_ptr()) }
+                    .to_string_lossy();
+                println!("  - {}", name);
+            }
+        }
         
         let app_info = vk::ApplicationInfo::default()
             .application_name(c"little-cat")
@@ -785,14 +941,80 @@ impl Renderer {
             .engine_version(vk::make_api_version(0, 1, 0, 0))
             .api_version(vk::API_VERSION_1_3);
 
-    let extension_names =
-        ash_window::enumerate_required_extensions(window.display_handle()?.as_raw())?.to_vec();
+        let mut extension_names =
+            ash_window::enumerate_required_extensions(window.display_handle()?.as_raw())?.to_vec();
+
+        if std::env::var("LC_LIST_VK_EXTS").ok().as_deref() == Some("1") {
+            let exts = unsafe { entry.enumerate_instance_extension_properties(None)? };
+            println!("[Renderer] Available Vulkan instance extensions ({}):", exts.len());
+            for ep in exts {
+                let name = unsafe { std::ffi::CStr::from_ptr(ep.extension_name.as_ptr()) }
+                    .to_string_lossy();
+                println!("  - {}", name);
+            }
+        }
+
+        // Validation is easiest to work with when it screams at us in the terminal.
+        let enable_validation = std::env::var("LC_VALIDATION").ok().as_deref() == Some("1");
+
+        // Request debug utils so we can hook a messenger (if validation is enabled).
+        if enable_validation {
+            extension_names.push(ash::ext::debug_utils::NAME.as_ptr());
+        }
+
+        // Try to enable the standard validation layer if it exists.
+        let mut layer_name_ptrs: Vec<*const i8> = Vec::new();
+        let validation_layer = std::ffi::CString::new("VK_LAYER_KHRONOS_validation")?;
+        if enable_validation {
+            let available_layers = unsafe { entry.enumerate_instance_layer_properties()? };
+            let has_validation = available_layers.iter().any(|lp| unsafe {
+                std::ffi::CStr::from_ptr(lp.layer_name.as_ptr()) == validation_layer.as_c_str()
+            });
+            if has_validation {
+                layer_name_ptrs.push(validation_layer.as_ptr());
+                println!("[Renderer] Vulkan validation: ENABLED (VK_LAYER_KHRONOS_validation)");
+            } else {
+                println!("[Renderer] Vulkan validation requested (LC_VALIDATION=1) but VK_LAYER_KHRONOS_validation not found");
+            }
+        }
         
-        let create_info = vk::InstanceCreateInfo::default()
+        // If validation is on, attach a debug messenger create-info via pNext so it catches
+        // messages produced during vkCreateInstance/vkCreateDevice as well.
+        let mut debug_create_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
+            .message_severity(
+                vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
+                    | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR
+                    | vk::DebugUtilsMessageSeverityFlagsEXT::INFO,
+            )
+            .message_type(
+                vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
+                    | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION
+                    | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE,
+            )
+            .pfn_user_callback(Some(vulkan_debug_callback));
+
+        let mut create_info = vk::InstanceCreateInfo::default()
             .application_info(&app_info)
             .enabled_extension_names(&extension_names);
 
+        if !layer_name_ptrs.is_empty() {
+            create_info = create_info.enabled_layer_names(&layer_name_ptrs);
+        }
+        if enable_validation && !layer_name_ptrs.is_empty() {
+            create_info = create_info.push_next(&mut debug_create_info);
+        }
+
         let instance = unsafe { entry.create_instance(&create_info, None) }?;
+
+        // Create debug utils messenger (optional).
+        if enable_validation && !layer_name_ptrs.is_empty() {
+            let debug_utils_loader = ash::ext::debug_utils::Instance::new(&entry, &instance);
+            let messenger = unsafe {
+                debug_utils_loader.create_debug_utils_messenger(&debug_create_info, None)
+            }?;
+            self.debug_utils_loader = Some(debug_utils_loader);
+            self.debug_messenger = Some(messenger);
+        }
 
 
 
@@ -1224,6 +1446,13 @@ impl Drop for Renderer {
         if let (Some(surface), Some(loader)) = (self.surface, &self.surface_loader) {
             unsafe {
                 loader.destroy_surface(surface, None);
+            }
+        }
+
+        // Must destroy debug messenger before destroying the instance.
+        if let (Some(loader), Some(messenger)) = (&self.debug_utils_loader, self.debug_messenger) {
+            unsafe {
+                loader.destroy_debug_utils_messenger(messenger, None);
             }
         }
 

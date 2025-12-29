@@ -2,11 +2,15 @@ pub mod renderable;
 pub mod transform;
 pub mod cursor;
 pub mod instance;
+pub mod camera;
+pub mod camera2d;
 
 pub use renderable::RenderableComponent;
 pub use transform::TransformComponent;
 pub use cursor::CursorComponent;
 pub use instance::InstanceComponent;
+pub use camera::CameraComponent;
+pub use camera2d::Camera2DComponent;
 
 use crate::engine::ecs::entity::EntityId;
 use crate::engine::ecs::entity::ComponentId;
@@ -33,6 +37,12 @@ pub trait Component: std::any::Any {
         }
         if self.as_any().is::<crate::engine::ecs::component::CursorComponent>() {
             return core::any::type_name::<crate::engine::ecs::component::CursorComponent>();
+        }
+        if self.as_any().is::<crate::engine::ecs::component::CameraComponent>() {
+            return core::any::type_name::<crate::engine::ecs::component::CameraComponent>();
+        }
+        if self.as_any().is::<crate::engine::ecs::component::Camera2DComponent>() {
+            return core::any::type_name::<crate::engine::ecs::component::Camera2DComponent>();
         }
 
         "<unknown component>"

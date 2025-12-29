@@ -65,6 +65,7 @@ impl TransformSystem {
         };
 
         visuals.update_model(handle, transform_comp.transform.model);
+
     }
 }
 

@@ -11,7 +11,7 @@ fn main() {
     let mut universe = engine::Universe::new(world);
     let mut renderer = engine::graphics::Renderer::new();
     {
-        use engine::ecs::component::{RenderableComponent, TransformComponent};
+        use engine::ecs::component::{Camera2DComponent, RenderableComponent, TransformComponent};
         use engine::ecs::entity::Entity;
         use engine::graphics::MeshFactory;
 
@@ -19,34 +19,49 @@ fn main() {
         let tri_mesh = universe.render_assets.register_mesh(MeshFactory::triangle_2d());
         let quad_mesh = universe.render_assets.register_mesh(MeshFactory::quad_2d());
 
-        // Triangle entity
-        let tri = {
-            let e = universe.world.spawn_entity();
-            Entity::new(e.id)
-                .with_component(
-                    TransformComponent::new().with_position(-0.5, 0.0, 0.0))
-                .with_component(
-                    RenderableComponent::triangle(tri_mesh))
-        };
+        // Spawn a small grid of shapes. These are already in clip-ish units, so keep
+        // the positions relatively small and scale down a bit.
+        let positions: &[(f32, f32)] = &[
+            (-0.75, -0.5),
+            (-0.25, -0.5),
+            (0.25, -0.5),
+            (0.75, -0.5),
+            (-0.75, 0.1),
+            (-0.25, 0.1),
+            (0.25, 0.1),
+            (0.75, 0.1),
+            (-0.5, 0.65),
+            (0.0, 0.65),
+            (0.5, 0.65),
+        ];
 
-        // Square entity
-        let sq = {
+        for (i, &(x, y)) in positions.iter().enumerate() {
+            let is_tri = (i % 2) == 0;
             let e = universe.world.spawn_entity();
-            Entity::new(e.id)
-                .with_component(
-                    TransformComponent::new()
-                        .with_position(0.5, 0.0, 0.0)
-                        .with_scale(0.75, 0.75, 1.0),
-                )
-                .with_component(
-                    RenderableComponent::square(quad_mesh)
-                )
-        };
 
-        // Register entities with the universe/system world so component init hooks run.
-            // Register entities through Universe so renderable init can upload meshes.
-        universe.add_entity(tri);
-        universe.add_entity(sq);
+            let mut ent = Entity::new(e.id).with_component(
+                TransformComponent::new()
+                    // Move the whole scene slightly away from the camera so perspective is visible.
+                    .with_position(x, y, -2.0)
+                    .with_scale(0.25, 0.25, 1.0),
+            );
+
+            if is_tri {
+                ent = ent.with_component(RenderableComponent::triangle(tri_mesh));
+            } else {
+                ent = ent.with_component(RenderableComponent::square(quad_mesh));
+            }
+
+            universe.add_entity(ent);
+        }
+
+        // Active 2D camera: its child TransformComponent drives VisualWorld.camera_translation,
+        // which the vertex shader uses as an NDC pan.
+        let e: Entity = universe.world.spawn_entity();
+        let ent = Entity::new(e.id)
+            .with_component(Camera2DComponent::new())
+            .with_component(TransformComponent::new().with_position(0.0, -0.15, 0.0));
+        universe.add_entity(ent);
     }
     let user_input = engine::user_input::UserInput::new();
 

@@ -1,9 +1,11 @@
 pub mod cursor_system;
+pub mod camera_system;
 pub mod renderable_system;
 pub mod transform_system;
 pub mod system_world;
 
 pub use cursor_system::CursorSystem;
+pub use camera_system::{Camera, CameraHandle, CameraSystem};
 pub use renderable_system::RenderableSystem;
 pub use transform_system::TransformSystem;
 pub use system_world::SystemWorld;

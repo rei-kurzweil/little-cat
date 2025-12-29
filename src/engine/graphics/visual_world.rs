@@ -23,9 +23,15 @@ pub struct DrawBatch {
     pub count: usize,
 }
 
-#[derive(Default)]
 pub struct VisualWorld {
     instances: Vec<(GpuRenderable, Instance)>,
+
+    // Active camera state (owned by CameraSystem, mirrored here for renderer snapshot).
+    camera_view: [[f32; 4]; 4],
+    camera_proj: [[f32; 4]; 4],
+    // Global translation for 2D camera panning in NDC (x,y).
+    camera_translation: [f32; 2],
+    dirty_camera: bool,
 
     next_handle: u32,
     handle_to_index: std::collections::HashMap<InstanceHandle, usize>,
@@ -38,6 +44,38 @@ pub struct VisualWorld {
     dirty_instance_data: bool,
     draw_order: Vec<u32>,     // indices into `instances`
     draw_batches: Vec<DrawBatch>,
+}
+
+impl Default for VisualWorld {
+    fn default() -> Self {
+        Self {
+            instances: Vec::new(),
+
+            camera_view: [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+            camera_proj: [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+            camera_translation: [0.0, 0.0],
+            dirty_camera: true,
+
+            next_handle: 0,
+            handle_to_index: std::collections::HashMap::new(),
+            component_to_handle: std::collections::HashMap::new(),
+
+            dirty_draw_cache: true,
+            dirty_instance_data: true,
+            draw_order: Vec::new(),
+            draw_batches: Vec::new(),
+        }
+    }
 }
 
 impl VisualWorld {
@@ -53,8 +91,45 @@ impl VisualWorld {
 
         self.dirty_draw_cache = true;
         self.dirty_instance_data = true;
+        self.dirty_camera = true;
         self.draw_order.clear();
         self.draw_batches.clear();
+    }
+
+    pub fn camera_dirty(&self) -> bool {
+        self.dirty_camera
+    }
+
+    pub fn take_camera_dirty(&mut self) -> bool {
+        let v = self.dirty_camera;
+        self.dirty_camera = false;
+        v
+    }
+
+    pub fn camera_view(&self) -> [[f32; 4]; 4] {
+        self.camera_view
+    }
+
+    pub fn camera_proj(&self) -> [[f32; 4]; 4] {
+        self.camera_proj
+    }
+
+    pub fn camera_translation(&self) -> [f32; 2] {
+        self.camera_translation
+    }
+
+    pub fn set_camera(&mut self, view: [[f32; 4]; 4], proj: [[f32; 4]; 4]) {
+        self.camera_view = view;
+        self.camera_proj = proj;
+        self.dirty_camera = true;
+    }
+
+    pub fn set_camera_translation(&mut self, t: [f32; 2]) {
+        if self.camera_translation == t {
+            return;
+        }
+        self.camera_translation = t;
+        self.dirty_camera = true;
     }
 
     /// Returns whether any per-instance data has changed since the last time it was consumed.

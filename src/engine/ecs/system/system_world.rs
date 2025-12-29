@@ -1,6 +1,7 @@
 use super::World;
 use crate::engine::ecs::entity::{ComponentId, EntityId};
 use crate::engine::ecs::system::CursorSystem;
+use crate::engine::ecs::system::CameraSystem;
 use crate::engine::ecs::system::RenderableSystem;
 use crate::engine::ecs::system::System;
 use crate::engine::ecs::system::TransformSystem;
@@ -12,6 +13,7 @@ use crate::engine::ecs::entity::Entity;
 #[derive(Debug, Default)]
 pub struct SystemWorld {
     pub cursor: CursorSystem,
+    pub camera: CameraSystem,
     pub renderable: RenderableSystem,
     pub transform: TransformSystem,
 }
@@ -77,10 +79,25 @@ impl SystemWorld {
         self.transform
             .transform_changed(world, visuals, entity, component);
     }
+
+    /// Called when a TransformComponent changes and we want camera components to react.
+    ///
+    /// This is intentionally separate from `transform_changed` because camera transforms may not
+    /// live under an InstanceComponent (and thus shouldn't go through VisualWorld instance sync).
+    pub fn camera_transform_changed(
+        &mut self,
+        world: &mut World,
+        visuals: &mut VisualWorld,
+        entity: EntityId,
+        component: ComponentId,
+    ) {
+        self.camera.transform_changed(world, visuals, entity, component);
+    }
     
     pub fn tick(&mut self, world: &mut World, visuals: &mut VisualWorld, input: &InputState) {
         self.transform.tick(world, visuals, input);
         self.renderable.tick(world, visuals, input);
+        self.camera.tick(world, visuals, input);
         self.cursor.tick(world, visuals, input);
     }
 }
