@@ -1,6 +1,6 @@
 use super::Component;
-use crate::engine::ecs::entity::ComponentId;
-use crate::engine::ecs::entity::EntityId;
+
+
 use crate::engine::ecs::system::SystemWorld;
 use crate::engine::ecs::World;
 use crate::engine::graphics::primitives::InstanceHandle;
@@ -41,7 +41,6 @@ impl Component for InstanceComponent {
         _world: &mut World,
         _systems: &mut SystemWorld,
         _visuals: &mut crate::engine::graphics::VisualWorld,
-        _entity: EntityId,
         _component: ComponentId,
     ) {
         // Initialization logic can be added here if needed

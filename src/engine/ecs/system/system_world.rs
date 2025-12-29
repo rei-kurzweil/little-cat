@@ -1,5 +1,5 @@
 use super::World;
-use crate::engine::ecs::entity::{ComponentId, EntityId};
+use crate::engine::ecs::ComponentId;
 use crate::engine::ecs::system::CursorSystem;
 use crate::engine::ecs::system::CameraSystem;
 use crate::engine::ecs::system::RenderableSystem;
@@ -7,7 +7,6 @@ use crate::engine::ecs::system::System;
 use crate::engine::ecs::system::TransformSystem;
 use crate::engine::graphics::{RenderAssets, Renderer, VisualWorld};
 use crate::engine::user_input::InputState;
-use crate::engine::ecs::entity::Entity;
 
 /// System world that holds and runs all registered systems.
 #[derive(Debug, Default)]
@@ -24,8 +23,8 @@ impl SystemWorld {
     }
 
     /// Register a CursorComponent instance with the CursorSystem.
-    pub fn register_cursor(&mut self, entity: EntityId, component: ComponentId) {
-        self.cursor.register_cursor(entity, component);
+    pub fn register_cursor(&mut self,  component: ComponentId) {
+        self.cursor.register_cursor(component);
     }
 
     /// Register a RenderableComponent instance with the RenderableSystem.
@@ -33,11 +32,10 @@ impl SystemWorld {
         &mut self,
         world: &mut World,
         visuals: &mut VisualWorld,
-        entity: EntityId,
         component: ComponentId,
     ) {
         self.renderable
-            .register_renderable(world, visuals, entity, component);
+            .register_renderable(world, visuals, component);
     }
 
     /// Register a RenderableComponent when you already have access to the `Entity`.
@@ -46,11 +44,10 @@ impl SystemWorld {
     pub fn register_renderable_from_entity(
         &mut self,
         visuals: &mut VisualWorld,
-        ent: &mut Entity,
         component: ComponentId,
     ) {
         self.renderable
-            .register_renderable_from_entity(visuals, ent, component);
+            .register_renderable_from_entity(visuals, component);
     }
 
     /// Prepare render state before issuing a frame.
@@ -73,11 +70,10 @@ impl SystemWorld {
         &mut self,
         world: &mut World,
         visuals: &mut VisualWorld,
-        entity: EntityId,
         component: ComponentId,
     ) {
         self.transform
-            .transform_changed(world, visuals, entity, component);
+            .transform_changed(world, visuals, component);
     }
 
     /// Called when a TransformComponent changes and we want camera components to react.
@@ -88,10 +84,9 @@ impl SystemWorld {
         &mut self,
         world: &mut World,
         visuals: &mut VisualWorld,
-        entity: EntityId,
         component: ComponentId,
     ) {
-        self.camera.transform_changed(world, visuals, entity, component);
+        self.camera.transform_changed(world, visuals, component);
     }
     
     pub fn tick(&mut self, world: &mut World, visuals: &mut VisualWorld, input: &InputState) {

@@ -3,22 +3,39 @@ pub mod transform;
 pub mod cursor;
 pub mod instance;
 pub mod camera;
-pub mod camera2d;
 
 pub use renderable::RenderableComponent;
 pub use transform::TransformComponent;
 pub use cursor::CursorComponent;
 pub use instance::InstanceComponent;
 pub use camera::CameraComponent;
-pub use camera2d::Camera2DComponent;
 
-use crate::engine::ecs::entity::EntityId;
-use crate::engine::ecs::entity::ComponentId;
 use crate::engine::ecs::system::SystemWorld;
 use crate::engine::ecs::World;
 
+/// World-owned record for a component payload plus its topology.
+///
+/// This is the building block of the component-centric ECS: a single flat store of records
+/// in `World`, each record carrying its own parent/children handles.
+
+pub struct ComponentNode {
+    pub component: Box<dyn Component>,
+    pub parent: Option<crate::engine::ecs::ComponentId>,
+    pub children: Vec<crate::engine::ecs::ComponentId>,
+}
+
+impl ComponentNode {
+    pub fn new(component: Box<dyn Component>) -> Self {
+        Self {
+            component,
+            parent: None,
+            children: Vec::new(),
+        }
+    }
+}
+
 /// Component interface.
-/// `init` runs when the component is registered on an entity that is registered with the world.
+/// `init` runs when the component is registered 
 pub trait Component: std::any::Any {
     fn as_any(&self) -> &dyn std::any::Any;
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
@@ -41,39 +58,33 @@ pub trait Component: std::any::Any {
         if self.as_any().is::<crate::engine::ecs::component::CameraComponent>() {
             return core::any::type_name::<crate::engine::ecs::component::CameraComponent>();
         }
-        if self.as_any().is::<crate::engine::ecs::component::Camera2DComponent>() {
-            return core::any::type_name::<crate::engine::ecs::component::Camera2DComponent>();
-        }
 
         "<unknown component>"
     }
 
-    /// Called immediately after the component is assigned an `(EntityId, ComponentId)`.
-    ///
-    /// Components can override this to store identity internally so their mutation APIs
-    /// don't need to take `entity`/`component` parameters.
-    fn set_ids(&mut self, _entity: EntityId, _component: ComponentId) {
+    fn set_id(
+        &mut self,
+        _component: crate::engine::ecs::ComponentId,
+    ) {
     }
 
-    /// Called when component is added to an entity in the world.
+    /// Called when component is added to the World
     fn init(
         &mut self,
         _world: &mut World,
         _systems: &mut SystemWorld,
         _visuals: &mut crate::engine::graphics::VisualWorld,
-        _entity: EntityId,
-        _component: ComponentId,
+        _component: crate::engine::ecs::ComponentId,
     ) {
     }
 
-    /// Called when component is removed from an entity.
+    /// Called when component is removed from the World.
     fn cleanup(
         &mut self,
         _world: &mut World,
         _systems: &mut SystemWorld,
         _visuals: &mut crate::engine::graphics::VisualWorld,
-        _entity: EntityId,
-        _component: ComponentId,
+        _component: crate::engine::ecs::ComponentId,
     ) {
     }
 }

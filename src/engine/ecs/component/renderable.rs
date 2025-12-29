@@ -1,5 +1,4 @@
 use crate::engine::ecs::component::Component;
-use crate::engine::ecs::entity::{ComponentId, EntityId};
 use crate::engine::ecs::system::SystemWorld;
 use crate::engine::ecs::World;
 use crate::engine::graphics::mesh::MeshFactory;
@@ -63,12 +62,11 @@ impl Component for RenderableComponent {
         world: &mut World,
         systems: &mut SystemWorld,
         visuals: &mut crate::engine::graphics::VisualWorld,
-        entity: EntityId,
         component: ComponentId,
     ) {
         // NOTE: Renderable registration now requires renderer-side uploads.
         // This `Component::init` signature doesn't have access to a renderer, so the engine
         // will call a separate init path that provides it.
-        let _ = (world, systems, visuals, entity, component);
+        let _ = (world, systems, visuals, component);
     }
 }

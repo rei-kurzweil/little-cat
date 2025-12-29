@@ -1,6 +1,5 @@
 use super::Component;
-use crate::engine::ecs::entity::ComponentId;
-use crate::engine::ecs::entity::EntityId;
+use crate::engine::ecs::ComponentId;
 use crate::engine::ecs::system::SystemWorld;
 use crate::engine::ecs::World;
 use crate::engine::ecs::WorldContext;
@@ -11,7 +10,6 @@ pub struct TransformComponent {
     /// Engine-wide transform type (also used by renderer/VisualWorld).
     pub transform: Transform,
 
-    entity: EntityId,
     component: ComponentId,
 }
 
@@ -20,7 +18,6 @@ impl TransformComponent {
         let transform = Transform::default();
         Self {
             transform,
-            entity: 0,
             component: 0,
         }
     }
@@ -121,16 +118,15 @@ impl TransformComponent {
         self.recompute_model();
 
         ctx.systems
-            .transform_changed(ctx.world, ctx.visuals, self.entity, self.component);
+            .transform_changed(ctx.world, ctx.visuals, self.component);
 
         ctx.systems
-            .camera_transform_changed(ctx.world, ctx.visuals, self.entity, self.component);
+            .camera_transform_changed(ctx.world, ctx.visuals, self.component);
     }
 }
 
 impl Component for TransformComponent {
-    fn set_ids(&mut self, entity: EntityId, component: ComponentId) {
-        self.entity = entity;
+    fn set_id(&mut self, component: ComponentId) {
         self.component = component;
     }
 
@@ -148,7 +144,6 @@ impl Component for TransformComponent {
         _world: &mut World,
         _systems: &mut SystemWorld,
         _visuals: &mut crate::engine::graphics::VisualWorld,
-        _entity: EntityId,
         _component: ComponentId,
     ) {
     }

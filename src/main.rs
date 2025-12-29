@@ -11,8 +11,8 @@ fn main() {
     let mut universe = engine::Universe::new(world);
     let mut renderer = engine::graphics::Renderer::new();
     {
-        use engine::ecs::component::{Camera2DComponent, RenderableComponent, TransformComponent};
-        use engine::ecs::entity::Entity;
+        use engine::ecs::component::{RenderableComponent, TransformComponent};
+
         use engine::graphics::MeshFactory;
 
         // Register reusable CPU meshes once and share handles across components.
@@ -55,13 +55,7 @@ fn main() {
             universe.add_entity(ent);
         }
 
-        // Active 2D camera: its child TransformComponent drives VisualWorld.camera_translation,
-        // which the vertex shader uses as an NDC pan.
-        let e: Entity = universe.world.spawn_entity();
-        let ent = Entity::new(e.id)
-            .with_component(Camera2DComponent::new())
-            .with_component(TransformComponent::new().with_position(0.0, -0.15, 0.0));
-        universe.add_entity(ent);
+        // (Camera intentionally omitted during ECS-id migration.)
     }
     let user_input = engine::user_input::UserInput::new();
 

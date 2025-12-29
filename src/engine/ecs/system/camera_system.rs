@@ -1,6 +1,5 @@
-use crate::engine::ecs::entity::{ComponentId, EntityId};
+
 use crate::engine::ecs::system::System;
-use crate::engine::ecs::component::TransformComponent;
 use crate::engine::ecs::{World};
 use crate::engine::graphics::VisualWorld;
 
@@ -14,14 +13,8 @@ pub struct Camera {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct Camera2D {
-    pub translation: [f32; 2],
-}
-
-#[derive(Debug, Clone, Copy)]
 enum AnyCamera {
     Camera3D(Camera),
-    Camera2D(Camera2D),
 }
 
 impl Camera {
@@ -86,7 +79,6 @@ impl CameraSystem {
         &mut self,
         _world: &mut World,
         visuals: &mut VisualWorld,
-        _entity: EntityId,
         _component: ComponentId,
     ) -> CameraHandle {
         // NOTE: Debug step: force BOTH view and projection to identity to fully isolate
@@ -97,40 +89,11 @@ impl CameraSystem {
         let h = CameraHandle(self.next_handle);
         self.next_handle = self.next_handle.wrapping_add(1);
 
-    self.cameras.push((h, AnyCamera::Camera3D(cam)));
+        self.cameras.push((h, AnyCamera::Camera3D(cam)));
 
         // Newest becomes active.
         self.active_camera = Some(h);
         visuals.set_camera(cam.view, cam.proj);
-
-        h
-    }
-
-    /// Register a 2D camera.
-    ///
-    /// This reads the translation from the camera component's child TransformComponent (if any)
-    /// and mirrors it to the VisualWorld as `camera_translation`.
-    pub fn register_camera2d(
-        &mut self,
-        world: &mut World,
-        visuals: &mut VisualWorld,
-        entity: EntityId,
-        component: ComponentId,
-    ) -> CameraHandle {
-        let translation = self
-            .camera2d_translation_from_component(world, entity, component)
-            .unwrap_or([0.0, 0.0]);
-
-        let cam2d = Camera2D { translation };
-
-        let h = CameraHandle(self.next_handle);
-        self.next_handle = self.next_handle.wrapping_add(1);
-        self.cameras.push((h, AnyCamera::Camera2D(cam2d)));
-
-        // Newest becomes active.
-        self.active_camera = Some(h);
-        visuals.set_camera_translation(translation);
-        // Keep view/proj as-is (typically identity) for now.
 
         h
     }
@@ -146,9 +109,6 @@ impl CameraSystem {
                 AnyCamera::Camera3D(cam3d) => {
                     visuals.set_camera(cam3d.view, cam3d.proj);
                 }
-                AnyCamera::Camera2D(cam2d) => {
-                    visuals.set_camera_translation(cam2d.translation);
-                }
             }
         }
     }
@@ -158,83 +118,7 @@ impl CameraSystem {
         let (_, cam) = self.cameras.iter().find(|(ch, _)| *ch == h)?;
         match *cam {
             AnyCamera::Camera3D(cam3d) => Some((cam3d.view, cam3d.proj)),
-            AnyCamera::Camera2D(_cam2d) => None,
         }
-    }
-
-    /// Called by TransformSystem when a TransformComponent changes.
-    ///
-    /// If the transform belongs to the active Camera2D, update VisualWorld translation.
-    pub fn transform_changed(
-        &mut self,
-        world: &mut World,
-        visuals: &mut VisualWorld,
-        entity: EntityId,
-        component: ComponentId,
-    ) {
-        let Some(active) = self.active_camera else {
-            return;
-        };
-
-        // Only update when active camera is 2D and the changed transform belongs to it.
-        let Some((_, active_cam)) = self.cameras.iter_mut().find(|(h, _)| *h == active) else {
-            return;
-        };
-
-        let AnyCamera::Camera2D(cam2d) = active_cam else {
-            return;
-        };
-
-        // The transform_changed event gives us the TransformComponent's cid.
-        // We need to see if its parent chain includes a Camera2D component.
-        let Some(ent) = world.get_entity(entity) else {
-            return;
-        };
-
-        let belongs_to_camera2d = {
-            let mut cur = component;
-            loop {
-                let Some(parent) = ent.parent_of(cur) else {
-                    break false;
-                };
-                if ent.get_component_by_id_as::<crate::engine::ecs::component::Camera2DComponent>(parent).is_some() {
-                    break true;
-                }
-                cur = parent;
-            }
-        };
-
-        if !belongs_to_camera2d {
-            return;
-        }
-
-        let Some(tc) = ent.get_component_by_id_as::<TransformComponent>(component) else {
-            return;
-        };
-
-        // Translation in our engine mat4 lives in m[3][0..2].
-        let t = [tc.transform.model[3][0], tc.transform.model[3][1]];
-    cam2d.translation = t;
-        visuals.set_camera_translation(t);
-    }
-
-    fn camera2d_translation_from_component(
-        &self,
-        world: &mut World,
-        entity: EntityId,
-        camera_cid: ComponentId,
-    ) -> Option<[f32; 2]> {
-        let ent = world.get_entity(entity)?;
-
-        // Find any TransformComponent child directly under the camera component.
-        // (This matches the existing component tree patterns in the project.)
-        for &child in ent.children_of(camera_cid) {
-            if let Some(tc) = ent.get_component_by_id_as::<TransformComponent>(child) {
-                return Some([tc.transform.model[3][0], tc.transform.model[3][1]]);
-            }
-        }
-
-        None
     }
 }
 

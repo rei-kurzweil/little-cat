@@ -1,5 +1,4 @@
 use crate::engine::ecs::component::Component;
-use crate::engine::ecs::entity::ComponentId;
 use crate::engine::ecs::system::SystemWorld;
 use crate::engine::ecs::World;
 use crate::engine::graphics::VisualWorld;
@@ -53,7 +52,6 @@ impl Component for CameraComponent {
         world: &mut World,
         systems: &mut SystemWorld,
         visuals: &mut VisualWorld,
-        entity_id: crate::engine::ecs::entity::EntityId,
         cid: ComponentId,
     ) {
         // New registration becomes the active camera by default.

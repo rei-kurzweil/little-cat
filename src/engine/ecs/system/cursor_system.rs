@@ -1,5 +1,5 @@
 use crate::engine::ecs::component::InstanceComponent;
-use crate::engine::ecs::entity::{ComponentId, EntityId};
+use crate::engine::ecs::ComponentId;
 use crate::engine::ecs::system::System;
 use crate::engine::ecs::World;
 use crate::engine::graphics::VisualWorld;
@@ -9,7 +9,7 @@ use crate::engine::user_input::InputState;
 /// System that updates cursor-following entities.
 #[derive(Debug, Default)]
 pub struct CursorSystem {
-    cursors: Vec<(EntityId, ComponentId)>,
+    cursors: Vec<ComponentId>,
 }
 
 impl CursorSystem {
@@ -23,9 +23,9 @@ impl CursorSystem {
     ///
     /// For now this stores just the entity id. Later this can store component pointers/handles
     /// once ECS storage is component-centric.
-    pub fn register_cursor(&mut self, entity: EntityId, component: ComponentId) {
-        if !self.cursors.iter().any(|(e, c)| *e == entity && *c == component) {
-            self.cursors.push((entity, component));
+    pub fn register_cursor(&mut self, component: ComponentId) {
+        if !self.cursors.iter().any(|(e, c)| *c == component) {
+            self.cursors.push(( component));
         }
     }
 
@@ -53,7 +53,7 @@ impl System for CursorSystem {
 
         // For each registered cursor component, find its parent InstanceComponent
         // and update the transform in the visual world.
-        for (entity_id, cursor_cid) in self.cursors.iter().copied() {
+        for (component_id, cursor_cid) in self.cursors.iter().copied() {
             let Some(entity) = world.get_entity_mut(entity_id) else {
                 continue;
             };

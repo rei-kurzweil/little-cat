@@ -1,6 +1,5 @@
 use crate::engine::ecs::component::{InstanceComponent, TransformComponent};
-use crate::engine::ecs::entity::ComponentId;
-use crate::engine::ecs::entity::EntityId;
+use crate::engine::ecs::ComponentId;
 use crate::engine::ecs::system::System;
 use crate::engine::ecs::World;
 use crate::engine::graphics::VisualWorld;
@@ -28,7 +27,6 @@ impl TransformSystem {
         &mut self,
         world: &mut World,
         visuals: &mut VisualWorld,
-        entity: EntityId,
         component: ComponentId,
     ) {
         let Some(ent) = world.get_entity_mut(entity) else {

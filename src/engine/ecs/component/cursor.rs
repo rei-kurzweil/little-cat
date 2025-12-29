@@ -1,5 +1,5 @@
 use super::Component;
-use crate::engine::ecs::entity::{ComponentId, EntityId};
+
 use crate::engine::ecs::system::SystemWorld;
 use crate::engine::ecs::World;
 
@@ -35,10 +35,9 @@ impl Component for CursorComponent {
         world: &mut World,
         systems: &mut SystemWorld,
         visuals: &mut crate::engine::graphics::VisualWorld,
-        entity: EntityId,
         component: ComponentId,
     ) {
-        systems.register_cursor(entity, component);
+        systems.register_cursor(component);
 
         // Initialize all child components.
         // Child component ids are allocated locally here for now; later we'll integrate

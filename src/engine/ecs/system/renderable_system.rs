@@ -1,9 +1,8 @@
+use crate::engine::ecs::ComponentId;
 use crate::engine::ecs::component::{InstanceComponent, RenderableComponent, TransformComponent};
-use crate::engine::ecs::entity::ComponentId;
-use crate::engine::ecs::entity::EntityId;
+
 use crate::engine::ecs::system::System;
 use crate::engine::ecs::World;
-use crate::engine::ecs::entity::Entity;
 use crate::engine::graphics::{GpuRenderable, Instance, VisualWorld};
 use crate::engine::graphics::{RenderAssets, Renderer};
 use crate::engine::user_input::InputState;
@@ -22,11 +21,11 @@ use std::collections::HashMap;
 ///   we use it as the instance transform. Otherwise we fall back to `Transform::default()`.
 #[derive(Debug, Default)]
 pub struct RenderableSystem {
-    renderables: Vec<(EntityId, ComponentId)>,
+    renderables: Vec<ComponentId>,
 
     /// Renderables that have been discovered/registered in ECS but not yet inserted into
     /// VisualWorld because their GPU mesh isn't ready.
-    pending: HashMap<(EntityId, ComponentId), PendingRenderable>,
+    pending: HashMap<ComponentId, PendingRenderable>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -52,19 +51,15 @@ impl RenderableSystem {
         &mut self,
         world: &mut World,
         visuals: &mut VisualWorld,
-        entity: EntityId,
         component: ComponentId,
     ) {
-        println!(
-            "[RenderableSystem] register_renderable: entity={} component={}",
-            entity, component
-        );
+        println!("[RenderableSystem] register_renderable: component={}", component);
         if !self
             .renderables
             .iter()
-            .any(|(e, c)| *e == entity && *c == component)
+            .any(|c| *c == component)
         {
-            self.renderables.push((entity, component));
+            self.renderables.push(component);
         }
 
         let Some(ent) = world.get_entity_mut(entity) else {
@@ -79,7 +74,6 @@ impl RenderableSystem {
     pub fn register_renderable_from_entity(
         &mut self,
         visuals: &mut VisualWorld,
-        ent: &mut Entity,
         component: ComponentId,
     ) {
         let entity = ent.id;
@@ -166,7 +160,7 @@ impl RenderableSystem {
             visuals.instances().len()
         );
         // Collect keys first to avoid borrow issues.
-        let keys: Vec<(EntityId, ComponentId)> = self.pending.keys().copied().collect();
+        let keys: Vec<ComponentId> = self.pending.keys().copied().collect();
         for key in keys {
             let Some(p) = self.pending.get(&key).copied() else {
                 continue;
@@ -182,7 +176,7 @@ impl RenderableSystem {
             };
 
             // If the instance component already got a handle (maybe through another renderable), skip.
-            let (entity, _component) = key;
+            let _component = key;
             let Some(ent) = world.get_entity_mut(entity) else {
                 println!("[RenderableSystem]  -> entity {} missing during flush", entity);
                 continue;
@@ -201,18 +195,26 @@ impl RenderableSystem {
                 material: p.material,
             };
             let inst = Instance { transform: p.transform };
-            let handle = visuals.register(entity, p.instance_cid, gpu_r, inst);
+            let handle = visuals.register(p.instance_cid, gpu_r, inst);
             instance_comp.handle = Some(handle);
 
-            println!(
-                "[RenderableSystem]  -> registered VisualWorld instance: entity={} instance_cid={} handle={:?} mesh={:?} material={:?}",
-                entity,
-                p.instance_cid,
-                handle,
-                mesh,
-                p.material
-            );
+            // println!(
+            //     "[RenderableSystem]  -> registered VisualWorld instance:  instance_cid={} handle={:?} mesh={:?} material={:?}",
 
+            //     p.instance_cid,
+            //     handle,
+            //     mesh,
+            //     p.material
+            // );
+            /**
+             * `ComponentId` doesn't implement `std::fmt::Display`
+in format strings you may be able to use `{:?}` (or {:#?} for pretty-print) insteadrustcClick for full compiler diagnostic
+macros.rs(143, 28): Actual error occurred here
+macros.rs(143, 28): Error originated from macro call here
+renderable_system.rs(205, 13): Error originated from macro call here
+renderable_system.rs(206, 88): required by this formatting parameter
+lib.rs(452, 9): the trait `std::fmt::Display` is not implemented for `ComponentId` 
+             */
             self.pending.remove(&key);
         }
     }

@@ -1,4 +1,4 @@
-use crate::engine::ecs::entity::{EntityId, ComponentId};
+use crate::engine::ecs::ComponentId;
 use crate::engine::ecs::Transform;
 use crate::engine::graphics::GpuRenderable;
 use crate::engine::graphics::primitives::InstanceHandle;
@@ -35,7 +35,7 @@ pub struct VisualWorld {
 
     next_handle: u32,
     handle_to_index: std::collections::HashMap<InstanceHandle, usize>,
-    component_to_handle: std::collections::HashMap<(EntityId, ComponentId), InstanceHandle>,
+    component_to_handle: std::collections::HashMap<ComponentId, InstanceHandle>,
 
     // Cached draw data (rebuilt when dirty)
     dirty_draw_cache: bool,
@@ -210,7 +210,6 @@ impl VisualWorld {
 
     pub fn register(
         &mut self,
-        id: EntityId,
         cid: ComponentId,
         renderable: GpuRenderable,
         instance: Instance,
@@ -221,7 +220,7 @@ impl VisualWorld {
         let idx = self.instances.len();
         self.instances.push((renderable, instance));
         self.handle_to_index.insert(handle, idx);
-        self.component_to_handle.insert((id, cid), handle);
+        self.component_to_handle.insert(cid, handle);
 
         self.dirty_draw_cache = true;
         self.dirty_instance_data = true;
