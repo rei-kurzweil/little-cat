@@ -22,8 +22,8 @@ pub struct Entity {
 
     next_component_id: ComponentId,
 
-    /// Root component ids (a forest).
-    roots: Vec<ComponentId>,
+    /// Root component id.
+    root: ComponentId,
 
     /// Nodes stored by id (includes roots + all descendants).
     nodes: HashMap<ComponentId, ComponentNode>,
@@ -36,7 +36,7 @@ impl core::fmt::Debug for Entity {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Entity")
             .field("id", &self.id)
-            .field("roots_len", &self.roots.len())
+            .field("root", &self.root)
             .field("nodes_len", &self.nodes.len())
             .finish()
     }
@@ -44,18 +44,23 @@ impl core::fmt::Debug for Entity {
 
 impl Entity {
     pub fn new(id: EntityId) -> Self {
+        Self::new_with_root(id, InstanceComponent::default())
+    }
+
+    /// Construct an entity with an explicit root component.
+    pub fn new_with_root(id: EntityId, c: impl Component + 'static) -> Self {
         let mut e = Self {
             id,
             next_component_id: 0,
-            roots: Vec::new(),
+            // temporary, overwritten below
+            root: 0,
             nodes: HashMap::new(),
             active_root: None,
         };
 
-        // Default: every entity starts with one root InstanceComponent.
-        let root = e.add_root(InstanceComponent::default());
+        let root = e.add_root(c);
+        e.root = root;
         e.active_root = Some(root);
-
         e
     }
 
@@ -78,7 +83,9 @@ impl Entity {
                 children: Vec::new(),
             },
         );
-        self.roots.push(cid);
+
+        // Replace the root. This keeps the API intact for now but enforces a single root.
+        self.root = cid;
         self.active_root = Some(cid);
         cid
     }
@@ -124,9 +131,9 @@ impl Entity {
     }
 
     pub fn set_active_root(&mut self, root: ComponentId) {
-        // Optional: validate it's actually a root.
-        if !self.roots.contains(&root) {
-            panic!("set_active_root: ComponentId {root} is not a root on entity {}", self.id);
+        // Validate it's actually the (single) root.
+        if self.root != root {
+            panic!("set_active_root: ComponentId {root} is not the root on entity {}", self.id);
         }
         self.active_root = Some(root);
     }
@@ -167,14 +174,13 @@ impl Entity {
     ) -> (ComponentId, &mut Box<dyn Component>) {
         let parent = self
             .active_root
-            .or_else(|| self.roots.first().copied())
-            .expect("entity has no roots");
+            .unwrap_or(self.root);
         self.add_child_boxed_and_get_mut(parent, c)
     }
 
-    /// Roots (ids).
-    pub fn roots(&self) -> &[ComponentId] {
-        &self.roots
+    /// Root id.
+    pub fn root(&self) -> ComponentId {
+        self.root
     }
 
     /// Iterate all nodes mutably (id + component).
@@ -253,9 +259,7 @@ impl Entity {
         let mut order = Vec::<ComponentId>::new();
         let mut stack = Vec::<ComponentId>::new();
 
-        for &r in self.roots.iter().rev() {
-            stack.push(r);
-        }
+        stack.push(self.root);
 
         while let Some(id) = stack.pop() {
             order.push(id);
@@ -293,8 +297,7 @@ impl Entity {
     ) -> ComponentId {
         let parent = self
             .active_root
-            .or_else(|| self.roots.first().copied())
-            .expect("entity has no roots");
+            .unwrap_or(self.root);
         
         let cid = self.add_child(parent, c);
         
@@ -328,8 +331,12 @@ impl Entity {
                 parent_node.children.retain(|&c| c != cid);
             }
         } else {
-            // It's a root, remove from roots
-            self.roots.retain(|&r| r != cid);
+            // It's the root component.
+            if self.root == cid {
+                // We don't currently support removing the root: entities must always have one.
+                // Callers should replace the root by constructing a new entity.
+                // (We keep the node removed to avoid leaving a dangling entry.)
+            }
         }
 
         // Recursively remove all children

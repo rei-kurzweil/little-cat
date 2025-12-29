@@ -136,9 +136,7 @@ impl RenderingInspector {
         println!("ECS tree:");
         for e in entities {
             println!("  Entity {}", e.id);
-            for &root in e.roots() {
-                self.print_component_subtree(e, root, 2);
-            }
+            self.print_component_subtree(e, e.root(), 2);
         }
     }
 
