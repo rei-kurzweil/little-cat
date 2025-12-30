@@ -9,7 +9,7 @@ using vulkan instanced rendering and several layers to describe game objects:
 
 ## Universe
 + holds all the layers below,
-+ and provides simple API to add entities and components
++ and provides simple API to build component trees and add them to the world
 
 ## (component) World
 + stores list of components and topology (parent / child relationship between components)
