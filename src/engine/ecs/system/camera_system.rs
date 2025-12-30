@@ -159,12 +159,13 @@ impl CameraSystem {
         &mut self,
         _world: &mut World,
         _visuals: &mut VisualWorld,
-        _component: ComponentId,
+        component: ComponentId,
     ) -> CameraHandle {
         let h = CameraHandle(self.next_handle);
         self.next_handle = self.next_handle.wrapping_add(1);
 
         self.cameras.push((h, AnyCamera::Camera2D));
+        self.camera2d_components.insert(h, component);
 
         // Newest becomes active.
         self.active_camera = Some(h);
@@ -217,8 +218,21 @@ fn invert_rigid_transform(m: &[[f32; 4]; 4]) -> [[f32; 4]; 4] {
 }
 
 impl System for CameraSystem {
-    fn tick(&mut self, _world: &mut World, _visuals: &mut VisualWorld, _input: &crate::engine::user_input::InputState, _dt_sec: f32) {
-        // Camera updates are now handled by TransformSystem when transforms change
-        // No-op for now.
+    fn tick(&mut self, world: &mut World, visuals: &mut VisualWorld, _input: &crate::engine::user_input::InputState, _dt_sec: f32) {
+        // If there's an active Camera2DComponent, find its child TransformComponent and update the camera
+        if let Some(active_handle) = self.active_camera {
+            // If the handle is in camera2d_components, it's a Camera2D
+            if let Some(camera2d_component_id) = self.camera2d_components.get(&active_handle) {
+                // Find the TransformComponent child of the Camera2DComponent
+                let children = world.children_of(*camera2d_component_id);
+                for &child_id in children {
+                    if world.get_component_by_id_as::<crate::engine::ecs::component::TransformComponent>(child_id).is_some() {
+                        // Found the TransformComponent, update the camera from it
+                        self.update_camera_2d_from_transform(world, visuals, child_id);
+                        break;
+                    }
+                }
+            }
+        }
     }
 }

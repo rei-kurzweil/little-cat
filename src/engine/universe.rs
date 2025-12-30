@@ -1,6 +1,6 @@
 use crate::engine::{ecs, graphics};
 use crate::engine::user_input::InputState;
-use crate::engine::ecs::component::{InstanceComponent, RenderableComponent, TransformComponent};
+use crate::engine::ecs::component::{InstanceComponent, RenderableComponent, TransformComponent, Camera2DComponent, InputComponent};
 use crate::engine::graphics::mesh::MeshFactory;
 use crate::engine::graphics::primitives::MaterialHandle;
 
@@ -74,18 +74,27 @@ impl Universe {
         // 2 triangles
         spawn(tri_mesh, -0.20, 0.35, 0.30, 3.14159 / 2.0);
         spawn(tri_mesh, 0.30, 0.35, 0.30, -3.14159);
+
+        // Create a camera with input control (WASD)
+        // Structure: Camera2DComponent -> TransformComponent -> InputComponent
+        let camera2d = self.world.add_component(Camera2DComponent::new());
+        let camera_transform = self.world.add_component(
+            TransformComponent::new()
+                .with_position(0.0, 0.0, 0.0) // Camera starts at origin
+        );
+        let camera_input = self.world.add_component(InputComponent::new().with_speed(0.5));
+
+        // Set up the hierarchy: camera -> transform -> input
+        let _ = self.world.add_child(camera2d, camera_transform);
+        let _ = self.world.add_child(camera_transform, camera_input);
+
+        // Initialize the component tree starting from the camera
+        // This will recursively initialize all children (transform, input)
+        self.world.init_component_tree(camera2d, &mut self.command_queue);
     }
 
     /// Game/update step
     pub fn update(&mut self, dt_sec: f32, input: &InputState) {
-        // Debug: check if update is being called
-        use std::sync::atomic::{AtomicU32, Ordering};
-        static FRAME_COUNT: AtomicU32 = AtomicU32::new(0);
-        let frame = FRAME_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
-        if frame % 60 == 0 {
-            println!("[Universe] update called (frame {}, dt={:.3})", frame, dt_sec);
-        }
-        
         // 1. Process input events (handled inside systems for now).
         // 2. Let systems call methods on components,
         //      for example, to update transforms or renderables, which

@@ -54,7 +54,8 @@ impl ApplicationHandler for App {
 
         let attrs: WindowAttributes = Window::default_attributes()
             .with_title("Little Cat Engine")
-            .with_inner_size(winit::dpi::LogicalSize::new(1024.0, 768.0));
+            .with_inner_size(winit::dpi::LogicalSize::new(1024.0, 768.0))
+            .with_resizable(true);
 
         let window = event_loop
             .create_window(attrs)
@@ -79,7 +80,9 @@ impl ApplicationHandler for App {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         // Feed input events into our input handler, but keep window lifecycle/render events here.
         // This intentionally ignores resize/draw.
+        println!("[Windowing] window_event: {:?}", event);
         let _was_input_event = self.user_input.handle_window_event(&event);
+        println!("[Windowing] handled user_input _was_input_event: {}", _was_input_event);
 
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
@@ -95,10 +98,21 @@ impl ApplicationHandler for App {
             } => event_loop.exit(),
 
             WindowEvent::Resized(size) => {
+                println!("[Windowing] Resized event received: {:?}", size);
+                if let Some(w) = &self.window {
+                    let actual_size = w.inner_size();
+                    println!("[Windowing] Window's actual inner_size: {:?}", actual_size);
+                    // Ensure window is still resizable (in case something changed it)
+                    if !w.is_resizable() {
+                        println!("[Windowing] WARNING: Window is not resizable!");
+                    }
+                }
                 if let Some(renderer) = self.renderer.as_mut() {
                     renderer.resize(size);
                 }
                 if let Some(w) = &self.window {
+                    println!("[Windowing] resized; requesting redraw");
+                    // w.pre_present_notify();
                     w.request_redraw();
                 }
             }
@@ -127,7 +141,7 @@ impl ApplicationHandler for App {
 
                 if let Some(w) = &self.window {
                     println!("[Windowing] request_redraw");
-                    w.pre_present_notify();
+                    // w.pre_present_notify();
                     w.request_redraw();
                 }
             }
