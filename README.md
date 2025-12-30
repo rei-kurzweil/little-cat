@@ -35,7 +35,8 @@ using vulkan instanced rendering and several layers to describe game objects:
 
 # Components
 + InstanceComponent
-  + Required to show entity in the world.
+  + Required to show a component graphically.
+  + InstanceComponent needs a child RenderableComponent to be displayed graphically
 
 + RenderableComponent
   + Several built-in RenderableComponents are available as special constructors on the impl.
