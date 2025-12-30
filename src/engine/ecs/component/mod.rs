@@ -3,15 +3,17 @@ pub mod transform;
 pub mod cursor;
 pub mod instance;
 pub mod camera;
+pub mod camera2d;
+pub mod input;
 
 pub use renderable::RenderableComponent;
 pub use transform::TransformComponent;
 pub use cursor::CursorComponent;
 pub use instance::InstanceComponent;
 pub use camera::CameraComponent;
+pub use camera2d::Camera2DComponent;
+pub use input::InputComponent;
 
-use crate::engine::ecs::system::SystemWorld;
-use crate::engine::ecs::World;
 
 /// World-owned record for a component payload plus its topology.
 ///
@@ -57,6 +59,12 @@ pub trait Component: std::any::Any {
         }
         if self.as_any().is::<crate::engine::ecs::component::CameraComponent>() {
             return core::any::type_name::<crate::engine::ecs::component::CameraComponent>();
+        }
+        if self.as_any().is::<crate::engine::ecs::component::Camera2DComponent>() {
+            return core::any::type_name::<crate::engine::ecs::component::Camera2DComponent>();
+        }
+        if self.as_any().is::<crate::engine::ecs::component::InputComponent>() {
+            return core::any::type_name::<crate::engine::ecs::component::InputComponent>();
         }
 
         "<unknown component>"

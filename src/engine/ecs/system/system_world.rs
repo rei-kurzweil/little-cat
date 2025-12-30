@@ -5,6 +5,7 @@ use crate::engine::ecs::system::CameraSystem;
 use crate::engine::ecs::system::RenderableSystem;
 use crate::engine::ecs::system::System;
 use crate::engine::ecs::system::TransformSystem;
+use crate::engine::ecs::system::InputSystem;
 use crate::engine::graphics::{RenderAssets, Renderer, VisualWorld};
 use crate::engine::user_input::InputState;
 
@@ -15,6 +16,7 @@ pub struct SystemWorld {
     pub camera: CameraSystem,
     pub renderable: RenderableSystem,
     pub transform: TransformSystem,
+    pub input: InputSystem,
 }
 
 impl SystemWorld {
@@ -62,7 +64,7 @@ impl SystemWorld {
         component: ComponentId,
     ) {
         self.transform
-            .transform_changed(world, visuals, component);
+            .transform_changed(world, visuals, component, &mut self.camera);
     }
 
     /// Update a transform component's transform value and notify systems.
@@ -95,19 +97,6 @@ impl SystemWorld {
         self.transform_changed(world, visuals, component);
     }
 
-    /// Called when a TransformComponent changes and we want camera components to react.
-    ///
-    /// This is intentionally separate from `transform_changed` because camera transforms may not
-    /// live under an InstanceComponent (and thus shouldn't go through VisualWorld instance sync).
-    pub fn camera_transform_changed(
-        &mut self,
-        world: &mut World,
-        visuals: &mut VisualWorld,
-        component: ComponentId,
-    ) {
-        let _ = (world, visuals, component);
-    }
-
     /// Register a camera component.
     pub fn register_camera(
         &mut self,
@@ -124,6 +113,27 @@ impl SystemWorld {
         }
     }
 
+    /// Register a Camera2D component.
+    pub fn register_camera2d(
+        &mut self,
+        world: &mut World,
+        visuals: &mut VisualWorld,
+        component: ComponentId,
+    ) {
+        let handle = self.camera.register_camera2d(world, visuals, component);
+        // Store the handle in the component
+        if let Some(camera2d_comp) = 
+            world.get_component_by_id_as_mut::<crate::engine::ecs::component::Camera2DComponent>(component) 
+        {
+            camera2d_comp.handle = Some(handle);
+        }
+    }
+
+    /// Register an InputComponent.
+    pub fn register_input(&mut self, component: ComponentId) {
+        self.input.register_input(component);
+    }
+
     /// Make a camera active by its component ID.
     pub fn make_active_camera(
         &mut self,
@@ -131,11 +141,20 @@ impl SystemWorld {
         visuals: &mut VisualWorld,
         component: ComponentId,
     ) {
-        // Get the camera handle from the component
+        // Try CameraComponent first
         if let Some(camera_comp) = 
             _world.get_component_by_id_as::<crate::engine::ecs::component::CameraComponent>(component) 
         {
             if let Some(handle) = camera_comp.handle {
+                self.camera.set_active_camera(visuals, handle);
+                return;
+            }
+        }
+        // Try Camera2DComponent
+        if let Some(camera2d_comp) = 
+            _world.get_component_by_id_as::<crate::engine::ecs::component::Camera2DComponent>(component) 
+        {
+            if let Some(handle) = camera2d_comp.handle {
                 self.camera.set_active_camera(visuals, handle);
             }
         }
@@ -151,10 +170,14 @@ impl SystemWorld {
         commands.flush(world, self, visuals);
     }
     
-    pub fn tick(&mut self, world: &mut World, visuals: &mut VisualWorld, input: &InputState) {
-        self.transform.tick(world, visuals, input);
-        self.renderable.tick(world, visuals, input);
-        self.camera.tick(world, visuals, input);
-        self.cursor.tick(world, visuals, input);
+    pub fn tick(&mut self, world: &mut World, visuals: &mut VisualWorld, input: &InputState, queue: &mut crate::engine::ecs::CommandQueue, dt_sec: f32) {
+        // Process input first - it may queue commands
+        println!("[SystemWorld] tick called, calling process_input");
+        self.input.process_input(world, input, queue, dt_sec);
+        
+        self.transform.tick(world, visuals, input, dt_sec);
+        self.renderable.tick(world, visuals, input, dt_sec);
+        self.camera.tick(world, visuals, input, dt_sec);
+        self.cursor.tick(world, visuals, input, dt_sec);
     }
 }

@@ -69,6 +69,17 @@ impl CommandQueue {
         });
     }
 
+    /// Queue a register camera2d command.
+    pub fn queue_register_camera2d(
+        &mut self,
+        component_id: crate::engine::ecs::ComponentId,
+    ) {
+        self.commands.push(ComponentCommand {
+            component_id,
+            command: Command::REGISTER_CAMERA2D { component_id },
+        });
+    }
+
     /// Queue a make active camera command.
     pub fn queue_make_active_camera(
         &mut self,
@@ -77,6 +88,17 @@ impl CommandQueue {
         self.commands.push(ComponentCommand {
             component_id,
             command: Command::MAKE_ACTIVE_CAMERA { component_id },
+        });
+    }
+
+    /// Queue a register input command.
+    pub fn queue_register_input(
+        &mut self,
+        component_id: crate::engine::ecs::ComponentId,
+    ) {
+        self.commands.push(ComponentCommand {
+            component_id,
+            command: Command::REGISTER_INPUT { component_id },
         });
     }
 
@@ -109,11 +131,17 @@ impl CommandQueue {
                 Command::REGISTER_CAMERA { component_id } => {
                     systems.register_camera(world, visuals, component_id);
                 }
+                Command::REGISTER_CAMERA2D { component_id } => {
+                    systems.register_camera2d(world, visuals, component_id);
+                }
                 Command::MAKE_ACTIVE_CAMERA { component_id } => {
                     systems.make_active_camera(world, visuals, component_id);
                 }
                 Command::REGISTER_CURSOR { component_id: _ } => {
                     // TODO: implement when needed
+                }
+                Command::REGISTER_INPUT { component_id } => {
+                    systems.register_input(component_id);
                 }
                 Command::REMOVE_CURSOR { component_id: _ } => {
                     // TODO: implement when needed
@@ -151,7 +179,13 @@ enum Command {
     REGISTER_CURSOR {
         component_id: crate::engine::ecs::ComponentId,
     },
+    REGISTER_INPUT {
+        component_id: crate::engine::ecs::ComponentId,
+    },
     REGISTER_CAMERA {
+        component_id: crate::engine::ecs::ComponentId,
+    },
+    REGISTER_CAMERA2D {
         component_id: crate::engine::ecs::ComponentId,
     },
 

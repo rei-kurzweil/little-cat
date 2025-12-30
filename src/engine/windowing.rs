@@ -20,7 +20,7 @@ impl Windowing {
         user_input: UserInput,
     ) -> EngineResult<()> {
         let event_loop = EventLoop::new().map_err(|_| EngineError::NotImplemented)?;
-        event_loop.set_control_flow(ControlFlow::Wait);
+        event_loop.set_control_flow(ControlFlow::Poll);
 
         let mut app = App {
             window: None,
@@ -117,11 +117,16 @@ impl ApplicationHandler for App {
                 let universe = self.universe.as_mut().expect("universe missing");
                 let renderer = self.renderer.as_mut().expect("renderer missing");
 
+                println!("[Windowing] RedrawRequested (dt={:.3})", dt);
+                
+                
+
                 universe.update(dt, self.user_input.state());
 
                 universe.render(renderer);
 
                 if let Some(w) = &self.window {
+                    println!("[Windowing] request_redraw");
                     w.pre_present_notify();
                     w.request_redraw();
                 }

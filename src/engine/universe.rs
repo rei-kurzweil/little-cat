@@ -1,4 +1,3 @@
-use crate::engine::ecs::Transform;
 use crate::engine::{ecs, graphics};
 use crate::engine::user_input::InputState;
 use crate::engine::ecs::component::{InstanceComponent, RenderableComponent, TransformComponent};
@@ -78,12 +77,20 @@ impl Universe {
     }
 
     /// Game/update step
-    pub fn update(&mut self, _dt_sec: f32, _input: &InputState) {
+    pub fn update(&mut self, dt_sec: f32, input: &InputState) {
+        // Debug: check if update is being called
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static FRAME_COUNT: AtomicU32 = AtomicU32::new(0);
+        let frame = FRAME_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
+        if frame % 60 == 0 {
+            println!("[Universe] update called (frame {}, dt={:.3})", frame, dt_sec);
+        }
+        
         // 1. Process input events (handled inside systems for now).
         // 2. Let systems call methods on components,
         //      for example, to update transforms or renderables, which
         //      will update VisualWorld can update draw_batches and give Renderer a snapshot
-        self.systems.tick(&mut self.world, &mut self.visuals, _input);
+        self.systems.tick(&mut self.world, &mut self.visuals, input, &mut self.command_queue, dt_sec);
         
         // Process commands after tick so any commands queued during tick are processed in the same frame
         self.systems.process_commands(&mut self.world, &mut self.visuals, &mut self.command_queue);

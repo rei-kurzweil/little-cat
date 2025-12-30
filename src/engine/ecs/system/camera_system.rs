@@ -16,6 +16,7 @@ pub struct Camera {
 #[derive(Debug, Clone, Copy)]
 enum AnyCamera {
     Camera3D(Camera),
+    Camera2D,
 }
 
 impl Camera {
@@ -65,7 +66,9 @@ impl Camera {
 pub struct CameraSystem {
     next_handle: u32,
     cameras: Vec<(CameraHandle, AnyCamera)>,
+    camera2d_components: std::collections::HashMap<CameraHandle, ComponentId>,
     pub active_camera: Option<CameraHandle>,
+    
 }
 
 impl CameraSystem {
@@ -110,8 +113,63 @@ impl CameraSystem {
                 AnyCamera::Camera3D(cam3d) => {
                     visuals.set_camera(cam3d.view, cam3d.proj);
                 }
+                AnyCamera::Camera2D => {
+                    // Camera2D doesn't set view/proj, only translation
+                }
             }
         }
+    }
+
+    /// Update Camera2D translation from a TransformComponent that is a child of a Camera2DComponent.
+    ///
+    /// Assumes the transform is already verified to be a child of a Camera2DComponent.
+    pub fn update_camera_2d_from_transform(
+        &mut self,
+        world: &World,
+        visuals: &mut VisualWorld,
+        transform_component_id: ComponentId,
+    ) {
+        // Get the parent Camera2DComponent (assumed to exist based on caller's check)
+        let Some(parent_id) = world.parent_of(transform_component_id) else {
+            return;
+        };
+
+        let Some(camera2d_comp) = world.get_component_by_id_as::<crate::engine::ecs::component::Camera2DComponent>(parent_id) else {
+            return;
+        };
+
+        // Update camera translation if this Camera2D is the active camera
+        if let Some(handle) = camera2d_comp.handle {
+            if self.active_camera == Some(handle) {
+                let Some(transform_comp) = world.get_component_by_id_as::<crate::engine::ecs::component::TransformComponent>(transform_component_id) else {
+                    return;
+                };
+                
+                // Extract translation from model matrix
+                // Model matrix is column-major, translation is in column 3 (m[3][0..2])
+                let tx = transform_comp.transform.model[3][0];
+                let ty = transform_comp.transform.model[3][1];
+                visuals.set_camera_translation([tx, ty]);
+            }
+        }
+    }
+
+    /// Register a Camera2D component.
+    pub fn register_camera2d(
+        &mut self,
+        _world: &mut World,
+        _visuals: &mut VisualWorld,
+        _component: ComponentId,
+    ) -> CameraHandle {
+        let h = CameraHandle(self.next_handle);
+        self.next_handle = self.next_handle.wrapping_add(1);
+
+        self.cameras.push((h, AnyCamera::Camera2D));
+
+        // Newest becomes active.
+        self.active_camera = Some(h);
+
+        h
     }
 
     pub fn active_camera_matrices(&self) -> Option<([[f32; 4]; 4], [[f32; 4]; 4])> {
@@ -119,6 +177,7 @@ impl CameraSystem {
         let (_, cam) = self.cameras.iter().find(|(ch, _)| *ch == h)?;
         match *cam {
             AnyCamera::Camera3D(cam3d) => Some((cam3d.view, cam3d.proj)),
+            AnyCamera::Camera2D => None, // Camera2D doesn't have view/proj matrices
         }
     }
 }
@@ -158,7 +217,8 @@ fn invert_rigid_transform(m: &[[f32; 4]; 4]) -> [[f32; 4]; 4] {
 }
 
 impl System for CameraSystem {
-    fn tick(&mut self, _world: &mut World, _visuals: &mut VisualWorld, _input: &crate::engine::user_input::InputState) {
+    fn tick(&mut self, _world: &mut World, _visuals: &mut VisualWorld, _input: &crate::engine::user_input::InputState, _dt_sec: f32) {
+        // Camera updates are now handled by TransformSystem when transforms change
         // No-op for now.
     }
 }

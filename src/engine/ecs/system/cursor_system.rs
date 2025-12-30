@@ -29,13 +29,11 @@ impl CursorSystem {
         }
     }
 
-    pub fn tick(&mut self, world: &mut World, visuals: &mut VisualWorld, input: &InputState) {
-        <Self as System>::tick(self, world, visuals, input)
-    }
 }
 
 impl System for CursorSystem {
-    fn tick(&mut self, world: &mut World, visuals: &mut VisualWorld, input: &InputState) {
+    fn tick(&mut self, world: &mut World, visuals: &mut VisualWorld, input: &InputState, dt_sec: f32) {
+        let _ = dt_sec; // Not used yet
         // Source of truth is `CursorComponent::init` registration.
         // If nothing registered yet, do nothing.
         if self.cursors.is_empty() {

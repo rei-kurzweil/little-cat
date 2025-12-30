@@ -7,7 +7,7 @@ use crate::engine::ecs::ComponentId;
 /// The 2D camera drives a global NDC translation used by the mesh vertex shader.
 #[derive(Debug, Clone, Default)]
 pub struct Camera2DComponent {
-	handle: Option<crate::engine::ecs::system::camera_system::CameraHandle>,
+	pub handle: Option<crate::engine::ecs::system::camera_system::CameraHandle>,
 }
 
 impl Camera2DComponent {
@@ -27,11 +27,10 @@ impl Component for Camera2DComponent {
 
 	fn init(
 		&mut self,
-		_queue: &mut crate::engine::ecs::CommandQueue,
-		_component: ComponentId,
+		queue: &mut crate::engine::ecs::CommandQueue,
+		component: ComponentId,
 	) {
-		// TODO: Queue REGISTER_CAMERA command when implemented
-		// For now, camera registration is handled elsewhere
+		queue.queue_register_camera2d(component);
 	}
 }
 

@@ -1,4 +1,4 @@
-use crate::engine::ecs::component::{InstanceComponent, TransformComponent};
+use crate::engine::ecs::component::{InstanceComponent, TransformComponent, Camera2DComponent};
 use crate::engine::ecs::ComponentId;
 use crate::engine::ecs::system::System;
 use crate::engine::ecs::World;
@@ -22,15 +22,30 @@ impl TransformSystem {
     /// Called by TransformComponent when its values change.
     ///
     /// This updates the transform of the VisualWorld instance corresponding to the *parent*
-    /// InstanceComponent of this TransformComponent.
+    /// InstanceComponent of this TransformComponent, or updates camera translation if the
+    /// transform is a child of a Camera2DComponent.
     pub fn transform_changed(
         &mut self,
         world: &mut World,
         visuals: &mut VisualWorld,
         component: ComponentId,
+        camera_system: &mut crate::engine::ecs::system::CameraSystem,
     ) {
+        // Check if this transform is a child of a Camera2DComponent
+        let parent = world.parent_of(component);
+        if let Some(parent_id) = parent {
+            if world.get_component_by_id_as::<Camera2DComponent>(parent_id).is_some() {
+                // This transform is part of a Camera2D - update camera translation
+                camera_system.update_camera_2d_from_transform(world, visuals, component);
+                return; // Don't update VisualWorld instance for camera transforms
+            }
+        }
 
-        // Each InstanceComponent (and its immediate children) defines a VisualWorld Instance.
+        let Some(transform_comp) = world.get_component_by_id_as::<TransformComponent>(component) else {
+            return;
+        };
+
+        // Normal case: Each InstanceComponent (and its immediate children) defines a VisualWorld Instance.
         // TransformComponents may be nested under other components; we walk up to find the nearest
         // ancestor InstanceComponent.
         let instance_cid = {
@@ -55,17 +70,12 @@ impl TransformSystem {
             return;
         };
 
-        let Some(transform_comp) = world.get_component_by_id_as::<TransformComponent>(component) else {
-            return;
-        };
-
         visuals.update_model(handle, transform_comp.transform.model);
-
     }
 }
 
 impl System for TransformSystem {
-    fn tick(&mut self, _world: &mut World, _visuals: &mut VisualWorld, _input: &InputState) {
+    fn tick(&mut self, _world: &mut World, _visuals: &mut VisualWorld, _input: &InputState, _dt_sec: f32) {
         // No-op. Transform updates are event-driven via `transform_changed`.
     }
 }

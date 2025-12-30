@@ -201,7 +201,7 @@ impl RenderableSystem {
 }
 
 impl System for RenderableSystem {
-    fn tick(&mut self, _world: &mut World, _visuals: &mut VisualWorld, _input: &InputState) {
+    fn tick(&mut self, _world: &mut World, _visuals: &mut VisualWorld, _input: &InputState, _dt_sec: f32) {
         // Intentionally a no-op for now.
         //
         // Per your architecture: VisualWorld registration happens at component registration time
