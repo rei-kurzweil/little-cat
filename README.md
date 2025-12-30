@@ -18,7 +18,10 @@ using vulkan instanced rendering and several layers to describe game objects:
 + registration / removal and methods of components that affect SystemWorld go through a CommandQueue and get applied after systems.tick() in the update loop.
 
 ## SystemWorld
-+ handles the behaviors of components 
++ handles the behaviors of components
++ can have one system's method invoked and then defer to one or more other systems
++ can call methods on components (via CommandQueue)
+    + calls to component methods are applied after all systems have run their tick() method.
 
 #### RenderableSystem
 + keeps a queue of CPUMesh from RenderableComponent that need to be converted to GpuMesh and uploaded into the GPU.
