@@ -39,3 +39,12 @@ using vulkan instanced rendering and several layers to describe game objects:
 + TransformComponent
   + lets you specify a transform for your Renderable Instance 
   + Both Renderable and Transform should be placed under an InstanceComponent as children.
+
++ CameraComponent
+  + add child TransformComponent to move the camera
+  + TODO: InputComponent to read InputState and set Transform on TransformComponent on CameraComponent
+
++ Camera2DComponent
+  + add child TransformComponent to move the camera
+
+
