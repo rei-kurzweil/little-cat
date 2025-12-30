@@ -80,9 +80,7 @@ impl ApplicationHandler for App {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         // Feed input events into our input handler, but keep window lifecycle/render events here.
         // This intentionally ignores resize/draw.
-        println!("[Windowing] window_event: {:?}", event);
         let _was_input_event = self.user_input.handle_window_event(&event);
-        println!("[Windowing] handled user_input _was_input_event: {}", _was_input_event);
 
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
@@ -131,16 +129,12 @@ impl ApplicationHandler for App {
                 let universe = self.universe.as_mut().expect("universe missing");
                 let renderer = self.renderer.as_mut().expect("renderer missing");
 
-                println!("[Windowing] RedrawRequested (dt={:.3})", dt);
                 
-                
-
                 universe.update(dt, self.user_input.state());
 
                 universe.render(renderer);
 
                 if let Some(w) = &self.window {
-                    println!("[Windowing] request_redraw");
                     // w.pre_present_notify();
                     w.request_redraw();
                 }

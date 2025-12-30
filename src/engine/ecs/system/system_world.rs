@@ -172,7 +172,6 @@ impl SystemWorld {
     
     pub fn tick(&mut self, world: &mut World, visuals: &mut VisualWorld, input: &InputState, queue: &mut crate::engine::ecs::CommandQueue, dt_sec: f32) {
         // Process input first - it may queue commands
-        println!("[SystemWorld] tick called, calling process_input");
         self.input.process_input(world, input, queue, dt_sec);
         
         self.transform.tick(world, visuals, input, dt_sec);

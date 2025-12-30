@@ -34,7 +34,6 @@ impl InputSystem {
         queue: &mut crate::engine::ecs::CommandQueue,
         dt_sec: f32,
     ) {
-        println!("[InputSystem] process_input called (registered inputs: {})", self.inputs.len());
         
         // Check for WASD keys using Character variant
         let w = input.key_down(&Key::Character("w".into())) || input.key_down(&Key::Character("W".into()));
@@ -49,7 +48,7 @@ impl InputSystem {
             if a { keys.push("A"); }
             if s { keys.push("S"); }
             if d { keys.push("D"); }
-            println!("[InputSystem] Keys pressed: {}", keys.join(", "));
+            //println!("[InputSystem] Keys pressed: {}", keys.join(", "));
         }
 
         if !w && !a && !s && !d {
@@ -59,8 +58,8 @@ impl InputSystem {
         // Calculate movement delta
         let mut dx = 0.0f32;
         let mut dy = 0.0f32;
-        if w { dy += 1.0; }
-        if s { dy -= 1.0; }
+        if w { dy -= 1.0; }
+        if s { dy += 1.0; }
         if a { dx -= 1.0; }
         if d { dx += 1.0; }
 
@@ -71,8 +70,7 @@ impl InputSystem {
             dy /= len;
         }
 
-        println!("[InputSystem] Processing {} registered input component(s)", self.inputs.len());
-
+        
         for &input_cid in &self.inputs {
             let Some(input_comp) = world.get_component_by_id_as::<InputComponent>(input_cid) else {
                 println!("[InputSystem] Input component {:?} not found", input_cid);
@@ -105,7 +103,6 @@ impl InputSystem {
                     }
                     // Case 2: TransformComponent -> Camera2DComponent (camera case)
                     else if world.get_component_by_id_as::<Camera2DComponent>(grandparent).is_some() {
-                        println!("[InputSystem] Updating Camera2DComponent via TransformComponent (dx={:.3}, dy={:.3}, speed={:.3})", dx * speed, dy * speed, speed);
                         // Update Camera2DComponent's TransformComponent directly
                         // CameraSystem will pick this up in the same tick
                         if let Some(transform_comp_mut) = world.get_component_by_id_as_mut::<TransformComponent>(parent) {

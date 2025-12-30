@@ -53,7 +53,6 @@ impl RenderableSystem {
         visuals: &mut VisualWorld,
         component: ComponentId,
     ) {
-        println!("[RenderableSystem] register_renderable: component={:?}", component);
         if !self
             .renderables
             .iter()
@@ -152,11 +151,11 @@ impl RenderableSystem {
         render_assets: &mut RenderAssets,
         renderer: &mut Renderer,
     ) {
-        println!(
-            "[RenderableSystem] flush_pending: pending_len={} visuals.instances={} ",
-            self.pending.len(),
-            visuals.instances().len()
-        );
+        // println!(
+        //     "[RenderableSystem] flush_pending: pending_len={} visuals.instances={} ",
+        //     self.pending.len(),
+        //     visuals.instances().len()
+        // );
         // Collect keys first to avoid borrow issues.
         let keys: Vec<ComponentId> = self.pending.keys().copied().collect();
         for key in keys {
