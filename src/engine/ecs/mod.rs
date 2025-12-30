@@ -259,4 +259,25 @@ impl World {
 
         Ok(())
     }
+
+    /// Initialize a component tree starting from the given root component.
+    ///
+    /// This recursively initializes the root component and all its descendants by calling
+    /// `Component::init` on each component in the tree.
+    pub fn init_component_tree(
+        &mut self,
+        root: ComponentId,
+        queue: &mut crate::engine::ecs::CommandQueue,
+    ) {
+        // Initialize the root component
+        if let Some(node) = self.get_component_record_mut(root) {
+            node.component.init(queue, root);
+        }
+
+        // Recursively initialize all children
+        let children: Vec<ComponentId> = self.children_of(root).to_vec();
+        for child in children {
+            self.init_component_tree(child, queue);
+        }
+    }
 }

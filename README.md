@@ -54,3 +54,31 @@ using vulkan instanced rendering and several layers to describe game objects:
   + add child TransformComponent to move the camera
 
 
+# Lifecycle
+
+#### Frame loop:
+```rust
+// in engine::Universe:
+
+/// Game/update step
+  pub fn update(&mut self, _dt_sec: f32, _input: &InputState) {
+      // each frame,
+      // 1. Process input events (handled inside systems for now).
+      // 2. Let systems call methods on components,
+      //      for example, to update transforms or renderables, which
+      //      will update VisualWorld can update draw_batches and give Renderer a snapshot
+      self.systems.tick(&mut self.world, &mut self.visuals, _input);
+      
+      // Process commands after tick so any commands queued during tick are processed in the same frame
+      self.systems.process_commands(&mut self.world, &mut self.visuals, &mut self.command_queue);
+  }
+
+  pub fn render(&mut self, renderer: &mut graphics::Renderer) {
+      // Ensure VisualWorld contains only GPU-ready instances.
+      self.systems
+          .prepare_render(&mut self.world, &mut self.visuals, &mut self.render_assets, renderer);
+      // TODO: rebuild inspector around component graph instead of entities.
+      renderer.render_visual_world(&mut self.visuals)
+              .expect("render failed");
+  }
+```

@@ -60,13 +60,9 @@ impl Universe {
             let _ = self.world.add_child(instance, transform);
             let _ = self.world.add_child(instance, renderable);
 
-            // Initialize components - they will queue registration commands
-            if let Some(node) = self.world.get_component_record_mut(transform) {
-                node.component.init(&mut self.command_queue, transform);
-            }
-            if let Some(node) = self.world.get_component_record_mut(renderable) {
-                node.component.init(&mut self.command_queue, renderable);
-            }
+            // Initialize the component tree starting from the instance
+            // This will recursively initialize all children (transform, renderable)
+            self.world.init_component_tree(instance, &mut self.command_queue);
         };
 
         // 5 squares
@@ -81,15 +77,16 @@ impl Universe {
         spawn(tri_mesh, 0.30, 0.35, 0.30, -3.14159);
     }
 
-    /// Game/update step (placeholder).
+    /// Game/update step
     pub fn update(&mut self, _dt_sec: f32, _input: &InputState) {
-        // Flush command queue before systems tick
-        self.systems.process_commands(&mut self.world, &mut self.visuals, &mut self.command_queue);
-        
-        // 1) Process input events (handled inside systems for now).
-        // 2) Let systems apply per-frame visual overrides (update VisualWorld so next frame can update draw_batches and give Renderer a snapshot)
-        
+        // 1. Process input events (handled inside systems for now).
+        // 2. Let systems call methods on components,
+        //      for example, to update transforms or renderables, which
+        //      will update VisualWorld can update draw_batches and give Renderer a snapshot
         self.systems.tick(&mut self.world, &mut self.visuals, _input);
+        
+        // Process commands after tick so any commands queued during tick are processed in the same frame
+        self.systems.process_commands(&mut self.world, &mut self.visuals, &mut self.command_queue);
     }
 
     pub fn render(&mut self, renderer: &mut graphics::Renderer) {
@@ -97,7 +94,7 @@ impl Universe {
         self.systems
             .prepare_render(&mut self.world, &mut self.visuals, &mut self.render_assets, renderer);
 
-    // TODO: rebuild inspector around component graph instead of entities.
+        // TODO: rebuild inspector around component graph instead of entities.
 
         renderer.render_visual_world(&mut self.visuals)
                 .expect("render failed");
