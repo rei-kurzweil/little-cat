@@ -65,6 +65,36 @@ impl SystemWorld {
             .transform_changed(world, visuals, component);
     }
 
+    /// Update a transform component's transform value and notify systems.
+    pub fn update_transform(
+        &mut self,
+        world: &mut World,
+        visuals: &mut VisualWorld,
+        component: ComponentId,
+        transform: crate::engine::graphics::primitives::Transform,
+    ) {
+        // Update the transform in the component itself first
+        if let Some(transform_comp) = world
+            .get_component_by_id_as_mut::<crate::engine::ecs::component::TransformComponent>(component) {
+            transform_comp.transform = transform;
+        }
+        self.transform_changed(world, visuals, component);
+    }
+
+    /// Remove/reset a transform component's transform value and notify systems.
+    pub fn remove_transform(
+        &mut self,
+        world: &mut World,
+        visuals: &mut VisualWorld,
+        component: ComponentId,
+    ) {
+        if let Some(transform_comp) = world
+            .get_component_by_id_as_mut::<crate::engine::ecs::component::TransformComponent>(component) {
+            transform_comp.transform = crate::engine::graphics::primitives::Transform::default();
+        }
+        self.transform_changed(world, visuals, component);
+    }
+
     /// Called when a TransformComponent changes and we want camera components to react.
     ///
     /// This is intentionally separate from `transform_changed` because camera transforms may not
@@ -76,6 +106,49 @@ impl SystemWorld {
         component: ComponentId,
     ) {
         let _ = (world, visuals, component);
+    }
+
+    /// Register a camera component.
+    pub fn register_camera(
+        &mut self,
+        world: &mut World,
+        visuals: &mut VisualWorld,
+        component: ComponentId,
+    ) {
+        let handle = self.camera.register_camera(world, visuals, component);
+        // Store the handle in the component
+        if let Some(camera_comp) = 
+            world.get_component_by_id_as_mut::<crate::engine::ecs::component::CameraComponent>(component) 
+        {
+            camera_comp.handle = Some(handle);
+        }
+    }
+
+    /// Make a camera active by its component ID.
+    pub fn make_active_camera(
+        &mut self,
+        _world: &mut World,
+        visuals: &mut VisualWorld,
+        component: ComponentId,
+    ) {
+        // Get the camera handle from the component
+        if let Some(camera_comp) = 
+            _world.get_component_by_id_as::<crate::engine::ecs::component::CameraComponent>(component) 
+        {
+            if let Some(handle) = camera_comp.handle {
+                self.camera.set_active_camera(visuals, handle);
+            }
+        }
+    }
+    
+    /// Process commands from the command queue.
+    pub fn process_commands(
+        &mut self,
+        world: &mut World,
+        visuals: &mut VisualWorld,
+        commands: &mut crate::engine::ecs::CommandQueue,
+    ) {
+        commands.flush(world, self, visuals);
     }
     
     pub fn tick(&mut self, world: &mut World, visuals: &mut VisualWorld, input: &InputState) {

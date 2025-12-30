@@ -1,8 +1,6 @@
 use super::Component;
 
 use crate::engine::ecs::ComponentId;
-use crate::engine::ecs::system::SystemWorld;
-use crate::engine::ecs::World;
 use crate::engine::graphics::primitives::InstanceHandle;
 
 /// Component that holds a handle to a graphics instance.
@@ -38,9 +36,7 @@ impl Component for InstanceComponent {
 
     fn init(
         &mut self,
-        _world: &mut World,
-        _systems: &mut SystemWorld,
-        _visuals: &mut crate::engine::graphics::VisualWorld,
+        _queue: &mut crate::engine::ecs::CommandQueue,
         _component: ComponentId,
     ) {
         // Initialization logic can be added here if needed

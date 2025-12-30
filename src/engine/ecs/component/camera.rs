@@ -1,8 +1,5 @@
 use crate::engine::ecs::component::Component;
 use crate::engine::ecs::ComponentId;
-use crate::engine::ecs::system::SystemWorld;
-use crate::engine::ecs::World;
-use crate::engine::graphics::VisualWorld;
 
 /// Camera component.
 ///
@@ -13,7 +10,7 @@ use crate::engine::graphics::VisualWorld;
 #[derive(Debug, Clone)]
 pub struct CameraComponent {
     // Handle owned by CameraSystem. Filled in during init.
-    handle: Option<crate::engine::ecs::system::camera_system::CameraHandle>,
+    pub handle: Option<crate::engine::ecs::system::camera_system::CameraHandle>,
 }
 
 impl CameraComponent {
@@ -23,12 +20,12 @@ impl CameraComponent {
 
     /// Ask the CameraSystem to make this the active camera.
     pub fn make_active_camera(
-        &self,
-        systems: &mut SystemWorld,
-        visuals: &mut VisualWorld,
+        &mut self,
+        queue: &mut crate::engine::ecs::CommandQueue,
+        component: ComponentId,
     ) {
-        if let Some(h) = self.handle {
-            systems.camera.set_active_camera(visuals, h);
+        if self.handle.is_some() {
+            queue.queue_make_active_camera(component);
         }
     }
 }
@@ -50,13 +47,9 @@ impl Component for CameraComponent {
 
     fn init(
         &mut self,
-        world: &mut World,
-        systems: &mut SystemWorld,
-        visuals: &mut VisualWorld,
-        cid: ComponentId,
+        queue: &mut crate::engine::ecs::CommandQueue,
+        component: ComponentId,
     ) {
-        // New registration becomes the active camera by default.
-        let h = systems.camera.register_camera(world, visuals, cid);
-        self.handle = Some(h);
+        queue.queue_register_camera(component);
     }
 }

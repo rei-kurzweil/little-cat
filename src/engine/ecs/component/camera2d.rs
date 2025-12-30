@@ -1,8 +1,5 @@
 use crate::engine::ecs::component::Component;
-use crate::engine::ecs::entity::ComponentId;
-use crate::engine::ecs::system::SystemWorld;
-use crate::engine::ecs::World;
-use crate::engine::graphics::VisualWorld;
+use crate::engine::ecs::ComponentId;
 
 /// 2D camera component.
 ///
@@ -30,14 +27,11 @@ impl Component for Camera2DComponent {
 
 	fn init(
 		&mut self,
-		world: &mut World,
-		systems: &mut SystemWorld,
-		visuals: &mut VisualWorld,
-		entity_id: crate::engine::ecs::entity::EntityId,
-		cid: ComponentId,
+		_queue: &mut crate::engine::ecs::CommandQueue,
+		_component: ComponentId,
 	) {
-		let h = systems.camera.register_camera2d(world, visuals, entity_id, cid);
-		self.handle = Some(h);
+		// TODO: Queue REGISTER_CAMERA command when implemented
+		// For now, camera registration is handled elsewhere
 	}
 }
 

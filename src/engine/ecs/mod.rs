@@ -1,5 +1,6 @@
 pub mod component;
 pub mod system;
+pub mod command_queue;
 
 #[cfg(test)]
 mod world_graph_tests;
@@ -17,6 +18,7 @@ new_key_type! {
 pub use crate::engine::graphics::primitives::{Renderable, Transform};
 
 pub use system::{CursorSystem, System, SystemWorld};
+pub use command_queue::CommandQueue;
 
 /// Bundle of mutable engine state passed to component mutation APIs.
 ///

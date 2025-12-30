@@ -1,7 +1,5 @@
 use super::Component;
 use crate::engine::ecs::ComponentId;
-use crate::engine::ecs::system::SystemWorld;
-use crate::engine::ecs::World;
 
 /// Marker component that indicates this entity should follow the cursor.
 pub struct CursorComponent {
@@ -32,15 +30,11 @@ impl Component for CursorComponent {
 
     fn init(
         &mut self,
-        world: &mut World,
-        systems: &mut SystemWorld,
-        visuals: &mut crate::engine::graphics::VisualWorld,
-        component: ComponentId,
+        _queue: &mut crate::engine::ecs::CommandQueue,
+        _component: ComponentId,
     ) {
-        systems.register_cursor(component);
-
-        // NOTE: Child components will be handled once World owns parent/child insertion APIs.
-        let _ = (world, visuals);
+        // TODO: Queue REGISTER_CURSOR command when implemented
+        // For now, cursor registration is handled elsewhere
     }
 }
 

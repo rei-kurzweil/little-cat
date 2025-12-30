@@ -71,9 +71,7 @@ pub trait Component: std::any::Any {
     /// Called when component is added to the World
     fn init(
         &mut self,
-        _world: &mut World,
-        _systems: &mut SystemWorld,
-        _visuals: &mut crate::engine::graphics::VisualWorld,
+        _queue: &mut crate::engine::ecs::CommandQueue,
         _component: crate::engine::ecs::ComponentId,
     ) {
     }
@@ -81,9 +79,7 @@ pub trait Component: std::any::Any {
     /// Called when component is removed from the World.
     fn cleanup(
         &mut self,
-        _world: &mut World,
-        _systems: &mut SystemWorld,
-        _visuals: &mut crate::engine::graphics::VisualWorld,
+        _queue: &mut crate::engine::ecs::CommandQueue,
         _component: crate::engine::ecs::ComponentId,
     ) {
     }

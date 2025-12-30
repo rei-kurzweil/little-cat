@@ -1,8 +1,6 @@
 use super::Component;
 use crate::engine::ecs::ComponentId;
-use crate::engine::ecs::system::SystemWorld;
-use crate::engine::ecs::World;
-use crate::engine::ecs::WorldContext;
+use crate::engine::ecs::CommandQueue;
 use crate::engine::graphics::primitives::Transform;
 
 #[derive(Debug, Clone, Copy)]
@@ -73,10 +71,10 @@ impl TransformComponent {
         self
     }
 
-    /// Set rotation from Euler angles (radians), XYZ order, and notify systems.
+    /// Set rotation from Euler angles (radians), XYZ order, and queue update.
     pub fn set_rotation_euler(
         &mut self,
-        ctx: &mut WorldContext,
+        queue: &mut CommandQueue,
         pitch_x: f32,
         yaw_y: f32,
         roll_z: f32,
@@ -84,17 +82,13 @@ impl TransformComponent {
         self.set_rotation_euler_internal(pitch_x, yaw_y, roll_z);
 
         let Some(cid) = self.component else { return; };
-        ctx.systems
-            .transform_changed(ctx.world, ctx.visuals, cid);
-
-        ctx.systems
-            .camera_transform_changed(ctx.world, ctx.visuals, cid);
+        queue.queue_update_transform(cid, self.transform);
     }
 
-    /// Set translation and notify `TransformSystem`.
+    /// Set translation and queue update.
     pub fn set_position(
         &mut self,
-        ctx: &mut WorldContext,
+        queue: &mut CommandQueue,
         x: f32,
         y: f32,
         z: f32,
@@ -102,18 +96,13 @@ impl TransformComponent {
         self.transform.translation = [x, y, z];
         self.recompute_model();
         let Some(cid) = self.component else { return; };
-        ctx.systems
-            .transform_changed(ctx.world, ctx.visuals, cid);
-
-        // If this transform is part of an active camera (Camera2D/Camera), let CameraSystem react.
-        ctx.systems
-            .camera_transform_changed(ctx.world, ctx.visuals, cid);
+        queue.queue_update_transform(cid, self.transform);
     }
 
-    /// Set non-uniform scale and notify `TransformSystem`.
+    /// Set non-uniform scale and queue update.
     pub fn set_scale(
         &mut self,
-        ctx: &mut WorldContext,
+        queue: &mut CommandQueue,
         x: f32,
         y: f32,
         z: f32,
@@ -121,11 +110,7 @@ impl TransformComponent {
         self.transform.scale = [x, y, z];
         self.recompute_model();
         let Some(cid) = self.component else { return; };
-        ctx.systems
-            .transform_changed(ctx.world, ctx.visuals, cid);
-
-        ctx.systems
-            .camera_transform_changed(ctx.world, ctx.visuals, cid);
+        queue.queue_update_transform(cid, self.transform);
     }
 }
 
@@ -142,14 +127,13 @@ impl Component for TransformComponent {
         self
     }
 
-    // For now Transform doesn't need initialization.
     fn init(
         &mut self,
-        _world: &mut World,
-        _systems: &mut SystemWorld,
-        _visuals: &mut crate::engine::graphics::VisualWorld,
-        _component: ComponentId,
+        queue: &mut CommandQueue,
+        component: ComponentId,
     ) {
+        // Queue registration command so transform system knows about this component
+        queue.queue_register_transform(component);
     }
 }
 

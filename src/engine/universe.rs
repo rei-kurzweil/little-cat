@@ -11,6 +11,7 @@ pub struct Universe {
     pub visuals: graphics::VisualWorld,
     pub render_assets: graphics::RenderAssets,
     pub systems: ecs::SystemWorld,
+    pub command_queue: ecs::CommandQueue,
 
 }
 
@@ -21,6 +22,7 @@ impl Universe {
             visuals: graphics::VisualWorld::new(),
             render_assets: graphics::RenderAssets::new(),
             systems: ecs::SystemWorld::new(),
+            command_queue: ecs::CommandQueue::new(),
         };
 
         // Temporary: rebuild a demo scene directly in Universe creation.
@@ -57,13 +59,14 @@ impl Universe {
             // Attach under the InstanceComponent (RenderableSystem expects this topology).
             let _ = self.world.add_child(instance, transform);
             let _ = self.world.add_child(instance, renderable);
-            
 
-            // Kick renderable registration so it gets queued in RenderableSystem (and then flushed during render()).
-            self.systems
-                .register_renderable(&mut self.world, &mut self.visuals, renderable);
-            
-
+            // Initialize components - they will queue registration commands
+            if let Some(node) = self.world.get_component_record_mut(transform) {
+                node.component.init(&mut self.command_queue, transform);
+            }
+            if let Some(node) = self.world.get_component_record_mut(renderable) {
+                node.component.init(&mut self.command_queue, renderable);
+            }
         };
 
         // 5 squares
@@ -80,6 +83,8 @@ impl Universe {
 
     /// Game/update step (placeholder).
     pub fn update(&mut self, _dt_sec: f32, _input: &InputState) {
+        // Flush command queue before systems tick
+        self.systems.process_commands(&mut self.world, &mut self.visuals, &mut self.command_queue);
         
         // 1) Process input events (handled inside systems for now).
         // 2) Let systems apply per-frame visual overrides (update VisualWorld so next frame can update draw_batches and give Renderer a snapshot)

@@ -1,7 +1,5 @@
 use crate::engine::ecs::component::Component;
 use crate::engine::ecs::ComponentId;
-use crate::engine::ecs::system::SystemWorld;
-use crate::engine::ecs::World;
 use crate::engine::graphics::mesh::MeshFactory;
 use crate::engine::graphics::primitives::{MaterialHandle, Renderable};
 
@@ -60,14 +58,10 @@ impl Component for RenderableComponent {
 
     fn init(
         &mut self,
-        world: &mut World,
-        systems: &mut SystemWorld,
-        visuals: &mut crate::engine::graphics::VisualWorld,
+        queue: &mut crate::engine::ecs::CommandQueue,
         component: ComponentId,
     ) {
-        // NOTE: Renderable registration now requires renderer-side uploads.
-        // This `Component::init` signature doesn't have access to a renderer, so the engine
-        // will call a separate init path that provides it.
-        let _ = (world, systems, visuals, component);
+        // Queue registration command instead of immediately registering
+        queue.queue_register_renderable(component);
     }
 }
