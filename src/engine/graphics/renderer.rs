@@ -1069,11 +1069,14 @@ impl Renderer {
         };
 
         // max_image_count == 0 means "no maximum".
-        let desired_image_count = surface_caps.min_image_count.saturating_add(1);
+        let desired_image_count = surface_caps.min_image_count;
+        println!("[Renderer] desired_image_count: {}", desired_image_count);
         let image_count = if surface_caps.max_image_count == 0 {
+            println!("[Renderer] max_image_count is unlimited");
             desired_image_count
         } else {
-            desired_image_count.min(surface_caps.max_image_count)
+            println!("[Renderer]  min_image_count, max_image_count: {}, {}", surface_caps.min_image_count, surface_caps.max_image_count);
+            desired_image_count
         };
 
         let composite_alpha = if surface_caps
