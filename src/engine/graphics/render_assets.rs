@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::engine::graphics::mesh::CpuMesh;
 use crate::engine::graphics::primitives::{CpuMeshHandle, MeshHandle};
-use crate::engine::graphics::Renderer;
+use crate::engine::graphics::MeshUploader;
 
 /// Renderer-side asset registry used by ECS systems.
 ///
@@ -37,7 +37,7 @@ impl RenderAssets {
     /// Get (or upload) a mesh into the renderer and return a renderer-owned `MeshHandle`.
     pub fn gpu_mesh_handle(
         &mut self,
-        renderer: &mut Renderer,
+        uploader: &mut dyn MeshUploader,
         cpu_mesh: CpuMeshHandle,
     ) -> Result<MeshHandle, Box<dyn std::error::Error>> {
         if let Some(h) = self.gpu_meshes.get(&cpu_mesh).copied() {
@@ -47,7 +47,7 @@ impl RenderAssets {
         let mesh = self
             .cpu_mesh(cpu_mesh)
             .ok_or("RenderAssets: invalid CpuMeshHandle")?;
-        let h = renderer.upload_mesh(mesh)?;
+        let h = uploader.upload_mesh(mesh)?;
         self.gpu_meshes.insert(cpu_mesh, h);
         Ok(h)
     }

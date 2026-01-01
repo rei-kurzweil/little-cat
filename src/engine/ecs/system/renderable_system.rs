@@ -4,7 +4,7 @@ use crate::engine::ecs::component::{InstanceComponent, RenderableComponent, Tran
 use crate::engine::ecs::system::System;
 use crate::engine::ecs::World;
 use crate::engine::graphics::{GpuRenderable, Instance, VisualWorld};
-use crate::engine::graphics::{RenderAssets, Renderer};
+use crate::engine::graphics::{RenderAssets, MeshUploader};
 use crate::engine::user_input::InputState;
 use crate::engine::graphics::primitives::{CpuMeshHandle, MaterialHandle};
 use std::collections::HashMap;
@@ -149,7 +149,7 @@ impl RenderableSystem {
         world: &mut World,
         visuals: &mut VisualWorld,
         render_assets: &mut RenderAssets,
-        renderer: &mut Renderer,
+        uploader: &mut dyn MeshUploader,
     ) {
         // println!(
         //     "[RenderableSystem] flush_pending: pending_len={} visuals.instances={} ",
@@ -164,7 +164,7 @@ impl RenderableSystem {
             };
 
             // Upload/resolve GPU mesh.
-            let mesh = match render_assets.gpu_mesh_handle(renderer, p.cpu_mesh) {
+            let mesh = match render_assets.gpu_mesh_handle(uploader, p.cpu_mesh) {
                 Ok(h) => h,
                 Err(err) => {
                     println!("[RenderableSystem]  -> gpu_mesh_handle failed for cpu_mesh={:?}: {:?}", p.cpu_mesh, err);

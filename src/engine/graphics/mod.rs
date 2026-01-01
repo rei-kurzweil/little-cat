@@ -11,6 +11,13 @@ pub use render_assets::RenderAssets;
 pub use renderer::Renderer;
 pub use visual_world::{Instance, VisualWorld};
 
+/// Trait for uploading CPU meshes to GPU.
+/// This abstraction allows different renderer implementations (ash, vulkano, etc.)
+/// to provide mesh uploading functionality without exposing renderer-specific details.
+pub trait MeshUploader {
+    fn upload_mesh(&mut self, mesh: &CpuMesh) -> Result<MeshHandle, Box<dyn std::error::Error>>;
+}
+
 /// Graphics/Vulkan placeholder.
 pub struct Graphics;
 

@@ -6,7 +6,7 @@ use crate::engine::ecs::system::RenderableSystem;
 use crate::engine::ecs::system::System;
 use crate::engine::ecs::system::TransformSystem;
 use crate::engine::ecs::system::InputSystem;
-use crate::engine::graphics::{RenderAssets, Renderer, VisualWorld};
+use crate::engine::graphics::{RenderAssets, MeshUploader, VisualWorld};
 use crate::engine::user_input::InputState;
 
 /// System world that holds and runs all registered systems.
@@ -50,10 +50,10 @@ impl SystemWorld {
         world: &mut World,
         visuals: &mut VisualWorld,
         render_assets: &mut RenderAssets,
-        renderer: &mut Renderer,
+        uploader: &mut dyn MeshUploader,
     ) {
         self.renderable
-            .flush_pending(world, visuals, render_assets, renderer);
+            .flush_pending(world, visuals, render_assets, uploader);
     }
 
     /// Called when a TransformComponent changes.

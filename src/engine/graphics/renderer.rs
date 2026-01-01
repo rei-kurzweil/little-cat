@@ -1,7 +1,7 @@
 // Public renderer-owned resource handles.
 // NOTE: Handle types live in `graphics/primitives.rs` now.
 
-use crate::engine::graphics::{Material, MaterialHandle, VisualWorld};
+use crate::engine::graphics::{Material, MaterialHandle, VisualWorld, MeshUploader};
 use crate::engine::graphics::mesh::{CpuMesh, CpuVertex};
 use crate::engine::graphics::primitives::{BufferHandle, GpuMesh, MeshHandle};
 use winit::window::Window;
@@ -393,10 +393,8 @@ impl Renderer {
         Ok(())
     }
 
-    /// Upload a CPU mesh into GPU buffers and return a renderer-owned `MeshHandle`.
-    ///
-    /// Bring-up implementation: uses HOST_VISIBLE|HOST_COHERENT memory directly.
-    pub fn upload_mesh(&mut self, mesh: &CpuMesh) -> Result<MeshHandle, Box<dyn std::error::Error>> {
+    /// Internal implementation of mesh upload (shared by public method and trait).
+    fn do_upload_mesh(&mut self, mesh: &CpuMesh) -> Result<MeshHandle, Box<dyn std::error::Error>> {
         // Vertex data: we ignore UVs for now (per your request) and pack positions only.
         let mut vertex_bytes: Vec<u8> = Vec::with_capacity(mesh.vertices.len() * 12);
         for CpuVertex { pos, .. } in mesh.vertices.iter() {
@@ -440,6 +438,13 @@ impl Renderer {
         let h = MeshHandle(self.meshes.len() as u32);
         self.meshes.push(gpu_mesh);
         Ok(h)
+    }
+
+    /// Upload a CPU mesh into GPU buffers and return a renderer-owned `MeshHandle`.
+    ///
+    /// Bring-up implementation: uses HOST_VISIBLE|HOST_COHERENT memory directly.
+    pub fn upload_mesh(&mut self, mesh: &CpuMesh) -> Result<MeshHandle, Box<dyn std::error::Error>> {
+        self.do_upload_mesh(mesh)
     }
 
     pub fn material(&self, h: MaterialHandle) -> Option<&Material> {
@@ -1369,6 +1374,12 @@ impl Renderer {
 
     pub fn resize(&mut self, _size: winit::dpi::PhysicalSize<u32>) {
         // TODO: recreate swapchain
+    }
+}
+
+impl MeshUploader for Renderer {
+    fn upload_mesh(&mut self, mesh: &CpuMesh) -> Result<MeshHandle, Box<dyn std::error::Error>> {
+        self.do_upload_mesh(mesh)
     }
 }
 

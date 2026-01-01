@@ -16,7 +16,6 @@ pub struct Windowing;
 impl Windowing {
     pub fn run_app(
         universe: crate::engine::Universe,
-        renderer: crate::engine::graphics::Renderer,
         user_input: UserInput,
     ) -> EngineResult<()> {
         let event_loop = EventLoop::new().map_err(|_| EngineError::NotImplemented)?;
@@ -25,7 +24,6 @@ impl Windowing {
         let mut app = App {
             window: None,
             universe: Some(universe),
-            renderer: Some(renderer),
             last_frame: None,
             user_input,
         };
@@ -41,7 +39,6 @@ impl Windowing {
 struct App {
     window: Option<Arc<Window>>,
     universe: Option<crate::engine::Universe>,
-    renderer: Option<crate::engine::graphics::Renderer>,
     last_frame: Option<Instant>,
     user_input: UserInput,
 }
@@ -62,10 +59,10 @@ impl ApplicationHandler for App {
             .expect("failed to create window");
         let window = Arc::new(window);
 
-        // Initialize renderer backend for this window (Vulkan surface/swapchain later)
-        if let Some(renderer) = self.renderer.as_mut() {
-            renderer
-                .init_for_window(&window)
+        // Initialize renderer backend for this window via Universe
+        if let Some(universe) = self.universe.as_mut() {
+            universe
+                .init_renderer_for_window(&window)
                 .expect("renderer init failed");
         }
 
@@ -105,8 +102,8 @@ impl ApplicationHandler for App {
                         println!("[Windowing] WARNING: Window is not resizable!");
                     }
                 }
-                if let Some(renderer) = self.renderer.as_mut() {
-                    renderer.resize(size);
+                if let Some(universe) = self.universe.as_mut() {
+                    universe.resize_renderer(size);
                 }
                 if let Some(w) = &self.window {
                     println!("[Windowing] resized; requesting redraw");
@@ -127,12 +124,10 @@ impl ApplicationHandler for App {
                     .unwrap_or(0.0);
 
                 let universe = self.universe.as_mut().expect("universe missing");
-                let renderer = self.renderer.as_mut().expect("renderer missing");
 
-                
                 universe.update(dt, self.user_input.state());
 
-                universe.render(renderer);
+                universe.render();
 
                 if let Some(w) = &self.window {
                     // w.pre_present_notify();

@@ -3,6 +3,8 @@ use crate::engine::user_input::InputState;
 use crate::engine::ecs::component::{InstanceComponent, RenderableComponent, TransformComponent, Camera2DComponent, InputComponent};
 use crate::engine::graphics::mesh::MeshFactory;
 use crate::engine::graphics::primitives::MaterialHandle;
+use std::sync::Arc;
+use winit::window::Window;
 
 
 pub struct Universe {
@@ -11,7 +13,7 @@ pub struct Universe {
     pub render_assets: graphics::RenderAssets,
     pub systems: ecs::SystemWorld,
     pub command_queue: ecs::CommandQueue,
-
+    renderer: graphics::Renderer,
 }
 
 impl Universe {
@@ -22,6 +24,7 @@ impl Universe {
             render_assets: graphics::RenderAssets::new(),
             systems: ecs::SystemWorld::new(),
             command_queue: ecs::CommandQueue::new(),
+            renderer: graphics::Renderer::new(),
         };
 
         // Temporary: rebuild a demo scene directly in Universe creation.
@@ -29,6 +32,17 @@ impl Universe {
         u.build_demo_scene_7_shapes();
 
         u
+    }
+    
+    /// Initialize the renderer for a window.
+    /// This must be called before rendering.
+    pub fn init_renderer_for_window(&mut self, window: &Arc<Window>) -> Result<(), Box<dyn std::error::Error>> {
+        self.renderer.init_for_window(window)
+    }
+    
+    /// Resize the renderer when the window is resized.
+    pub fn resize_renderer(&mut self, size: winit::dpi::PhysicalSize<u32>) {
+        self.renderer.resize(size);
     }
 
     fn build_demo_scene_7_shapes(&mut self) {
@@ -105,14 +119,18 @@ impl Universe {
         self.systems.process_commands(&mut self.world, &mut self.visuals, &mut self.command_queue);
     }
 
-    pub fn render(&mut self, renderer: &mut graphics::Renderer) {
-        // Ensure VisualWorld contains only GPU-ready instances.
-        self.systems
-            .prepare_render(&mut self.world, &mut self.visuals, &mut self.render_assets, renderer);
+    pub fn render(&mut self) {
+        // Prepare render (mesh uploads) - cast renderer to trait
+        self.systems.prepare_render(
+            &mut self.world,
+            &mut self.visuals,
+            &mut self.render_assets,
+            &mut self.renderer as &mut dyn graphics::MeshUploader,
+        );
 
         // TODO: rebuild inspector around component graph instead of entities.
 
-        renderer.render_visual_world(&mut self.visuals)
-                .expect("render failed");
+        self.renderer.render_visual_world(&mut self.visuals)
+            .expect("render failed");
     }
 }
