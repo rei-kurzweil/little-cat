@@ -36,6 +36,12 @@ impl TransformComponent {
         self
     }
 
+    /// Builder-style: set rotation from Euler angles (radians), returns Self.
+    pub fn with_rotation_euler(mut self, pitch_x: f32, yaw_y: f32, roll_z: f32) -> Self {
+        self.set_rotation_euler_internal(pitch_x, yaw_y, roll_z);
+        self
+    }
+
     /// Private helper: computes and sets quaternion from euler angles, then recomputes model.
     fn set_rotation_euler_internal(&mut self, pitch_x: f32, yaw_y: f32, roll_z: f32) {
         // Minimal Euler->quat (XYZ intrinsic) implementation.
@@ -65,11 +71,6 @@ impl TransformComponent {
         self.recompute_model();
     }
 
-    /// Builder-style: set rotation from Euler angles (radians), returns Self.
-    pub fn with_rotation_euler(mut self, pitch_x: f32, yaw_y: f32, roll_z: f32) -> Self {
-        self.set_rotation_euler_internal(pitch_x, yaw_y, roll_z);
-        self
-    }
 
     /// Set rotation from Euler angles (radians), XYZ order, and queue update.
     pub fn set_rotation_euler(

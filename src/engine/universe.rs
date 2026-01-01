@@ -8,23 +8,26 @@ use winit::window::Window;
 
 
 pub struct Universe {
-    pub world: ecs::World,
-    pub visuals: graphics::VisualWorld,
-    pub render_assets: graphics::RenderAssets,
-    pub systems: ecs::SystemWorld,
+    pub world:         ecs::World,
     pub command_queue: ecs::CommandQueue,
-    renderer: graphics::Renderer,
+    pub systems:       ecs::SystemWorld,
+
+    pub visuals:       graphics::VisualWorld,
+    pub render_assets: graphics::RenderAssets,
+
+    renderer:          graphics::Renderer,
 }
 
 impl Universe {
     pub fn new(world: ecs::World) -> Self {
         let mut u = Self {
             world,
-            visuals: graphics::VisualWorld::new(),
-            render_assets: graphics::RenderAssets::new(),
-            systems: ecs::SystemWorld::new(),
             command_queue: ecs::CommandQueue::new(),
-            renderer: graphics::Renderer::new(),
+            systems:       ecs::SystemWorld::new(),
+            
+            visuals:       graphics::VisualWorld::new(),
+            render_assets: graphics::RenderAssets::new(),
+            renderer:      graphics::Renderer::new(),
         };
 
         // Temporary: rebuild a demo scene directly in Universe creation.
