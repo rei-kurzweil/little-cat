@@ -160,15 +160,8 @@ impl SystemWorld {
         }
     }
     
-    /// Process commands from the command queue.
-    pub fn process_commands(
-        &mut self,
-        world: &mut World,
-        visuals: &mut VisualWorld,
-        commands: &mut crate::engine::ecs::CommandQueue,
-    ) {
-        commands.flush(world, self, visuals);
-    }
+    // first, tick is called on all systems, 
+    // process_commands is called after, systems.tick(), to process the commands in the queue
     
     pub fn tick(&mut self, world: &mut World, visuals: &mut VisualWorld, input: &InputState, queue: &mut crate::engine::ecs::CommandQueue, dt_sec: f32) {
         // Process input first - it may queue commands
@@ -178,5 +171,15 @@ impl SystemWorld {
         self.renderable.tick(world, visuals, input, dt_sec);
         self.camera.tick(world, visuals, input, dt_sec);
         self.cursor.tick(world, visuals, input, dt_sec);
+    }
+
+    /// Process commands from the command queue.
+    pub fn process_commands(
+        &mut self,
+        world: &mut World,
+        visuals: &mut VisualWorld,
+        commands: &mut crate::engine::ecs::CommandQueue,
+    ) {
+        commands.flush(world, self, visuals);
     }
 }

@@ -91,7 +91,6 @@ impl InputSystem {
                 // Case 1: TransformComponent -> InstanceComponent (normal case)
                 if let Some(grandparent) = transform_parent {
                     if world.get_component_by_id_as::<InstanceComponent>(grandparent).is_some() {
-                        println!("[InputSystem] Updating InstanceComponent via TransformComponent (dx={:.3}, dy={:.3}, speed={:.3})", dx * speed, dy * speed, speed);
                         // Update TransformComponent and queue update command
                         if let Some(transform_comp_mut) = world.get_component_by_id_as_mut::<TransformComponent>(parent) {
                             transform_comp_mut.transform.translation[0] += dx * speed;
