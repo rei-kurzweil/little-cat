@@ -53,33 +53,9 @@ impl Universe {
         let tri_mesh = self.render_assets.register_mesh(MeshFactory::triangle_2d());
         let square_mesh = self.render_assets.register_mesh(MeshFactory::quad_2d());
         
-        // First triangle with input control (WASD)
-        // Structure: InstanceComponent -> TransformComponent -> InputComponent
-        let triangle1_instance = self.world.add_component(InstanceComponent::new());
-        let triangle1_transform = self.world.add_component(
-            TransformComponent::new()
-                .with_position(-0.20, 0.35, 0.0)
-                .with_scale(0.30, 0.30, 1.0)
-                .with_rotation_euler(0.0, 0.0, 3.14159 / 2.0)
-        );
-        let triangle1_renderable = self.world.add_component(RenderableComponent {
-            renderable: crate::engine::graphics::primitives::Renderable::new(
-                tri_mesh, MaterialHandle::UNLIT_MESH
-            ),
-        });
-        let triangle1_input = self.world.add_component(InputComponent::new().with_speed(0.5));
-
-        // Set up the hierarchy: instance -> transform -> input, instance -> renderable
-        let _ = self.world.add_child(triangle1_instance, triangle1_transform);
-        let _ = self.world.add_child(triangle1_instance, triangle1_renderable);
-        let _ = self.world.add_child(triangle1_transform, triangle1_input);
-
-        // Initialize the component tree starting from the instance
-        // This will recursively initialize all children (transform, renderable, input)
-        self.world.init_component_tree(triangle1_instance, &mut self.command_queue);
-
-        // Helper to spawn a single rendered shape.
-        let mut spawn = |mesh, x: f32, y: f32, s: f32, r: f32| {
+        // Helper closure to spawn a shape with the common component tree structure.
+        // Returns the transform ComponentId so we can add additional components if needed.
+        let mut spawn = |mesh, x: f32, y: f32, s: f32, r: f32| -> ecs::ComponentId {
             let instance = self.world.add_component(InstanceComponent::new());
             let transform = self.world.add_component(
                 TransformComponent::new()
@@ -100,17 +76,27 @@ impl Universe {
             // Initialize the component tree starting from the instance
             // This will recursively initialize all children (transform, renderable)
             self.world.init_component_tree(instance, &mut self.command_queue);
+            
+            transform
         };
 
-        // 5 squares
+        // Spawn all shapes using the common spawn function
+        let first_triangle_transform = spawn(tri_mesh, -0.20, 0.35, 0.30, 3.14159 / 2.0);
         spawn(square_mesh, -0.80, -0.30, 0.25, 0.0);
         spawn(square_mesh, -0.40, -0.30, 0.25, 0.0);
         spawn(square_mesh, 0.00, -0.30, 0.25, 0.0);
         spawn(square_mesh, 0.40, -0.30, 0.25, 0.0);
         spawn(square_mesh, 0.80, -0.30, 0.25, 0.0);
-
-        // Second triangle (no input)
         spawn(tri_mesh, 0.30, 0.35, 0.30, -3.14159);
+        
+        // Add InputComponent to the first triangle's transform (special case)
+        // Structure: InstanceComponent -> TransformComponent -> InputComponent
+        let triangle1_input = self.world.add_component(InputComponent::new().with_speed(0.5));
+        let _ = self.world.add_child(first_triangle_transform, triangle1_input);
+        // Re-initialize to register the InputComponent
+        if let Some(instance) = self.world.parent_of(first_triangle_transform) {
+            self.world.init_component_tree(instance, &mut self.command_queue);
+        }
 
         // Create a camera (no input control)
         // Structure: Camera2DComponent -> TransformComponent
