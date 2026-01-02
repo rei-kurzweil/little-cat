@@ -4,6 +4,9 @@
 //! The renderer later uploads them into GPU buffers (vertex/index buffers)
 //! and returns a `MeshHandle` that can be referenced by ECS renderables.
 
+use vulkano::buffer::BufferContents;
+use vulkano::pipeline::graphics::vertex_input::Vertex;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PrimitiveTopology {
     TriangleList,
@@ -19,9 +22,12 @@ pub enum IndexFormat {
 ///
 /// - `pos`: object-space / model-space position
 /// - `uv`: optional 0..1 UV (useful for screen-space gradients)
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(BufferContents, Vertex, Debug, Clone, Copy, Default)]
+#[repr(C)]
 pub struct CpuVertex {
+    #[format(R32G32B32_SFLOAT)]
     pub pos: [f32; 3],
+    #[format(R32G32_SFLOAT)]
     pub uv: [f32; 2],
 }
 

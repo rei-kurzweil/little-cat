@@ -15,7 +15,7 @@ pub struct Universe {
     pub visuals:       graphics::VisualWorld,
     pub render_assets: graphics::RenderAssets,
 
-    renderer:          graphics::Renderer,
+    renderer:          graphics::VulkanoRenderer,
 }
 
 impl Universe {
@@ -27,7 +27,7 @@ impl Universe {
             
             visuals:       graphics::VisualWorld::new(),
             render_assets: graphics::RenderAssets::new(),
-            renderer:      graphics::Renderer::new(),
+            renderer:      graphics::VulkanoRenderer::new(),
         };
 
         // Temporary: rebuild a demo scene directly in Universe creation.

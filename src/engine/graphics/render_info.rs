@@ -2,10 +2,7 @@
 //
 // Currently just owns the LC_PRINT_PIPELINE_LAYOUTS env-var gating and printing.
 
-use crate::engine::graphics::primitives::{BufferHandle, MeshHandle};
-use std::sync::Arc;
-
-use ash::vk;
+// Intentionally empty for now; this file remains as a home for renderer debug helpers.
 
 pub struct RenderInfo;
 

@@ -5,9 +5,10 @@ edition = "2024"
 
 [dependencies]
 rspirv = "0.12"
-ash = "0.38"
-ash-window = "0.13"
-raw-window-handle = "0.6"
+
+vulkano = "0.35"
+vulkano-shaders = "0.35"
+vulkano-util = "0.35"
 
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 openxr = "0.19"
