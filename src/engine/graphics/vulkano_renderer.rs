@@ -351,7 +351,9 @@ mod vulkano_backend {
                 return Ok(());
             }
 
-            let (new_swapchain, new_images) = match self.swapchain.recreate(SwapchainCreateInfo {
+            let (new_swapchain, new_images) 
+                = match self.swapchain.recreate(SwapchainCreateInfo 
+            {
                 image_extent: new_dimensions.into(),
                 ..self.swapchain.create_info()
             }) {
@@ -369,7 +371,8 @@ mod vulkano_backend {
             self.swapchain = new_swapchain;
             self.swapchain_views = new_images
                 .into_iter()
-                .map(|image| ImageView::new_default(image).map_err(|e| e.into()))
+                .map(|image| ImageView::new_default(image)
+                .map_err(|e| e.into()))
                 .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?;
 
             self.framebuffers = self
@@ -391,13 +394,17 @@ mod vulkano_backend {
             Ok(())
         }
 
-        pub fn render_visual_world(&mut self, visual_world: &mut VisualWorld) -> Result<(), Box<dyn std::error::Error>> {
+        pub fn render_visual_world(&mut self, visual_world: &mut VisualWorld) 
+            -> Result<(), Box<dyn std::error::Error>> 
+        {
             self.recreate_swapchain_if_needed()?;
 
             let device = self.context.device().clone();
             let queue = self.context.graphics_queue().clone();
 
-            if let Some(previous_frame_end) = self.previous_frame_end.as_mut() {
+            if let Some(previous_frame_end) = 
+                self.previous_frame_end.as_mut() 
+            {
                 previous_frame_end.cleanup_finished();
             }
 
@@ -423,7 +430,9 @@ mod vulkano_backend {
             // Build instance buffer in draw order so each DrawBatch maps to a contiguous range.
             let instance_count = visual_world.draw_order().len();
             let instances_ref = visual_world.instances();
-            let instance_data_iter = visual_world.draw_order().iter().map(|&idx| {
+            let instance_data_iter =    visual_world.draw_order()
+                                                                                        .iter()
+                                                                                        .map(|&idx| {
                 let (_, inst) = instances_ref[idx as usize];
                 let m = inst.transform.model;
                 InstanceData {
