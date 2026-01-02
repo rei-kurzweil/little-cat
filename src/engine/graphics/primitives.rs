@@ -137,6 +137,15 @@ pub enum VertexFormat {
     Uint32,
 }
 
+// CPU-side mesh handles
+impl MeshHandle {
+    pub const TRIANGLE: MeshHandle = MeshHandle(2);
+    pub const SQUARE: MeshHandle = MeshHandle(3);
+
+    pub const CUBE: MeshHandle = MeshHandle(0);
+    pub const TETRAHEDRON: MeshHandle = MeshHandle(1);
+}
+
 /// Renderer-owned GPU mesh resource (looked up by `MeshHandle`).
 #[derive(Debug, Clone, Copy)]
 pub struct GpuMesh {
@@ -176,34 +185,16 @@ pub struct Material {
 
 // Optional convenience: built-in material names/paths.
 impl Material {
-    pub const UNLIT_FULLSCREEN: Material = Material {
-        vertex_shader: "engine/graphics/shaders/triangle.vert",
-        fragment_shader: "engine/graphics/shaders/triangle.frag",
-    };
-
+    
     /// Unlit material intended for normal mesh rendering (vertex/index buffers + transforms).
     pub const UNLIT_MESH: Material = Material {
         vertex_shader: "engine/graphics/shaders/unlit-mesh.vert",
         fragment_shader: "engine/graphics/shaders/unlit-mesh.frag",
     };
-    pub const GRADIENT_BG_XY: Material = Material {
-        vertex_shader: "engine/graphics/shaders/vertex/triangle.vert",
-        fragment_shader: "engine/graphics/shaders/fragment/gradient-triangle.frag",
-    };
 }
 
-impl MeshHandle {
-    pub const TRIANGLE: MeshHandle = MeshHandle(2);
-    pub const SQUARE: MeshHandle = MeshHandle(3);
-
-    pub const CUBE: MeshHandle = MeshHandle(0);
-    pub const TETRAHEDRON: MeshHandle = MeshHandle(1);
-}
 
 impl MaterialHandle {
-    pub const UNLIT_FULLSCREEN: MaterialHandle = MaterialHandle(0);
-    pub const GRADIENT_BG_XY: MaterialHandle = MaterialHandle(1);
-
     /// Unlit mesh material (see `Material::UNLIT_MESH`).
-    pub const UNLIT_MESH: MaterialHandle = MaterialHandle(2);
+    pub const UNLIT_MESH: MaterialHandle = MaterialHandle(0);
 }

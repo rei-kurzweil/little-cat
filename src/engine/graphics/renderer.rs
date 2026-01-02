@@ -101,8 +101,6 @@ pub struct Renderer {
     swapchain_format: vk::Format,
     swapchain_extent: vk::Extent2D,
     render_pass: Option<vk::RenderPass>,
-    pipeline_layout: Option<vk::PipelineLayout>,
-    graphics_pipeline: Option<vk::Pipeline>,
     // Per-material pipeline cache (indexed by MaterialHandle.0).
     material_pipelines: Vec<Option<vk::Pipeline>>,
     material_pipeline_layouts: Vec<Option<vk::PipelineLayout>>,
@@ -138,8 +136,6 @@ impl Renderer {
             buffers: Vec::new(),
             meshes: Vec::new(),
             materials: vec![
-                Material::UNLIT_FULLSCREEN,
-                Material::GRADIENT_BG_XY,
                 Material::UNLIT_MESH,
             ],
 
@@ -177,8 +173,6 @@ impl Renderer {
             swapchain_format: vk::Format::UNDEFINED,
             swapchain_extent: vk::Extent2D::default(),
             render_pass: None,
-            pipeline_layout: None,
-            graphics_pipeline: None,
             material_pipelines: Vec::new(),
             material_pipeline_layouts: Vec::new(),
             framebuffers: Vec::new(),
@@ -468,6 +462,13 @@ impl Renderer {
         &mut self,
         material: MaterialHandle,
     ) -> Result<vk::Pipeline, Box<dyn std::error::Error>> {
+        if material != MaterialHandle::UNLIT_MESH {
+            return Err(format!(
+                "unknown material {:?}; only UNLIT_MESH is supported",
+                material
+            )
+            .into());
+        }
         let idx = material.0 as usize;
         self.ensure_pipeline_cache_len(idx + 1);
     let device = self.device.as_ref().ok_or("Renderer device not initialized")?;
@@ -480,24 +481,8 @@ impl Renderer {
         // For now, map MaterialHandle -> embedded SPIR-V shader pair.
         // Later this should load/compile from Material::vertex_shader / fragment_shader.
         //
-        let (vert_spv, frag_spv): (&[u8], &[u8]) = match material {
-            MaterialHandle::UNLIT_FULLSCREEN => (
-                include_bytes!("shaders/spv/triangle.vert.spv"),
-                include_bytes!("shaders/spv/triangle.frag.spv"),
-            ),
-            MaterialHandle::GRADIENT_BG_XY => (
-                include_bytes!("shaders/spv/triangle.vert.spv"),
-                include_bytes!("shaders/spv/gradient.frag.spv"),
-            ),
-            MaterialHandle::UNLIT_MESH => (
-                include_bytes!("shaders/spv/unlit-mesh.vert.spv"),
-                include_bytes!("shaders/spv/unlit-mesh.frag.spv"),
-            ),
-            _ => (
-                include_bytes!("shaders/spv/triangle.vert.spv"),
-                include_bytes!("shaders/spv/triangle.frag.spv"),
-            ),
-        };
+        let vert_spv: &[u8] = include_bytes!("shaders/spv/unlit-mesh.vert.spv");
+        let frag_spv: &[u8] = include_bytes!("shaders/spv/unlit-mesh.frag.spv");
 
         let vert_shader_module = self.create_shader_module(device, vert_spv)?;
         let frag_shader_module = self.create_shader_module(device, frag_spv)?;
@@ -772,48 +757,39 @@ impl Renderer {
                 // One-time debug print to verify that the pipeline layout used for push constants
                 // matches the pipeline we bind for this material.
                 // Print per-batch info for the first frame only, when enabled.
-                if std::env::var("LC_PRINT_PIPELINE_LAYOUTS").ok().as_deref() == Some("1")
-                    && self.current_frame == 0
                 {
-                    let layout_opt = self.material_pipeline_layouts.get(batch.material.0 as usize).and_then(|v| *v);
-                    println!(
-                        "[Renderer] pipeline/layout debug: material={:?} mesh={:?} pipeline=0x{:x} layout={}",
-                        batch.material,
-                        batch.mesh,
+                    let layout_opt = self
+                        .material_pipeline_layouts
+                        .get(batch.material.0 as usize)
+                        .and_then(|v| *v);
+
+                    crate::engine::graphics::RenderInfo::maybe_print_pipeline_layouts(
+                        self.current_frame,
+                        &batch.material,
+                        &batch.mesh,
                         debug_handle_u64(pipeline),
-                        layout_opt
-                            .map(|l| format!("0x{:x}", debug_handle_u64(l)))
-                            .unwrap_or_else(|| "<missing>".to_string()),
-                    );
-                    println!(
-                        "[Renderer] expected push-constant range: stage=VERTEX offset=0 size={} bytes",
-                        std::mem::size_of::<CameraPushConstants>()
-                    );
-                    println!(
-                        "[Renderer] batch idx {}/{} start={} count={}",
+                        layout_opt.map(debug_handle_u64),
+                        std::mem::size_of::<CameraPushConstants>(),
                         i,
                         batch_len,
-                        batch.start,
-                        batch.count
+                        batch.start as u32,
+                        batch.count as u32,
                     );
                 }
 
                 // Bind pipeline per material.
                 device.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
 
-                // Push camera constants for UNLIT_MESH only. Other pipelines (fullscreen triangle)
-                // don't declare this push constant range.
-                if batch.material == MaterialHandle::UNLIT_MESH {
-                    let layout = self.material_pipeline_layouts[batch.material.0 as usize]
-                        .expect("pipeline layout missing for material");
-                    device.cmd_push_constants(
-                        command_buffer,
-                        layout,
-                        vk::ShaderStageFlags::VERTEX,
-                        0,
-                        bytes_of(&cam_pc),
-                    );
-                }
+                // Push camera constants (this is the only supported material/pipeline).
+                let layout = self.material_pipeline_layouts[batch.material.0 as usize]
+                    .expect("pipeline layout missing for material");
+                device.cmd_push_constants(
+                    command_buffer,
+                    layout,
+                    vk::ShaderStageFlags::VERTEX,
+                    0,
+                    bytes_of(&cam_pc),
+                );
 
                 // Mesh buffers.
                 let Some(mesh) = self.meshes.get(batch.mesh.0 as usize) else {
@@ -1185,97 +1161,6 @@ impl Renderer {
 
         let render_pass = unsafe { device.create_render_pass(&render_pass_info, None) }?;
 
-        // 9. Create graphics pipeline (simple white triangle shader)
-    let vert_shader_code = include_bytes!("shaders/spv/triangle.vert.spv");
-    let frag_shader_code = include_bytes!("shaders/spv/triangle.frag.spv");
-
-        let vert_shader_module = self.create_shader_module(&device, vert_shader_code)?;
-        let frag_shader_module = self.create_shader_module(&device, frag_shader_code)?;
-
-        let main_name = c"main";
-        
-        let shader_stages = [
-            vk::PipelineShaderStageCreateInfo::default()
-                .stage(vk::ShaderStageFlags::VERTEX)
-                .module(vert_shader_module)
-                .name(main_name),
-            vk::PipelineShaderStageCreateInfo::default()
-                .stage(vk::ShaderStageFlags::FRAGMENT)
-                .module(frag_shader_module)
-                .name(main_name),
-        ];
-
-        let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::default();
-
-        let input_assembly = vk::PipelineInputAssemblyStateCreateInfo::default()
-            .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
-            .primitive_restart_enable(false);
-
-        let viewport = vk::Viewport {
-            x: 0.0,
-            y: 0.0,
-            width: extent.width as f32,
-            height: extent.height as f32,
-            min_depth: 0.0,
-            max_depth: 1.0,
-        };
-
-        let scissor = vk::Rect2D {
-            offset: vk::Offset2D { x: 0, y: 0 },
-            extent,
-        };
-
-        let viewport_state = vk::PipelineViewportStateCreateInfo::default()
-            .viewports(std::slice::from_ref(&viewport))
-            .scissors(std::slice::from_ref(&scissor));
-
-        let rasterizer = vk::PipelineRasterizationStateCreateInfo::default()
-            .depth_clamp_enable(false)
-            .rasterizer_discard_enable(false)
-            .polygon_mode(vk::PolygonMode::FILL)
-            .line_width(1.0)
-            .cull_mode(vk::CullModeFlags::BACK)
-            .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
-            .depth_bias_enable(false);
-
-        let multisampling = vk::PipelineMultisampleStateCreateInfo::default()
-            .sample_shading_enable(false)
-            .rasterization_samples(vk::SampleCountFlags::TYPE_1);
-
-        let color_blend_attachment = vk::PipelineColorBlendAttachmentState::default()
-            .color_write_mask(vk::ColorComponentFlags::RGBA)
-            .blend_enable(false);
-
-        let color_blending = vk::PipelineColorBlendStateCreateInfo::default()
-            .logic_op_enable(false)
-            .attachments(std::slice::from_ref(&color_blend_attachment));
-
-        let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default();
-        let pipeline_layout = unsafe { device.create_pipeline_layout(&pipeline_layout_info, None) }?;
-
-        let pipeline_info = vk::GraphicsPipelineCreateInfo::default()
-            .stages(&shader_stages)
-            .vertex_input_state(&vertex_input_info)
-            .input_assembly_state(&input_assembly)
-            .viewport_state(&viewport_state)
-            .rasterization_state(&rasterizer)
-            .multisample_state(&multisampling)
-            .color_blend_state(&color_blending)
-            .layout(pipeline_layout)
-            .render_pass(render_pass)
-            .subpass(0);
-
-        let graphics_pipeline = unsafe {
-            device
-                .create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
-                .map_err(|(_, e)| e)?
-        }[0];
-
-        unsafe {
-            device.destroy_shader_module(vert_shader_module, None);
-            device.destroy_shader_module(frag_shader_module, None);
-        }
-
         // 10. Create framebuffers
         let framebuffers: Vec<_> = swapchain_image_views
             .iter()
@@ -1336,8 +1221,6 @@ impl Renderer {
         self.swapchain_format = surface_format.format;
         self.swapchain_extent = extent;
         self.render_pass = Some(render_pass);
-        self.pipeline_layout = Some(pipeline_layout);
-        self.graphics_pipeline = Some(graphics_pipeline);
         self.framebuffers = framebuffers;
         self.command_pool = Some(command_pool);
         self.command_buffers = command_buffers;
@@ -1389,6 +1272,13 @@ impl Drop for Renderer {
             unsafe {
                 device.device_wait_idle().ok();
 
+                for p in self.material_pipelines.iter().copied().flatten() {
+                    device.destroy_pipeline(p, None);
+                }
+                for layout in self.material_pipeline_layouts.iter().copied().flatten() {
+                    device.destroy_pipeline_layout(layout, None);
+                }
+
                 for &semaphore in &self.image_available_semaphores {
                     device.destroy_semaphore(semaphore, None);
                 }
@@ -1407,12 +1297,6 @@ impl Drop for Renderer {
                     device.destroy_framebuffer(framebuffer, None);
                 }
 
-                if let Some(pipeline) = self.graphics_pipeline {
-                    device.destroy_pipeline(pipeline, None);
-                }
-                if let Some(layout) = self.pipeline_layout {
-                    device.destroy_pipeline_layout(layout, None);
-                }
                 if let Some(render_pass) = self.render_pass {
                     device.destroy_render_pass(render_pass, None);
                 }

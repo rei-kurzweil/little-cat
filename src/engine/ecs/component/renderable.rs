@@ -40,10 +40,10 @@ impl RenderableComponent {
         Self::from_cpu_mesh_handle(mesh, MaterialHandle::UNLIT_MESH)
     }
 
-    /// Predefined renderable: tetrahedron with a screen-space XY gradient material.
+    /// Predefined renderable: tetrahedron (alias of `tetrahedron`).
     pub fn color_tetrahedron(mesh: crate::engine::graphics::primitives::CpuMeshHandle) -> Self {
         let _ = MeshFactory::tetrahedron();
-        Self::from_cpu_mesh_handle(mesh, MaterialHandle::GRADIENT_BG_XY)
+        Self::from_cpu_mesh_handle(mesh, MaterialHandle::UNLIT_MESH)
     }
 }
 
