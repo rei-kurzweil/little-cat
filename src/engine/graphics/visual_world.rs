@@ -4,17 +4,6 @@ use crate::engine::graphics::GpuRenderable;
 use crate::engine::graphics::primitives::InstanceHandle;
 
 #[derive(Debug, Clone, Copy)]
-pub struct Instance {
-    pub transform: Transform,
-}
-
-impl From<Transform> for Instance {
-    fn from(transform: Transform) -> Self {
-        Self { transform }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
 pub struct DrawBatch {
     pub material: crate::engine::graphics::MaterialHandle,
     pub mesh: crate::engine::graphics::primitives::MeshHandle,
@@ -24,7 +13,7 @@ pub struct DrawBatch {
 }
 
 pub struct VisualWorld {
-    instances: Vec<(GpuRenderable, Instance)>,
+    instances: Vec<(GpuRenderable, Transform)>,
 
     // Active camera state (owned by CameraSystem, mirrored here for renderer snapshot).
     camera_view: [[f32; 4]; 4],
@@ -144,7 +133,7 @@ impl VisualWorld {
         v
     }
 
-    pub fn instances(&self) -> &[(GpuRenderable, Instance)] {
+    pub fn instances(&self) -> &[(GpuRenderable, Transform)] {
         &self.instances
     }
 
@@ -166,7 +155,7 @@ impl VisualWorld {
         }
 
         self.draw_order.clear();
-    self.draw_order.extend(0..self.instances.len() as u32);
+        self.draw_order.extend(0..self.instances.len() as u32);
 
         // Sort by (material, mesh). Stable sort keeps relative order for identical keys.
         self.draw_order.sort_by_key(|&i| {
@@ -212,13 +201,13 @@ impl VisualWorld {
         &mut self,
         cid: ComponentId,
         renderable: GpuRenderable,
-        instance: Instance,
+        transform: Transform,
     ) -> InstanceHandle {
         let handle = InstanceHandle(self.next_handle);
         self.next_handle = self.next_handle.wrapping_add(1);
 
         let idx = self.instances.len();
-        self.instances.push((renderable, instance));
+        self.instances.push((renderable, transform));
         self.handle_to_index.insert(handle, idx);
         self.component_to_handle.insert(cid, handle);
 
@@ -254,7 +243,7 @@ impl VisualWorld {
 
     pub fn update_transform(&mut self, handle: InstanceHandle, transform: Transform) -> bool {
         if let Some(&idx) = self.handle_to_index.get(&handle) {
-            self.instances[idx].1.transform = transform;
+            self.instances[idx].1 = transform;
             self.dirty_instance_data = true;
             // transform-only doesn’t affect batching by (material, mesh)
             true
@@ -265,7 +254,7 @@ impl VisualWorld {
 
     pub fn update_model(&mut self, handle: InstanceHandle, model: [[f32; 4]; 4]) -> bool {
         if let Some(&idx) = self.handle_to_index.get(&handle) {
-            self.instances[idx].1.transform.model = model;
+            self.instances[idx].1.model = model;
             self.dirty_instance_data = true;
             // model-only doesn’t affect batching by (material, mesh)
             true
@@ -274,9 +263,9 @@ impl VisualWorld {
         }
     }
 
-    pub fn update(&mut self, handle: InstanceHandle, renderable: GpuRenderable, instance: Instance) -> bool {
+    pub fn update(&mut self, handle: InstanceHandle, renderable: GpuRenderable, transform: Transform) -> bool {
         if let Some(&idx) = self.handle_to_index.get(&handle) {
-            self.instances[idx] = (renderable, instance);
+            self.instances[idx] = (renderable, transform);
             self.dirty_draw_cache = true; // renderable changes likely affect sort/batch
             self.dirty_instance_data = true;
             true

@@ -21,6 +21,10 @@ impl InputComponent {
 }
 
 impl Component for InputComponent {
+    fn name(&self) -> &'static str {
+        "input"
+    }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

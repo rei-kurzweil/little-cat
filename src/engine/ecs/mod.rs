@@ -17,7 +17,7 @@ new_key_type! {
 // and `crate::engine::ecs::Renderable` consistently.
 pub use crate::engine::graphics::primitives::{Renderable, Transform};
 
-pub use system::{CursorSystem, System, SystemWorld};
+pub use system::{System, SystemWorld};
 pub use command_queue::CommandQueue;
 
 /// Bundle of mutable engine state passed to component mutation APIs.
@@ -74,6 +74,16 @@ impl World {
     ) -> ComponentId {
         self.components
             .insert(crate::engine::ecs::component::ComponentNode::new(c))
+    }
+
+    /// Add a new boxed component with an explicit stored name.
+    pub fn add_component_boxed_named(
+        &mut self,
+        name: &'static str,
+        c: Box<dyn crate::engine::ecs::component::Component>,
+    ) -> ComponentId {
+        self.components
+            .insert(crate::engine::ecs::component::ComponentNode::new_named(name, c))
     }
 
     /// Temporary alias during migration.

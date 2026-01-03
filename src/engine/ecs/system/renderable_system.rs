@@ -1,9 +1,9 @@
 use crate::engine::ecs::ComponentId;
-use crate::engine::ecs::component::{InstanceComponent, RenderableComponent, TransformComponent};
+use crate::engine::ecs::component::{RenderableComponent, TransformComponent};
 
 use crate::engine::ecs::system::System;
 use crate::engine::ecs::World;
-use crate::engine::graphics::{GpuRenderable, Instance, VisualWorld};
+use crate::engine::graphics::{GpuRenderable, VisualWorld};
 use crate::engine::graphics::{RenderAssets, MeshUploader};
 use crate::engine::user_input::InputState;
 use crate::engine::graphics::primitives::{CpuMeshHandle, MaterialHandle};
@@ -12,13 +12,11 @@ use std::collections::HashMap;
 /// System that registers/updates renderables in the `VisualWorld`.
 ///
 /// Contract / intent:
-/// - A `RenderableComponent` must be a *child* of an `InstanceComponent`.
-/// - **Each `InstanceComponent` corresponds to exactly one `VisualWorld` `Instance`.**
-///   Multiple renderable children under the same `InstanceComponent` share that one instance.
-/// - The `InstanceComponent` stores the `InstanceHandle` which is assigned when the first
-///   renderable child registers.
-/// - Optional: if there is a sibling `TransformComponent` under the same `InstanceComponent`,
-///   we use it as the instance transform. Otherwise we fall back to `Transform::default()`.
+/// - A `RenderableComponent` is expected to be a *descendant* of a `TransformComponent`.
+///   (In practice we attach renderables directly under a transform.)
+/// - Each `RenderableComponent` corresponds to exactly one `VisualWorld` instance.
+/// - The world-space model matrix for that instance is computed by walking up the component
+///   tree and multiplying all ancestor `TransformComponent` model matrices.
 #[derive(Debug, Default)]
 pub struct RenderableSystem {
     renderables: Vec<ComponentId>,
@@ -32,8 +30,41 @@ pub struct RenderableSystem {
 struct PendingRenderable {
     cpu_mesh: CpuMeshHandle,
     material: MaterialHandle,
-    instance_cid: ComponentId,
-    transform: crate::engine::graphics::primitives::Transform,
+    renderable_cid: ComponentId,
+}
+
+fn mat4_mul(a: [[f32; 4]; 4], b: [[f32; 4]; 4]) -> [[f32; 4]; 4] {
+    let mut out = [[0.0f32; 4]; 4];
+    for c in 0..4 {
+        for r in 0..4 {
+            out[c][r] = a[0][r] * b[c][0] + a[1][r] * b[c][1] + a[2][r] * b[c][2] + a[3][r] * b[c][3];
+        }
+    }
+    out
+}
+
+fn world_model_for_renderable(world: &World, renderable_cid: ComponentId) -> Option<[[f32; 4]; 4]> {
+    // Walk up from the renderable and collect all TransformComponents along the way.
+    let mut transforms: Vec<[[f32; 4]; 4]> = Vec::new();
+    let mut cur = renderable_cid;
+    while let Some(parent) = world.parent_of(cur) {
+        if let Some(t) = world.get_component_by_id_as::<TransformComponent>(parent) {
+            transforms.push(t.transform.model);
+        }
+        cur = parent;
+    }
+
+    if transforms.is_empty() {
+        return None;
+    }
+
+    // Multiply from root -> leaf.
+    transforms.reverse();
+    let mut model = transforms[0];
+    for m in transforms.into_iter().skip(1) {
+        model = mat4_mul(model, m);
+    }
+    Some(model)
 }
 
 impl RenderableSystem {
@@ -71,49 +102,15 @@ impl RenderableSystem {
         visuals: &mut VisualWorld,
         component: ComponentId,
     ) {
-
-        // Each InstanceComponent (and its immediate children) defines a VisualWorld Instance.
-        // Renderables may be nested under other components; we walk up to find the nearest
-        // ancestor InstanceComponent.
-        let instance_cid = {
-            let mut cur = component;
-            loop {
-                let Some(parent) = world.parent_of(cur) else {
-                    println!(
-                        "[RenderableSystem]  -> no parent while walking to InstanceComponent (cur={:?})",
-                        cur
-                    );
-                    return;
-                };
-                if world.get_component_by_id_as::<InstanceComponent>(parent).is_some() {
-                    break parent;
-                }
-                cur = parent;
-            }
-        };
-        println!("[RenderableSystem]  -> instance_cid={:?}", instance_cid);
-
-        // First TransformComponent directly under the InstanceComponent (if present).
-        let transform_comp = world
-            .children_of(instance_cid)
-            .iter()
-            .find_map(|&cid| world.get_component_by_id_as::<TransformComponent>(cid));
-        let transform = if let Some(t) = transform_comp {
-            t.transform
-        } else {
-            crate::engine::graphics::primitives::Transform::default()
-        };
-        let inst = Instance { transform };
-
-        // Now mutably borrow the InstanceComponent to store the handle.
-        let Some(instance_comp) = world.get_component_by_id_as_mut::<InstanceComponent>(instance_cid) else {
-            return;
-        };
-
         // If it's already registered in VisualWorld, nothing else to do.
-        if instance_comp.get_handle().is_some() {
-            println!("[RenderableSystem]  -> instance already has VisualWorld handle; skipping");
-            return;
+        {
+            let Some(renderable_comp) = world.get_component_by_id_as::<RenderableComponent>(component) else {
+                println!("[RenderableSystem]  -> component is not RenderableComponent somehow");
+                return;
+            };
+            if renderable_comp.get_handle().is_some() {
+                return;
+            }
         }
 
         // Defer insertion into VisualWorld until the GPU mesh exists.
@@ -127,8 +124,7 @@ impl RenderableSystem {
             PendingRenderable {
                 cpu_mesh: renderable_comp.renderable.mesh,
                 material: renderable_comp.renderable.material,
-                instance_cid,
-                transform: inst.transform,
+                renderable_cid: component,
             },
         );
         println!(
@@ -172,26 +168,25 @@ impl RenderableSystem {
                 }
             };
 
-            // If the instance component already got a handle (maybe through another renderable), skip.
-            let Some(instance_comp) = world.get_component_by_id_as_mut::<InstanceComponent>(p.instance_cid) else {
-                println!(
-                    "[RenderableSystem]  -> instance component {:?} missing during flush",
-                    p.instance_cid
-                );
-                continue;
-            };
-            if instance_comp.get_handle().is_some() {
-                self.pending.remove(&key);
-                continue;
-            }
-
             let gpu_r = GpuRenderable {
                 mesh,
                 material: p.material,
             };
-            let inst = Instance { transform: p.transform };
-            let handle = visuals.register(p.instance_cid, gpu_r, inst);
-            instance_comp.handle = Some(handle);
+
+            let model = match world_model_for_renderable(world, p.renderable_cid) {
+                Some(m) => m,
+                None => {
+                    self.pending.remove(&key);
+                    continue;
+                }
+            };
+
+            let transform = crate::engine::graphics::primitives::Transform { model, ..Default::default() };
+            let handle = visuals.register(p.renderable_cid, gpu_r, transform);
+
+            if let Some(renderable_comp) = world.get_component_by_id_as_mut::<RenderableComponent>(p.renderable_cid) {
+                renderable_comp.handle = Some(handle);
+            }
 
             // (If you log ComponentId in a format string, use {:?}.)
             self.pending.remove(&key);

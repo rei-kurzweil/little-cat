@@ -6,7 +6,7 @@ mod tests {
     fn add_child_sets_parent_and_child_list() {
         let mut w = World::default();
 
-        let p = w.add_component(crate::engine::ecs::component::InstanceComponent::new());
+        let p = w.add_component(crate::engine::ecs::component::TransformComponent::new());
         let c = w.add_component(crate::engine::ecs::component::TransformComponent::new());
 
         w.add_child(p, c).unwrap();
@@ -19,7 +19,7 @@ mod tests {
     fn set_parent_none_detaches() {
         let mut w = World::default();
 
-        let p = w.add_component(crate::engine::ecs::component::InstanceComponent::new());
+        let p = w.add_component(crate::engine::ecs::component::TransformComponent::new());
         let c = w.add_component(crate::engine::ecs::component::TransformComponent::new());
 
         w.add_child(p, c).unwrap();
@@ -33,7 +33,7 @@ mod tests {
     fn prevent_cycles() {
         let mut w = World::default();
 
-        let a = w.add_component(crate::engine::ecs::component::InstanceComponent::new());
+        let a = w.add_component(crate::engine::ecs::component::TransformComponent::new());
         let b = w.add_component(crate::engine::ecs::component::TransformComponent::new());
 
         w.add_child(a, b).unwrap();
@@ -46,7 +46,7 @@ mod tests {
     fn remove_leaf_requires_no_children() {
         let mut w = World::default();
 
-        let p = w.add_component(crate::engine::ecs::component::InstanceComponent::new());
+        let p = w.add_component(crate::engine::ecs::component::TransformComponent::new());
         let c = w.add_component(crate::engine::ecs::component::TransformComponent::new());
 
         w.add_child(p, c).unwrap();
@@ -64,7 +64,7 @@ mod tests {
     fn remove_subtree_deletes_descendants() {
         let mut w = World::default();
 
-        let root = w.add_component(crate::engine::ecs::component::InstanceComponent::new());
+        let root = w.add_component(crate::engine::ecs::component::TransformComponent::new());
         let child = w.add_component(crate::engine::ecs::component::TransformComponent::new());
         let grandchild = w.add_component(crate::engine::ecs::component::RenderableComponent::cube(
             crate::engine::graphics::primitives::CpuMeshHandle(0),

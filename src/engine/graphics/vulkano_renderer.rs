@@ -11,6 +11,7 @@ mod vulkano_backend {
     use std::sync::Arc;
 
     use crate::engine::graphics::mesh::{CpuMesh, CpuVertex};
+    use crate::engine::graphics::pipeline_descriptor_set_layouts::PipelineDescriptorSetLayouts;
     use crate::engine::graphics::primitives::MeshHandle;
     use crate::engine::graphics::visual_world::VisualWorld;
     use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer};
@@ -39,7 +40,8 @@ mod vulkano_backend {
         VertexInputState,
     };
     use vulkano::pipeline::graphics::viewport::{Scissor, Viewport, ViewportState};
-    use vulkano::pipeline::layout::{PipelineDescriptorSetLayoutCreateInfo, PipelineLayout};
+    use vulkano::pipeline::layout::{PipelineLayout, PipelineLayoutCreateInfo};
+    
     use vulkano::pipeline::{DynamicState, GraphicsPipeline, Pipeline, PipelineBindPoint, PipelineShaderStageCreateInfo};
     use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass, Subpass};
     use vulkano::swapchain::{self, Surface, Swapchain, SwapchainCreateInfo, SwapchainPresentInfo};
@@ -50,17 +52,17 @@ mod vulkano_backend {
     use vulkano_util::context::{VulkanoConfig, VulkanoContext};
     use winit::window::Window;
 
-    mod unlit_mesh_vs {
+    mod toon_mesh_vs {
         vulkano_shaders::shader! {
             ty: "vertex",
-            path: "src/engine/graphics/shaders/unlit-mesh.vert",
+            path: "src/engine/graphics/shaders/toon-mesh.vert",
         }
     }
 
-    mod unlit_mesh_fs {
+    mod toon_mesh_fs {
         vulkano_shaders::shader! {
             ty: "fragment",
-            path: "src/engine/graphics/shaders/unlit-mesh.frag",
+            path: "src/engine/graphics/shaders/toon-mesh.frag",
         }
     }
 
@@ -118,9 +120,12 @@ mod vulkano_backend {
         pub descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
 
         #[allow(dead_code)]
+        pub set_layouts: PipelineDescriptorSetLayouts,
+
+        #[allow(dead_code)]
         pub meshes: HashMap<MeshHandle, VulkanoGpuMesh>,
 
-        pub pipeline_unlit_mesh: Arc<GraphicsPipeline>,
+        pub pipeline_toon_mesh: Arc<GraphicsPipeline>,
 
         pub window_resized: bool,
         pub recreate_swapchain: bool,
@@ -204,25 +209,28 @@ mod vulkano_backend {
                 })
                 .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?;
 
-            let vs = unlit_mesh_vs::load(device.clone())?;
-            let fs = unlit_mesh_fs::load(device.clone())?;
+            let set_layouts = PipelineDescriptorSetLayouts::new(device.clone())?;
+
+            let vs = toon_mesh_vs::load(device.clone())?;
+            let fs = toon_mesh_fs::load(device.clone())?;
 
             let stages = vec![
                 PipelineShaderStageCreateInfo::new(
                     vs.entry_point("main")
-                        .ok_or("missing unlit-mesh.vert entry point")?,
+                        .ok_or("missing toon-mesh.vert entry point")?,
                 ),
                 PipelineShaderStageCreateInfo::new(
                     fs.entry_point("main")
-                        .ok_or("missing unlit-mesh.frag entry point")?,
+                        .ok_or("missing toon-mesh.frag entry point")?,
                 ),
             ];
 
             let layout = PipelineLayout::new(
                 device.clone(),
-                PipelineDescriptorSetLayoutCreateInfo::from_stages(&stages)
-                    .into_pipeline_layout_create_info(device.clone())
-                    .map_err(|e| e.to_string())?,
+                PipelineLayoutCreateInfo {
+                    set_layouts: vec![set_layouts.global.clone(), set_layouts.material.clone()],
+                    ..Default::default()
+                },
             )?;
 
             // Important: `CpuVertex` currently contains more than just position (e.g. UV),
@@ -306,7 +314,7 @@ mod vulkano_backend {
                 .collect();
             pipeline_ci.subpass = Some(PipelineSubpassType::BeginRenderPass(subpass));
 
-            let pipeline_unlit_mesh = GraphicsPipeline::new(device.clone(), None, pipeline_ci)?;
+            let pipeline_toon_mesh = GraphicsPipeline::new(device.clone(), None, pipeline_ci)?;
 
             let command_buffer_allocator = Arc::new(StandardCommandBufferAllocator::new(
                 device.clone(),
@@ -331,7 +339,9 @@ mod vulkano_backend {
                 descriptor_set_allocator,
                 meshes: HashMap::new(),
 
-                pipeline_unlit_mesh,
+                set_layouts,
+
+                pipeline_toon_mesh,
 
                 window_resized: false,
                 recreate_swapchain: false,
@@ -433,8 +443,8 @@ mod vulkano_backend {
             let instance_data_iter =    visual_world.draw_order()
                                                                                         .iter()
                                                                                         .map(|&idx| {
-                let (_, inst) = instances_ref[idx as usize];
-                let m = inst.transform.model;
+                let (_, transform) = instances_ref[idx as usize];
+                let m = transform.model;
                 InstanceData {
                     i_model_c0: m[0],
                     i_model_c1: m[1],
@@ -491,20 +501,70 @@ mod vulkano_backend {
                 camera_ubo,
             )?;
 
-            let set_layout = self
-                .pipeline_unlit_mesh
-                .layout()
-                .set_layouts()
-                .get(0)
-                .ok_or("pipeline missing set 0 layout")?
-                .clone();
+            // Lights storage buffer (set=0, binding=1). Placeholder for now.
+            // Layout is intentionally minimal until LightSystem is wired in.
+            let lights_buffer: Subbuffer<[u32; 4]> = Buffer::from_data(
+                self.context.memory_allocator().clone(),
+                BufferCreateInfo {
+                    usage: BufferUsage::STORAGE_BUFFER,
+                    ..Default::default()
+                },
+                AllocationCreateInfo {
+                    memory_type_filter:
+                        MemoryTypeFilter::PREFER_HOST | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                    ..Default::default()
+                },
+                [0, 0, 0, 0],
+            )?;
 
-                let descriptor_set = DescriptorSet::new(
-                    self.descriptor_set_allocator.clone(),
-                    set_layout,
-                    [WriteDescriptorSet::buffer(0, camera_buffer)],
-                    [],
-                )?;
+            let global_set = DescriptorSet::new(
+                self.descriptor_set_allocator.clone(),
+                self.set_layouts.global.clone(),
+                [
+                    WriteDescriptorSet::buffer(0, camera_buffer),
+                    WriteDescriptorSet::buffer(1, lights_buffer),
+                ],
+                [],
+            )?;
+
+            #[derive(BufferContents, Clone, Copy, Debug, Default)]
+            #[repr(C, align(16))]
+            struct MaterialUBO {
+                base_color: [f32; 4],
+                light_dir_ws: [f32; 3],
+                quant_steps: f32,
+                unlit: u32,
+                _pad0: [f32; 3],
+            }
+
+            let material_ubo = MaterialUBO {
+                base_color: [1.0, 0.7, 0.2, 1.0],
+                light_dir_ws: [0.6, 0.4, 0.7],
+                quant_steps: 4.0,
+                unlit: 0,
+                _pad0: [0.0, 0.0, 0.0],
+            };
+
+            let material_buffer: Subbuffer<MaterialUBO> = Buffer::from_data(
+                self.context.memory_allocator().clone(),
+                BufferCreateInfo {
+                    usage: BufferUsage::UNIFORM_BUFFER,
+                    ..Default::default()
+                },
+                AllocationCreateInfo {
+                    memory_type_filter:
+                        MemoryTypeFilter::PREFER_HOST | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                    ..Default::default()
+                },
+                material_ubo,
+            )?;
+
+            let material_set = DescriptorSet::new(
+                self.descriptor_set_allocator.clone(),
+                self.set_layouts.material.clone(),
+                [WriteDescriptorSet::buffer(0, material_buffer)],
+                [],
+            )?;
 
             let mut cbb = AutoCommandBufferBuilder::primary(
                 self.command_buffer_allocator.clone(),
@@ -525,12 +585,12 @@ mod vulkano_backend {
                 .into(),
             )?;
 
-            cbb.bind_pipeline_graphics(self.pipeline_unlit_mesh.clone())?;
+            cbb.bind_pipeline_graphics(self.pipeline_toon_mesh.clone())?;
             cbb.bind_descriptor_sets(
                 PipelineBindPoint::Graphics,
-                self.pipeline_unlit_mesh.layout().clone(),
+                self.pipeline_toon_mesh.layout().clone(),
                 0,
-                descriptor_set,
+                (global_set, material_set),
             )?;
 
             // For now we only support UNLIT_MESH; VisualWorld batches already group by material.

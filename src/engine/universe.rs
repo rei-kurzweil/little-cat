@@ -1,6 +1,6 @@
 use crate::engine::{ecs, graphics};
 use crate::engine::user_input::InputState;
-use crate::engine::ecs::component::{InstanceComponent, RenderableComponent, TransformComponent, Camera2DComponent, InputComponent};
+use crate::engine::ecs::component::{RenderableComponent, TransformComponent, Camera2DComponent, InputComponent};
 use crate::engine::graphics::mesh::MeshFactory;
 use crate::engine::graphics::primitives::MaterialHandle;
 use std::sync::Arc;
@@ -56,32 +56,27 @@ impl Universe {
         // Helper closure to spawn a shape with the common component tree structure.
         // Returns the transform ComponentId so we can add additional components if needed.
         let mut spawn = |mesh, x: f32, y: f32, s: f32, r: f32| -> ecs::ComponentId {
-            let instance = self.world.add_component(InstanceComponent::new());
             let transform = self.world.add_component(
                 TransformComponent::new()
                     .with_position(x, y, 0.0)
                     .with_scale(s, s, 1.0)
                     .with_rotation_euler(0.0, 0.0, r)
             );
-            let renderable = self.world.add_component(RenderableComponent {
-                renderable: crate::engine::graphics::primitives::Renderable::new(
-                                mesh, MaterialHandle::UNLIT_MESH
-                            ),
-            });
+            let renderable = self.world.add_component(RenderableComponent::new(
+                crate::engine::graphics::primitives::Renderable::new(mesh, MaterialHandle::UNLIT_MESH),
+            ));
 
-            // Attach under the InstanceComponent (RenderableSystem expects this topology).
-            let _ = self.world.add_child(instance, transform);
-            let _ = self.world.add_child(instance, renderable);
+            // Topology: Transform -> Renderable
+            let _ = self.world.add_child(transform, renderable);
 
-            // Initialize the component tree starting from the instance
-            // This will recursively initialize all children (transform, renderable)
-            self.world.init_component_tree(instance, &mut self.command_queue);
+            // Initialize the component tree starting from the transform root.
+            self.world.init_component_tree(transform, &mut self.command_queue);
             
             transform
         };
 
         // Spawn all shapes using the common spawn function
-        let first_triangle_transform = spawn(tri_mesh, -0.20, 0.35, 0.30, 3.14159 / 2.0);
+        let _first_triangle_transform = spawn(tri_mesh, -0.20, 0.35, 0.30, 3.14159 / 2.0);
         spawn(square_mesh, -0.80, -0.30, 0.25, 0.0);
         spawn(square_mesh, -0.40, -0.30, 0.25, 0.0);
         spawn(square_mesh, 0.00, -0.30, 0.25, 0.0);
@@ -89,29 +84,20 @@ impl Universe {
         spawn(square_mesh, 0.80, -0.30, 0.25, 0.0);
         spawn(tri_mesh, 0.30, 0.35, 0.30, -3.14159);
         
-        // Add InputComponent to the first triangle's transform (special case)
-        // Structure: InstanceComponent -> TransformComponent -> InputComponent
-        let triangle1_input = self.world.add_component(InputComponent::new().with_speed(0.5));
-        let _ = self.world.add_child(first_triangle_transform, triangle1_input);
-        // Re-initialize to register the InputComponent
-        if let Some(instance) = self.world.parent_of(first_triangle_transform) {
-            self.world.init_component_tree(instance, &mut self.command_queue);
-        }
-
-        // Create a camera (no input control)
-        // Structure: Camera2DComponent -> TransformComponent
-        let camera2d = self.world.add_component(Camera2DComponent::new());
+        // Create a movable Camera2D rig.
+        // Preferred topology (simple one-way data flow):
+        // InputComponent -> TransformComponent -> Camera2DComponent
+        let camera_input = self.world.add_component(InputComponent::new().with_speed(0.5));
         let camera_transform = self.world.add_component(
-            TransformComponent::new()
-                .with_position(0.0, 0.0, 0.0) // Camera starts at origin
+            TransformComponent::new().with_position(0.0, 0.0, 0.0),
         );
+        let camera2d = self.world.add_component(Camera2DComponent::new());
 
-        // Set up the hierarchy: camera -> transform
-        let _ = self.world.add_child(camera2d, camera_transform);
+        let _ = self.world.add_child(camera_input, camera_transform);
+        let _ = self.world.add_child(camera_transform, camera2d);
 
-        // Initialize the component tree starting from the camera
-        // This will recursively initialize all children (transform)
-        self.world.init_component_tree(camera2d, &mut self.command_queue);
+        // Initialize the component tree starting from the input root.
+        self.world.init_component_tree(camera_input, &mut self.command_queue);
     }
 
     /// Game/update step

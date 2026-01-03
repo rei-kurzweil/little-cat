@@ -75,20 +75,30 @@ impl CpuMesh {
 pub struct MeshFactory;
 
 impl MeshFactory {
-    /// 2D triangle in NDC-ish space [-1..1].
+    /// 2D equilateral triangle centered at origin.
     pub fn triangle_2d() -> CpuMesh {
+        // Equilateral triangle of side length 1.0.
+        // Height h = sqrt(3)/2. Centered at origin using:
+        //  - top:    (0,  2h/3)
+        //  - bottom: (±0.5, -h/3)
+        let h = 0.866_025_4_f32;
+        let y_top = 2.0 * h / 3.0;
+        let y_bottom = -h / 3.0;
+        let y_span = y_top - y_bottom;
+
         let vertices = vec![
             CpuVertex {
-                pos: [-0.5, -0.5, 0.0],
+                pos: [-0.5, y_bottom, 0.0],
+                // For 2D primitives, we treat UV as normalized XY over the primitive's bounds.
                 uv: [0.0, 0.0],
             },
             CpuVertex {
-                pos: [0.5, -0.5, 0.0],
+                pos: [0.5, y_bottom, 0.0],
                 uv: [1.0, 0.0],
             },
             CpuVertex {
-                pos: [0.0, 0.5, 0.0],
-                uv: [0.5, 1.0],
+                pos: [0.0, y_top, 0.0],
+                uv: [0.5, (y_top - y_bottom) / y_span],
             },
         ];
 

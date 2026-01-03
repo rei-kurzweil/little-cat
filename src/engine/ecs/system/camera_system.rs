@@ -120,33 +120,24 @@ impl CameraSystem {
         }
     }
 
-    /// Update Camera2D translation from a TransformComponent that is a child of a Camera2DComponent.
-    ///
-    /// Assumes the transform is already verified to be a child of a Camera2DComponent.
-    pub fn update_camera_2d_from_transform(
+    /// Update Camera2D translation from a TransformComponent that is the *parent* of a Camera2DComponent.
+    pub fn update_camera_2d_from_parent_transform(
         &mut self,
         world: &World,
         visuals: &mut VisualWorld,
+        camera2d_component_id: ComponentId,
         transform_component_id: ComponentId,
     ) {
-        // Get the parent Camera2DComponent (assumed to exist based on caller's check)
-        let Some(parent_id) = world.parent_of(transform_component_id) else {
+        let Some(camera2d_comp) = world.get_component_by_id_as::<crate::engine::ecs::component::Camera2DComponent>(camera2d_component_id) else {
             return;
         };
 
-        let Some(camera2d_comp) = world.get_component_by_id_as::<crate::engine::ecs::component::Camera2DComponent>(parent_id) else {
-            return;
-        };
-
-        // Update camera translation if this Camera2D is the active camera
         if let Some(handle) = camera2d_comp.handle {
             if self.active_camera == Some(handle) {
-                let Some(transform_comp) = world.get_component_by_id_as::<crate::engine::ecs::component::TransformComponent>(transform_component_id) else {
+                let Some(transform_comp) 
+                    = world.get_component_by_id_as::<crate::engine::ecs::component::TransformComponent>(transform_component_id) else {
                     return;
                 };
-                
-                // Extract translation from model matrix
-                // Model matrix is column-major, translation is in column 3 (m[3][0..2])
                 let tx = transform_comp.transform.model[3][0];
                 let ty = transform_comp.transform.model[3][1];
                 visuals.set_camera_translation([tx, ty]);
@@ -219,18 +210,18 @@ fn invert_rigid_transform(m: &[[f32; 4]; 4]) -> [[f32; 4]; 4] {
 
 impl System for CameraSystem {
     fn tick(&mut self, world: &mut World, visuals: &mut VisualWorld, _input: &crate::engine::user_input::InputState, _dt_sec: f32) {
-        // If there's an active Camera2DComponent, find its child TransformComponent and update the camera
+        // If there's an active Camera2DComponent, read its parent TransformComponent.
         if let Some(active_handle) = self.active_camera {
             // If the handle is in camera2d_components, it's a Camera2D
             if let Some(camera2d_component_id) = self.camera2d_components.get(&active_handle) {
-                // Find the TransformComponent child of the Camera2DComponent
-                let children = world.children_of(*camera2d_component_id);
-                for &child_id in children {
-                    if world.get_component_by_id_as::<crate::engine::ecs::component::TransformComponent>(child_id).is_some() {
-                        // Found the TransformComponent, update the camera from it
-                        self.update_camera_2d_from_transform(world, visuals, child_id);
-                        break;
-                    }
+                let Some(parent) = world.parent_of(*camera2d_component_id) else {
+                    return;
+                };
+                if world
+                    .get_component_by_id_as::<crate::engine::ecs::component::TransformComponent>(parent)
+                    .is_some()
+                {
+                    self.update_camera_2d_from_parent_transform(world, visuals, *camera2d_component_id, parent);
                 }
             }
         }

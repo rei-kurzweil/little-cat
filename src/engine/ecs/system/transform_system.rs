@@ -1,4 +1,4 @@
-use crate::engine::ecs::component::{InstanceComponent, TransformComponent, Camera2DComponent};
+use crate::engine::ecs::component::{Camera2DComponent, RenderableComponent, TransformComponent};
 use crate::engine::ecs::ComponentId;
 use crate::engine::ecs::system::System;
 use crate::engine::ecs::World;
@@ -9,10 +9,42 @@ use crate::engine::user_input::InputState;
 ///
 /// Key points:
 /// - An entity can have multiple TransformComponents.
-/// - A TransformComponent should be a child of an InstanceComponent.
-/// - InstanceComponent owns the `InstanceHandle` pointing into VisualWorld.
+/// - A `TransformComponent` can parent other transforms to form groups.
+/// - Instances in `VisualWorld` are created per `RenderableComponent` under transforms.
 #[derive(Debug, Default)]
 pub struct TransformSystem;
+
+fn mat4_mul(a: [[f32; 4]; 4], b: [[f32; 4]; 4]) -> [[f32; 4]; 4] {
+    let mut out = [[0.0f32; 4]; 4];
+    for c in 0..4 {
+        for r in 0..4 {
+            out[c][r] = a[0][r] * b[c][0] + a[1][r] * b[c][1] + a[2][r] * b[c][2] + a[3][r] * b[c][3];
+        }
+    }
+    out
+}
+
+fn world_model_for_renderable(world: &World, renderable_cid: ComponentId) -> Option<[[f32; 4]; 4]> {
+    let mut transforms: Vec<[[f32; 4]; 4]> = Vec::new();
+    let mut cur = renderable_cid;
+    while let Some(parent) = world.parent_of(cur) {
+        if let Some(t) = world.get_component_by_id_as::<TransformComponent>(parent) {
+            transforms.push(t.transform.model);
+        }
+        cur = parent;
+    }
+
+    if transforms.is_empty() {
+        return None;
+    }
+
+    transforms.reverse();
+    let mut model = transforms[0];
+    for m in transforms.into_iter().skip(1) {
+        model = mat4_mul(model, m);
+    }
+    Some(model)
+}
 
 impl TransformSystem {
     pub fn new() -> Self {
@@ -21,9 +53,8 @@ impl TransformSystem {
 
     /// Called by TransformComponent when its values change.
     ///
-    /// This updates the transform of the VisualWorld instance corresponding to the *parent*
-    /// InstanceComponent of this TransformComponent, or updates camera translation if the
-    /// transform is a child of a Camera2DComponent.
+    /// This updates camera translation if the transform has a Camera2D child, and updates
+    /// VisualWorld instance model matrices for any `RenderableComponent` descendants.
     pub fn transform_changed(
         &mut self,
         world: &mut World,
@@ -31,46 +62,36 @@ impl TransformSystem {
         component: ComponentId,
         camera_system: &mut crate::engine::ecs::system::CameraSystem,
     ) {
-        // Check if this transform is a child of a Camera2DComponent
-        let parent = world.parent_of(component);
-        if let Some(parent_id) = parent {
-            if world.get_component_by_id_as::<Camera2DComponent>(parent_id).is_some() {
-                // This transform is part of a Camera2D - update camera translation
-                camera_system.update_camera_2d_from_transform(world, visuals, component);
-                return; // Don't update VisualWorld instance for camera transforms
-            }
+        // If this transform has a Camera2D child, update camera translation.
+        if let Some(camera2d_cid) = world
+            .children_of(component)
+            .iter()
+            .copied()
+            .find(|&cid| world.get_component_by_id_as::<Camera2DComponent>(cid).is_some())
+        {
+            camera_system.update_camera_2d_from_parent_transform(world, visuals, camera2d_cid, component);
         }
 
-        let Some(transform_comp) = world.get_component_by_id_as::<TransformComponent>(component) else {
-            return;
-        };
+        // Update all renderable instances in the subtree rooted at this transform.
+        let mut stack = vec![component];
+        while let Some(node) = stack.pop() {
+            for &child in world.children_of(node) {
+                stack.push(child);
 
-        // Normal case: Each InstanceComponent (and its immediate children) defines a VisualWorld Instance.
-        // TransformComponents may be nested under other components; we walk up to find the nearest
-        // ancestor InstanceComponent.
-        let instance_cid = {
-            let mut cur = component;
-            loop {
-                let Some(parent) = world.parent_of(cur) else {
-                    return;
-                };
-                if world.get_component_by_id_as::<InstanceComponent>(parent).is_some() {
-                    break parent;
+                if world.get_component_by_id_as::<RenderableComponent>(child).is_some() {
+                    let Some(handle) = world
+                        .get_component_by_id_as::<RenderableComponent>(child)
+                        .and_then(|r| r.get_handle())
+                    else {
+                        continue;
+                    };
+
+                    if let Some(model) = world_model_for_renderable(world, child) {
+                        visuals.update_model(handle, model);
+                    }
                 }
-                cur = parent;
             }
-        };
-
-        let Some(instance_comp) = world.get_component_by_id_as::<InstanceComponent>(instance_cid) else {
-            return;
-        };
-
-        let Some(handle) = instance_comp.get_handle() else {
-            // Visual instance not registered yet (RenderableSystem likely hasn't run).
-            return;
-        };
-
-        visuals.update_model(handle, transform_comp.transform.model);
+        }
     }
 }
 

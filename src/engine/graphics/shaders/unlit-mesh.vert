@@ -13,7 +13,7 @@ layout(location = 3) in vec4 i_model_c2;
 layout(location = 4) in vec4 i_model_c3;
 
 // Uniform buffer: camera data comes from set=0,binding=0.
-// For this debug mode we do *not* use view/proj yet; we use global_translation in NDC.
+// For this debug mode we do *not* use view/proj yet; we use global_translation as a 2D camera position.
 layout(set = 0, binding = 0) uniform CameraUBO {
     mat4 view;
     mat4 proj;
@@ -29,5 +29,6 @@ void main() {
     // Baseline clip-space projection just to see the scene.
     // NOTE: we intentionally ignore Z so objects at z=-2 remain visible.
     // Apply global translation in NDC space.
-    gl_Position = vec4(world.xy + ubo.global_translation, 0.0, 1.0);
+    // Camera pan: subtract camera position so the world moves opposite the camera.
+    gl_Position = vec4(world.xy - ubo.global_translation, 0.0, 1.0);
 }

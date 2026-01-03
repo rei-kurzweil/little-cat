@@ -116,6 +116,10 @@ impl TransformComponent {
 }
 
 impl Component for TransformComponent {
+    fn name(&self) -> &'static str {
+        "transform"
+    }
+
     fn set_id(&mut self, component: ComponentId) {
         self.component = Some(component);
     }

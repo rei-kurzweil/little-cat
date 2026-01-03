@@ -17,6 +17,10 @@ impl Camera2DComponent {
 }
 
 impl Component for Camera2DComponent {
+	fn name(&self) -> &'static str {
+		"camera2d"
+	}
+
 	fn as_any(&self) -> &dyn std::any::Any {
 		self
 	}

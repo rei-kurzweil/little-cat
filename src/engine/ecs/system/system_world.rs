@@ -1,32 +1,29 @@
 use super::World;
 use crate::engine::ecs::ComponentId;
-use crate::engine::ecs::system::CursorSystem;
 use crate::engine::ecs::system::CameraSystem;
 use crate::engine::ecs::system::RenderableSystem;
 use crate::engine::ecs::system::System;
 use crate::engine::ecs::system::TransformSystem;
 use crate::engine::ecs::system::InputSystem;
+use crate::engine::ecs::system::LightSystem;
+use crate::engine::ecs::system::LitVoxelSystem;
 use crate::engine::graphics::{RenderAssets, MeshUploader, VisualWorld};
 use crate::engine::user_input::InputState;
 
 /// System world that holds and runs all registered systems.
 #[derive(Debug, Default)]
 pub struct SystemWorld {
-    pub cursor: CursorSystem,
     pub camera: CameraSystem,
     pub renderable: RenderableSystem,
     pub transform: TransformSystem,
     pub input: InputSystem,
+    pub light: LightSystem,
+    pub lit_voxel: LitVoxelSystem,
 }
 
 impl SystemWorld {
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Register a CursorComponent instance with the CursorSystem.
-    pub fn register_cursor(&mut self,  component: ComponentId) {
-        self.cursor.register_cursor(component);
     }
 
     /// Register a RenderableComponent instance with the RenderableSystem.
@@ -127,6 +124,18 @@ impl SystemWorld {
         {
             camera2d_comp.handle = Some(handle);
         }
+
+        // Apply translation from the parent Transform immediately so the camera is correct
+        // on the first frame after registration.
+        if let Some(parent) = world.parent_of(component) {
+            if world
+                .get_component_by_id_as::<crate::engine::ecs::component::TransformComponent>(parent)
+                .is_some()
+            {
+                self.camera
+                    .update_camera_2d_from_parent_transform(&*world, visuals, component, parent);
+            }
+        }
     }
 
     /// Register an InputComponent.
@@ -170,7 +179,9 @@ impl SystemWorld {
         self.transform.tick(world, visuals, input, dt_sec);
         self.renderable.tick(world, visuals, input, dt_sec);
         self.camera.tick(world, visuals, input, dt_sec);
-        self.cursor.tick(world, visuals, input, dt_sec);
+
+        self.light.tick(world, visuals, input, dt_sec);
+        self.lit_voxel.tick(world, visuals, input, dt_sec);
     }
 
     /// Process commands from the command queue.

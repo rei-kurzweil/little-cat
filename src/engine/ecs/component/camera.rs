@@ -37,6 +37,10 @@ impl Default for CameraComponent {
 }
 
 impl Component for CameraComponent {
+    fn name(&self) -> &'static str {
+        "camera"
+    }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

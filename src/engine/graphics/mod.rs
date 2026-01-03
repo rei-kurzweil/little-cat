@@ -2,7 +2,7 @@ pub mod primitives;
 pub mod mesh;
 pub mod render_assets;
 pub mod render_info;
-pub mod spirv_reflect;
+pub mod pipeline_descriptor_set_layouts;
 pub mod vulkano_renderer;
 pub mod visual_world;
 
@@ -11,7 +11,7 @@ pub use mesh::{CpuMesh, CpuVertex, MeshFactory};
 
 pub use render_assets::RenderAssets;
 pub use vulkano_renderer::VulkanoRenderer;
-pub use visual_world::{Instance, VisualWorld};
+pub use visual_world::VisualWorld;
 
 pub use render_info::RenderInfo;
 /// Trait for uploading CPU meshes to GPU.

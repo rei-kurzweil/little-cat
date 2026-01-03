@@ -1,19 +1,34 @@
 use crate::engine::ecs::component::Component;
 use crate::engine::ecs::ComponentId;
 use crate::engine::graphics::mesh::MeshFactory;
-use crate::engine::graphics::primitives::{MaterialHandle, Renderable};
+use crate::engine::graphics::primitives::{InstanceHandle, MaterialHandle, Renderable};
 
 /// Renderable component.
 #[derive(Debug, Clone)]
 pub struct RenderableComponent {
     pub renderable: Renderable,
+
+    /// VisualWorld instance handle created for this renderable.
+    pub handle: Option<InstanceHandle>,
+
+    component: Option<ComponentId>,
 }
 
 impl RenderableComponent {
-    fn from_cpu_mesh_handle(h: crate::engine::graphics::primitives::CpuMeshHandle, material: MaterialHandle) -> Self {
+    pub fn new(renderable: Renderable) -> Self {
         Self {
-            renderable: Renderable::new(h, material),
+            renderable,
+            handle: None,
+            component: None,
         }
+    }
+
+    fn from_cpu_mesh_handle(h: crate::engine::graphics::primitives::CpuMeshHandle, material: MaterialHandle) -> Self {
+        Self::new(Renderable::new(h, material))
+    }
+
+    pub fn get_handle(&self) -> Option<InstanceHandle> {
+        self.handle
     }
 
     /// Predefined renderable: 2D triangle (placeholder handle).
@@ -48,6 +63,14 @@ impl RenderableComponent {
 }
 
 impl Component for RenderableComponent {
+    fn name(&self) -> &'static str {
+        "renderable"
+    }
+
+    fn set_id(&mut self, component: ComponentId) {
+        self.component = Some(component);
+    }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

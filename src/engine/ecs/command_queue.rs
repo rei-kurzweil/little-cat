@@ -121,13 +121,6 @@ impl CommandQueue {
                 Command::REMOVE_TRANSFORM { component_id } => {
                     systems.remove_transform(world, visuals, component_id);
                 }
-                
-                Command::REGISTER_INSTANCE { component_id: _ } => {
-                    // TODO: implement when needed
-                }
-                Command::REMOVE_INSTANCE { component_id: _ } => {
-                    // TODO: implement when needed
-                }
                 Command::REGISTER_CAMERA { component_id } => {
                     systems.register_camera(world, visuals, component_id);
                 }
@@ -137,14 +130,8 @@ impl CommandQueue {
                 Command::MAKE_ACTIVE_CAMERA { component_id } => {
                     systems.make_active_camera(world, visuals, component_id);
                 }
-                Command::REGISTER_CURSOR { component_id: _ } => {
-                    // TODO: implement when needed
-                }
                 Command::REGISTER_INPUT { component_id } => {
                     systems.register_input(component_id);
-                }
-                Command::REMOVE_CURSOR { component_id: _ } => {
-                    // TODO: implement when needed
                 }
                 Command::REGISTER_RENDERABLE { component_id } => {
                     systems.register_renderable(world, visuals, component_id);
@@ -167,16 +154,10 @@ pub struct ComponentCommand {
 }
 
 enum Command {
-    REGISTER_INSTANCE {
-        component_id: crate::engine::ecs::ComponentId,
-    },
     REGISTER_RENDERABLE {
         component_id: crate::engine::ecs::ComponentId,
     },
     REGISTER_TRANSFORM {
-        component_id: crate::engine::ecs::ComponentId,
-    },
-    REGISTER_CURSOR {
         component_id: crate::engine::ecs::ComponentId,
     },
     REGISTER_INPUT {
@@ -188,17 +169,10 @@ enum Command {
     REGISTER_CAMERA2D {
         component_id: crate::engine::ecs::ComponentId,
     },
-
-    REMOVE_INSTANCE {
-        component_id: crate::engine::ecs::ComponentId,
-    },
     REMOVE_RENDERABLE {
         component_id: crate::engine::ecs::ComponentId,
     },
     REMOVE_TRANSFORM {
-        component_id: crate::engine::ecs::ComponentId,
-    },
-    REMOVE_CURSOR {
         component_id: crate::engine::ecs::ComponentId,
     },
     REMOVE_CAMERA {
