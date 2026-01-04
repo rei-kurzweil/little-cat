@@ -50,6 +50,29 @@ impl InputSystem {
         let e = input.key_down(&Key::Character("e".into()))
             || input.key_down(&Key::Character("E".into()));
 
+        // Roll around Z first so translation happens "after" rotation.
+        if q || e {
+            const ROT_SPEED_RAD_PER_SEC: f32 = 1.5;
+            let dir = (q as i32) as f32 - (e as i32) as f32;
+            let dtheta = dir * ROT_SPEED_RAD_PER_SEC * dt_sec;
+            let (sz, cz) = (0.5 * dtheta).sin_cos();
+            let qz = [0.0f32, 0.0f32, sz, cz];
+
+            fn quat_mul(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
+                let (ax, ay, az, aw) = (a[0], a[1], a[2], a[3]);
+                let (bx, by, bz, bw) = (b[0], b[1], b[2], b[3]);
+                [
+                    aw * bx + ax * bw + ay * bz - az * by,
+                    aw * by - ax * bz + ay * bw + az * bx,
+                    aw * bz + ax * by - ay * bx + az * bw,
+                    aw * bw - ax * bx - ay * by - az * bz,
+                ]
+            }
+
+            // Apply local Z-roll increment.
+            transform.rotation = quat_mul(transform.rotation, qz);
+        }
+
         // Translation delta.
         let mut dx = 0.0f32;
         let mut dy = 0.0f32;
@@ -73,32 +96,16 @@ impl InputSystem {
             dy /= len;
         }
 
+        // Translate after rotation, in the transform's local (rotated) axes.
         let speed = speed_units_per_sec * dt_sec;
-        transform.translation[0] += dx * speed;
-        transform.translation[1] += dy * speed;
+        let (qz, qw) = (transform.rotation[2], transform.rotation[3]);
+        let theta = 2.0 * qz.atan2(qw);
+        let (sin_theta, cos_theta) = theta.sin_cos();
+        let local_dx = cos_theta * dx - sin_theta * dy;
+        let local_dy = sin_theta * dx + cos_theta * dy;
 
-        // Roll around Z.
-        if q || e {
-            const ROT_SPEED_RAD_PER_SEC: f32 = 1.5;
-            let dir = (q as i32) as f32 - (e as i32) as f32;
-            let dtheta = dir * ROT_SPEED_RAD_PER_SEC * dt_sec;
-            let (sz, cz) = (0.5 * dtheta).sin_cos();
-            let qz = [0.0f32, 0.0f32, sz, cz];
-
-            fn quat_mul(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
-                let (ax, ay, az, aw) = (a[0], a[1], a[2], a[3]);
-                let (bx, by, bz, bw) = (b[0], b[1], b[2], b[3]);
-                [
-                    aw * bx + ax * bw + ay * bz - az * by,
-                    aw * by - ax * bz + ay * bw + az * bx,
-                    aw * bz + ax * by - ay * bx + az * bw,
-                    aw * bw - ax * bx - ay * by - az * bz,
-                ]
-            }
-
-            // Apply local Z-roll increment.
-            transform.rotation = quat_mul(transform.rotation, qz);
-        }
+        transform.translation[0] += local_dx * speed;
+        transform.translation[1] += local_dy * speed;
 
         transform.recompute_model();
     }
