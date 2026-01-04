@@ -125,7 +125,7 @@ impl SystemWorld {
             camera2d_comp.handle = Some(handle);
         }
 
-        // Apply translation from the parent Transform immediately so the camera is correct
+        // Apply 2D camera view transform from the parent Transform immediately so the camera is correct
         // on the first frame after registration.
         if let Some(parent) = world.parent_of(component) {
             if world

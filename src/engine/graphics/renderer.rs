@@ -17,10 +17,8 @@ use ash::vk;
 struct CameraPushConstants {
     view: [[f32; 4]; 4],
     proj: [[f32; 4]; 4],
-    // NDC-space translation applied in the vertex shader.
-    // We keep this as vec2 and add explicit padding so the overall layout is well-defined.
-    global_translation: [f32; 2],
-    _pad0: [f32; 2],
+    // std140 mat3 = 3x vec4 columns.
+    camera2d: [[f32; 4]; 3],
 }
 
 fn print_mat4(label: &str, m: &[[f32; 4]; 4]) {
@@ -692,14 +690,12 @@ impl Renderer {
         // This is tiny (128 bytes) and simpler than threading mutability for a dirty flag.
         self.cached_camera_view = visual_world.camera_view();
         self.cached_camera_proj = visual_world.camera_proj();
-        // Global translation from the active 2D camera (NDC pan).
-        let global_translation = visual_world.camera_translation();
+        let camera2d = visual_world.camera_2d();
 
         let cam_pc = CameraPushConstants {
             view: self.cached_camera_view,
             proj: self.cached_camera_proj,
-            global_translation,
-            _pad0: [0.0, 0.0],
+            camera2d,
         };
 
         // Debug: print the exact matrices that will be pushed to the GPU.

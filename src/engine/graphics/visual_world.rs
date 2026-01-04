@@ -18,8 +18,9 @@ pub struct VisualWorld {
     // Active camera state (owned by CameraSystem, mirrored here for renderer snapshot).
     camera_view: [[f32; 4]; 4],
     camera_proj: [[f32; 4]; 4],
-    // Global translation for 2D camera panning in NDC (x,y).
-    camera_translation: [f32; 2],
+    // 2D camera view transform for translation/scale/rotation.
+    // Stored as mat3 column vectors padded to vec4 columns (std140 friendly).
+    camera_2d: [[f32; 4]; 3],
     dirty_camera: bool,
 
     next_handle: u32,
@@ -52,7 +53,11 @@ impl Default for VisualWorld {
                 [0.0, 0.0, 1.0, 0.0],
                 [0.0, 0.0, 0.0, 1.0],
             ],
-            camera_translation: [0.0, 0.0],
+            camera_2d: [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+            ],
             dirty_camera: true,
 
             next_handle: 0,
@@ -103,21 +108,27 @@ impl VisualWorld {
         self.camera_proj
     }
 
-    pub fn camera_translation(&self) -> [f32; 2] {
-        self.camera_translation
+    pub fn camera_2d(&self) -> [[f32; 4]; 3] {
+        self.camera_2d
     }
 
     pub fn set_camera(&mut self, view: [[f32; 4]; 4], proj: [[f32; 4]; 4]) {
         self.camera_view = view;
         self.camera_proj = proj;
+        // When a 3D camera becomes active, the 2D camera transform should be neutral.
+        self.camera_2d = [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+        ];
         self.dirty_camera = true;
     }
 
-    pub fn set_camera_translation(&mut self, t: [f32; 2]) {
-        if self.camera_translation == t {
+    pub fn set_camera_2d(&mut self, m: [[f32; 4]; 3]) {
+        if self.camera_2d == m {
             return;
         }
-        self.camera_translation = t;
+        self.camera_2d = m;
         self.dirty_camera = true;
     }
 

@@ -71,8 +71,8 @@ mod vulkano_backend {
     pub struct CameraUBO {
         pub view: [[f32; 4]; 4],
         pub proj: [[f32; 4]; 4],
-        pub global_translation: [f32; 2],
-        pub _pad0: [f32; 2],
+        // std140 mat3 = 3x vec4 columns.
+        pub camera2d: [[f32; 4]; 3],
     }
 
     #[derive(BufferContents, vulkano::pipeline::graphics::vertex_input::Vertex, Clone, Copy, Debug, Default)]
@@ -483,8 +483,7 @@ mod vulkano_backend {
             let camera_ubo = CameraUBO {
                 view: visual_world.camera_view(),
                 proj: visual_world.camera_proj(),
-                global_translation: visual_world.camera_translation(),
-                _pad0: [0.0, 0.0],
+                camera2d: visual_world.camera_2d(),
             };
 
             let camera_buffer: Subbuffer<CameraUBO> = Buffer::from_data(

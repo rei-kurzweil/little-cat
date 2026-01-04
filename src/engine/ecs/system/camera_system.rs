@@ -114,13 +114,13 @@ impl CameraSystem {
                     visuals.set_camera(cam3d.view, cam3d.proj);
                 }
                 AnyCamera::Camera2D => {
-                    // Camera2D doesn't set view/proj, only translation
+                    // Camera2D doesn't set view/proj here; it is driven by its parent Transform.
                 }
             }
         }
     }
 
-    /// Update Camera2D translation from a TransformComponent that is the *parent* of a Camera2DComponent.
+    /// Update Camera2D view transform from a TransformComponent that is the *parent* of a Camera2DComponent.
     pub fn update_camera_2d_from_parent_transform(
         &mut self,
         world: &World,
@@ -138,9 +138,38 @@ impl CameraSystem {
                     = world.get_component_by_id_as::<crate::engine::ecs::component::TransformComponent>(transform_component_id) else {
                     return;
                 };
-                let tx = transform_comp.transform.model[3][0];
-                let ty = transform_comp.transform.model[3][1];
-                visuals.set_camera_translation([tx, ty]);
+
+                // Build a 2D view matrix (world -> camera) from the camera's TRS.
+                // We treat the camera component's parent Transform as the camera pose.
+                let tx = transform_comp.transform.translation[0];
+                let ty = transform_comp.transform.translation[1];
+                let sx = transform_comp.transform.scale[0];
+                let sy = transform_comp.transform.scale[1];
+
+                // Extract Z-rotation (roll) from quaternion (xyzw), assuming it's a 2D camera.
+                let qz = transform_comp.transform.rotation[2];
+                let qw = transform_comp.transform.rotation[3];
+                let theta = 2.0 * qz.atan2(qw);
+                let (s, c) = theta.sin_cos();
+
+                let inv_sx = if sx.abs() > 1e-8 { 1.0 / sx } else { 1.0 };
+                let inv_sy = if sy.abs() > 1e-8 { 1.0 / sy } else { 1.0 };
+
+                // View = S^-1 * R^-1 * T^-1, column-major affine 2D.
+                let a00 = c * inv_sx;
+                let a01 = s * inv_sx;
+                let a10 = -s * inv_sy;
+                let a11 = c * inv_sy;
+
+                let t0 = -(a00 * tx + a01 * ty);
+                let t1 = -(a10 * tx + a11 * ty);
+
+                let camera_2d = [
+                    [a00, a10, 0.0, 0.0],
+                    [a01, a11, 0.0, 0.0],
+                    [t0,  t1,  1.0, 0.0],
+                ];
+                visuals.set_camera_2d(camera_2d);
             }
         }
     }
