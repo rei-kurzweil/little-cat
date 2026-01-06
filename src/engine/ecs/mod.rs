@@ -1,12 +1,12 @@
+pub mod command_queue;
 pub mod component;
 pub mod system;
-pub mod command_queue;
 
 #[cfg(test)]
 mod world_graph_tests;
 
-use slotmap::{new_key_type, SlotMap};
 use crate::engine::graphics::{RenderAssets, VisualWorld};
+use slotmap::{SlotMap, new_key_type};
 
 new_key_type! {
     /// Global component identity (dense arena key).
@@ -17,8 +17,8 @@ new_key_type! {
 // and `crate::engine::ecs::Renderable` consistently.
 pub use crate::engine::graphics::primitives::{Renderable, Transform};
 
-pub use system::{CursorSystem, System, SystemWorld};
 pub use command_queue::CommandQueue;
+pub use system::{System, SystemWorld};
 
 /// Bundle of mutable engine state passed to component mutation APIs.
 ///
@@ -58,7 +58,10 @@ impl World {
     ///
     /// Note: this currently does *not* call `Component::init`. That should happen via a
     /// higher-level API that has access to `SystemWorld` and `VisualWorld`.
-    pub fn add_component<T: crate::engine::ecs::component::Component>(&mut self, c: T) -> ComponentId {
+    pub fn add_component<T: crate::engine::ecs::component::Component>(
+        &mut self,
+        c: T,
+    ) -> ComponentId {
         // We set the id after insertion so components that cache their id can do so.
         let id = self.add_component_boxed(Box::new(c));
         if let Some(node) = self.get_component_record_mut(id) {
@@ -76,6 +79,18 @@ impl World {
             .insert(crate::engine::ecs::component::ComponentNode::new(c))
     }
 
+    /// Add a new boxed component with an explicit stored name.
+    pub fn add_component_boxed_named(
+        &mut self,
+        name: &'static str,
+        c: Box<dyn crate::engine::ecs::component::Component>,
+    ) -> ComponentId {
+        self.components
+            .insert(crate::engine::ecs::component::ComponentNode::new_named(
+                name, c,
+            ))
+    }
+
     /// Temporary alias during migration.
     pub fn spawn_component_boxed(
         &mut self,
@@ -84,11 +99,17 @@ impl World {
         self.add_component_boxed(c)
     }
 
-    pub fn get_component_record(&self, id: ComponentId) -> Option<&crate::engine::ecs::component::ComponentNode> {
+    pub fn get_component_record(
+        &self,
+        id: ComponentId,
+    ) -> Option<&crate::engine::ecs::component::ComponentNode> {
         self.components.get(id)
     }
 
-    pub fn get_component_record_mut(&mut self, id: ComponentId) -> Option<&mut crate::engine::ecs::component::ComponentNode> {
+    pub fn get_component_record_mut(
+        &mut self,
+        id: ComponentId,
+    ) -> Option<&mut crate::engine::ecs::component::ComponentNode> {
         self.components.get_mut(id)
     }
 
@@ -121,7 +142,10 @@ impl World {
         Some((parent, typed))
     }
 
-    pub fn get_parent_as_mut<T: 'static>(&mut self, c: ComponentId) -> Option<(ComponentId, &mut T)> {
+    pub fn get_parent_as_mut<T: 'static>(
+        &mut self,
+        c: ComponentId,
+    ) -> Option<(ComponentId, &mut T)> {
         let parent = self.parent_of(c)?;
         // Avoid borrowing self twice by doing the downcast via the node.
         let node = self.get_component_record_mut(parent)?;
@@ -146,7 +170,11 @@ impl World {
     /// - Both ids must exist.
     /// - `child` is detached from its current parent first.
     /// - Cycles are rejected.
-    pub fn add_child(&mut self, parent: ComponentId, child: ComponentId) -> Result<(), &'static str> {
+    pub fn add_child(
+        &mut self,
+        parent: ComponentId,
+        child: ComponentId,
+    ) -> Result<(), &'static str> {
         if self.get_component_record(parent).is_none() {
             return Err("parent does not exist");
         }
@@ -164,12 +192,16 @@ impl World {
 
         // Set child's parent.
         {
-            let child_node = self.get_component_record_mut(child).ok_or("child missing")?;
+            let child_node = self
+                .get_component_record_mut(child)
+                .ok_or("child missing")?;
             child_node.parent = Some(parent);
         }
         // Push into parent's children list.
         {
-            let parent_node = self.get_component_record_mut(parent).ok_or("parent missing")?;
+            let parent_node = self
+                .get_component_record_mut(parent)
+                .ok_or("parent missing")?;
             if !parent_node.children.contains(&child) {
                 parent_node.children.push(child);
             }
@@ -181,7 +213,11 @@ impl World {
     /// Change a component's parent.
     ///
     /// Equivalent to `detach_from_parent(child)` when `new_parent` is None.
-    pub fn set_parent(&mut self, child: ComponentId, new_parent: Option<ComponentId>) -> Result<(), &'static str> {
+    pub fn set_parent(
+        &mut self,
+        child: ComponentId,
+        new_parent: Option<ComponentId>,
+    ) -> Result<(), &'static str> {
         match new_parent {
             None => {
                 self.detach_from_parent(child);
@@ -219,7 +255,9 @@ impl World {
             return Err("component does not exist");
         };
         if !node.children.is_empty() {
-            return Err("component has children; use remove_component_subtree or detach children first");
+            return Err(
+                "component has children; use remove_component_subtree or detach children first",
+            );
         }
 
         self.detach_from_parent(c);

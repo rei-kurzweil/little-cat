@@ -1,15 +1,44 @@
-pub mod primitives;
 pub mod mesh;
+pub mod pipeline_descriptor_set_layouts;
+pub mod primitives;
 pub mod render_assets;
-pub mod renderer;
-pub mod spirv_reflect;
+pub mod render_info;
 pub mod visual_world;
+pub mod vulkano_renderer;
 
-pub use primitives::{GpuRenderable, Material, MaterialHandle, MeshHandle, Renderable, Transform};
 pub use mesh::{CpuMesh, CpuVertex, MeshFactory};
+pub use primitives::{
+    GpuRenderable, Material, MaterialHandle, MeshHandle, Renderable, TextureHandle, Transform,
+};
+
 pub use render_assets::RenderAssets;
-pub use renderer::Renderer;
-pub use visual_world::{Instance, VisualWorld};
+pub use visual_world::VisualWorld;
+pub use vulkano_renderer::VulkanoRenderer;
+
+pub use render_info::RenderInfo;
+/// Trait for uploading CPU meshes to GPU.
+/// This abstraction allows different renderer implementations
+/// to provide mesh uploading functionality without exposing renderer-specific details.
+pub trait MeshUploader {
+    fn upload_mesh(&mut self, mesh: &CpuMesh) -> Result<MeshHandle, Box<dyn std::error::Error>>;
+}
+
+/// Trait for uploading decoded textures to the GPU.
+///
+/// Textures are provided as RGBA8 pixels.
+pub trait TextureUploader {
+    fn upload_texture_rgba8(
+        &mut self,
+        rgba: &[u8],
+        width: u32,
+        height: u32,
+    ) -> Result<TextureHandle, Box<dyn std::error::Error>>;
+}
+
+/// Convenience super-trait for types that can upload both meshes and textures.
+pub trait RenderUploader: MeshUploader + TextureUploader {}
+
+impl<T> RenderUploader for T where T: MeshUploader + TextureUploader {}
 
 /// Graphics/Vulkan placeholder.
 pub struct Graphics;
@@ -19,4 +48,3 @@ impl Graphics {
         Self
     }
 }
-

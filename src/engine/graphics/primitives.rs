@@ -1,6 +1,5 @@
 /// Mesh helpers / basic primitives placeholder.
 
-
 /// Minimal transform (placeholder).
 #[derive(Debug, Clone, Copy)]
 pub struct Transform {
@@ -76,8 +75,6 @@ impl Transform {
     }
 }
 
-
-
 /// Renderable component: references renderer-managed resources.
 /// Vulkan-minded: material -> pipeline/layout + descriptors.
 ///
@@ -111,7 +108,6 @@ impl GpuRenderable {
     }
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BufferHandle(pub u32);
 
@@ -137,6 +133,15 @@ pub enum VertexFormat {
     Uint32,
 }
 
+// CPU-side mesh handles
+impl MeshHandle {
+    pub const TRIANGLE: MeshHandle = MeshHandle(2);
+    pub const SQUARE: MeshHandle = MeshHandle(3);
+
+    pub const CUBE: MeshHandle = MeshHandle(0);
+    pub const TETRAHEDRON: MeshHandle = MeshHandle(1);
+}
+
 /// Renderer-owned GPU mesh resource (looked up by `MeshHandle`).
 #[derive(Debug, Clone, Copy)]
 pub struct GpuMesh {
@@ -145,8 +150,6 @@ pub struct GpuMesh {
     pub index_count: u32,
     pub vertex_layout: &'static VertexLayout,
 }
-
-
 
 /// Renderer-owned resource handles (lightweight ids into renderer/asset tables).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -160,6 +163,9 @@ pub struct CpuMeshHandle(pub u32);
 pub struct MaterialHandle(pub u32);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TextureHandle(pub u32);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct InstanceHandle(pub u32);
 
 /// Renderer-owned material definition (API-agnostic placeholder).
@@ -168,7 +174,6 @@ pub struct InstanceHandle(pub u32);
 pub struct Material {
     pub vertex_shader: &'static str,
     pub fragment_shader: &'static str,
-
     // Later:
     // pub pipeline_config: PipelineConfig,
     // pub uniforms: MaterialUniforms,
@@ -176,34 +181,23 @@ pub struct Material {
 
 // Optional convenience: built-in material names/paths.
 impl Material {
-    pub const UNLIT_FULLSCREEN: Material = Material {
-        vertex_shader: "engine/graphics/shaders/triangle.vert",
-        fragment_shader: "engine/graphics/shaders/triangle.frag",
-    };
-
     /// Unlit material intended for normal mesh rendering (vertex/index buffers + transforms).
     pub const UNLIT_MESH: Material = Material {
         vertex_shader: "engine/graphics/shaders/unlit-mesh.vert",
         fragment_shader: "engine/graphics/shaders/unlit-mesh.frag",
     };
-    pub const GRADIENT_BG_XY: Material = Material {
-        vertex_shader: "engine/graphics/shaders/vertex/triangle.vert",
-        fragment_shader: "engine/graphics/shaders/fragment/gradient-triangle.frag",
+
+    /// Toon material used by the Vulkano renderer bring-up pipeline.
+    pub const TOON_MESH: Material = Material {
+        vertex_shader: "engine/graphics/shaders/toon-mesh.vert",
+        fragment_shader: "engine/graphics/shaders/toon-mesh.frag",
     };
 }
 
-impl MeshHandle {
-    pub const TRIANGLE: MeshHandle = MeshHandle(2);
-    pub const SQUARE: MeshHandle = MeshHandle(3);
-
-    pub const CUBE: MeshHandle = MeshHandle(0);
-    pub const TETRAHEDRON: MeshHandle = MeshHandle(1);
-}
-
 impl MaterialHandle {
-    pub const UNLIT_FULLSCREEN: MaterialHandle = MaterialHandle(0);
-    pub const GRADIENT_BG_XY: MaterialHandle = MaterialHandle(1);
-
     /// Unlit mesh material (see `Material::UNLIT_MESH`).
-    pub const UNLIT_MESH: MaterialHandle = MaterialHandle(2);
+    pub const UNLIT_MESH: MaterialHandle = MaterialHandle(0);
+
+    /// Toon mesh material (see `Material::TOON_MESH`).
+    pub const TOON_MESH: MaterialHandle = MaterialHandle(1);
 }

@@ -4,6 +4,9 @@
 //! The renderer later uploads them into GPU buffers (vertex/index buffers)
 //! and returns a `MeshHandle` that can be referenced by ECS renderables.
 
+use vulkano::buffer::BufferContents;
+use vulkano::pipeline::graphics::vertex_input::Vertex;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PrimitiveTopology {
     TriangleList,
@@ -19,9 +22,12 @@ pub enum IndexFormat {
 ///
 /// - `pos`: object-space / model-space position
 /// - `uv`: optional 0..1 UV (useful for screen-space gradients)
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(BufferContents, Vertex, Debug, Clone, Copy, Default)]
+#[repr(C)]
 pub struct CpuVertex {
+    #[format(R32G32B32_SFLOAT)]
     pub pos: [f32; 3],
+    #[format(R32G32_SFLOAT)]
     pub uv: [f32; 2],
 }
 
@@ -69,20 +75,30 @@ impl CpuMesh {
 pub struct MeshFactory;
 
 impl MeshFactory {
-    /// 2D triangle in NDC-ish space [-1..1].
+    /// 2D equilateral triangle centered at origin.
     pub fn triangle_2d() -> CpuMesh {
+        // Equilateral triangle of side length 1.0.
+        // Height h = sqrt(3)/2. Centered at origin using:
+        //  - top:    (0,  2h/3)
+        //  - bottom: (±0.5, -h/3)
+        let h = 0.866_025_4_f32;
+        let y_top = 2.0 * h / 3.0;
+        let y_bottom = -h / 3.0;
+        let y_span = y_top - y_bottom;
+
         let vertices = vec![
             CpuVertex {
-                pos: [-0.5, -0.5, 0.0],
+                pos: [-0.5, y_bottom, 0.0],
+                // For 2D primitives, we treat UV as normalized XY over the primitive's bounds.
                 uv: [0.0, 0.0],
             },
             CpuVertex {
-                pos: [0.5, -0.5, 0.0],
+                pos: [0.5, y_bottom, 0.0],
                 uv: [1.0, 0.0],
             },
             CpuVertex {
-                pos: [0.0, 0.5, 0.0],
-                uv: [0.5, 1.0],
+                pos: [0.0, y_top, 0.0],
+                uv: [0.5, (y_top - y_bottom) / y_span],
             },
         ];
 
@@ -137,16 +153,11 @@ impl MeshFactory {
         // 12 triangles (2 per face), CCW when looking at the outside
         let indices = vec![
             // -Z face
-            0, 2, 1, 0, 3, 2,
-            // +Z face
-            4, 5, 6, 4, 6, 7,
-            // -X face
-            0, 4, 7, 0, 7, 3,
-            // +X face
-            1, 2, 6, 1, 6, 5,
-            // -Y face
-            0, 1, 5, 0, 5, 4,
-            // +Y face
+            0, 2, 1, 0, 3, 2, // +Z face
+            4, 5, 6, 4, 6, 7, // -X face
+            0, 4, 7, 0, 7, 3, // +X face
+            1, 2, 6, 1, 6, 5, // -Y face
+            0, 1, 5, 0, 5, 4, // +Y face
             3, 7, 6, 3, 6, 2,
         ];
 
@@ -179,9 +190,7 @@ impl MeshFactory {
         // 4 faces, CCW as seen from outside
         let indices = vec![
             0, 2, 1, // base-ish
-            0, 1, 3,
-            0, 3, 2,
-            1, 2, 3,
+            0, 1, 3, 0, 3, 2, 1, 2, 3,
         ];
 
         CpuMesh::new(vertices, indices)

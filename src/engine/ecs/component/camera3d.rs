@@ -1,19 +1,19 @@
-use crate::engine::ecs::component::Component;
 use crate::engine::ecs::ComponentId;
+use crate::engine::ecs::component::Component;
 
-/// Camera component.
+/// 3D camera component.
 ///
 /// Contract:
 /// - On init, registers a camera with `CameraSystem`.
 /// - The most recently registered camera becomes active.
 /// - Call `make_active_camera()` to explicitly set this camera active.
 #[derive(Debug, Clone)]
-pub struct CameraComponent {
+pub struct Camera3DComponent {
     // Handle owned by CameraSystem. Filled in during init.
     pub handle: Option<crate::engine::ecs::system::camera_system::CameraHandle>,
 }
 
-impl CameraComponent {
+impl Camera3DComponent {
     pub fn new() -> Self {
         Self { handle: None }
     }
@@ -30,13 +30,17 @@ impl CameraComponent {
     }
 }
 
-impl Default for CameraComponent {
+impl Default for Camera3DComponent {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Component for CameraComponent {
+impl Component for Camera3DComponent {
+    fn name(&self) -> &'static str {
+        "camera3d"
+    }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -45,11 +49,7 @@ impl Component for CameraComponent {
         self
     }
 
-    fn init(
-        &mut self,
-        queue: &mut crate::engine::ecs::CommandQueue,
-        component: ComponentId,
-    ) {
-        queue.queue_register_camera(component);
+    fn init(&mut self, queue: &mut crate::engine::ecs::CommandQueue, component: ComponentId) {
+        queue.queue_register_camera_3d(component);
     }
 }

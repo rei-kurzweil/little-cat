@@ -28,26 +28,36 @@ using vulkan instanced rendering and several layers to describe game objects:
 
 ## VisualWorld
 + stores a snapshot of Instances and GpuRenderables
-+ and builds cache, sorted by material pipeline and mesh
++ and builds cache, sorted by material pipeline, mesh, and texture
 
 #### RenderAssets
 + converts `CPUMesh` into `GPUMesh`
+
+#### TextureSystem
+#### LightSystem
 
 ## Renderer 
 + displays data from VisualWorld through vulkan
 
 # Components
-+ InstanceComponent
-  + Required to show a component graphically.
-  + InstanceComponent needs a child RenderableComponent to be displayed graphically
+
++ TransformComponent
+  + lets position anything in space (and rotate and scale it)
+  + affects children:
+    + RenderableComponent
+    + Camera2DComponent
+    + Camera3DComponent
+    + PointLightComponent
+  + affected by parents:
+    + InputComponent (recieves transform input from InputComponent)
 
 + RenderableComponent
   + Several built-in RenderableComponents are available as special constructors on the impl.
   + TODO: make separate material and geometry components
 
-+ TransformComponent
-  + lets you specify a transform for your Renderable Instance 
-  + Both Renderable and Transform should be placed under an InstanceComponent as children.
++ InputComponent
+  + Recieves keyboard or other input sources and passes that info to relevant child components
+  + TODO: set up key mappings and movement / transform modes beyond the defaults.
 
 + CameraComponent
   + add child TransformComponent to move the camera
@@ -55,6 +65,23 @@ using vulkan instanced rendering and several layers to describe game objects:
 
 + Camera2DComponent
   + add child TransformComponent to move the camera
+
++ ColorComponent
+  + Per-instance RGBA tint.
+  + Routed into the instanced vertex buffer, so it does not split draw batches.
+  + Useful for quick “team color” / debug visualization without creating new materials.
+
++ UVComponent
+  + Supplies UVs for a mesh so shaders can sample textures.
+
++ TextureComponent
+  + References a texture by `uri` (e.g. `"assets/cat-face-neutral.png"`).
+  + Loaded/decoded via the `image` crate and uploaded to the GPU.
+  + Textures are deduplicated by `uri` (multiple components can share the same GPU texture).
+  + Texture affects batching: draw calls are grouped by (material, mesh, texture).
+
++ PointLightComponent
+  + Adds a point light to the scene (fed to the shader via an SSBO).
 
 
 # Lifecycle

@@ -1,24 +1,23 @@
 use crate::engine::ecs::ComponentId;
-use crate::engine::ecs::component::{InstanceComponent, RenderableComponent, TransformComponent};
+use crate::engine::ecs::component::{ColorComponent, RenderableComponent, UVComponent};
 
-use crate::engine::ecs::system::System;
 use crate::engine::ecs::World;
-use crate::engine::graphics::{GpuRenderable, Instance, VisualWorld};
-use crate::engine::graphics::{RenderAssets, Renderer};
+use crate::engine::ecs::system::System;
+use crate::engine::ecs::system::TransformSystem;
+use crate::engine::graphics::primitives::{CpuMeshHandle, MaterialHandle, Transform};
+use crate::engine::graphics::{GpuRenderable, VisualWorld};
+use crate::engine::graphics::{MeshUploader, RenderAssets};
 use crate::engine::user_input::InputState;
-use crate::engine::graphics::primitives::{CpuMeshHandle, MaterialHandle};
 use std::collections::HashMap;
 
 /// System that registers/updates renderables in the `VisualWorld`.
 ///
 /// Contract / intent:
-/// - A `RenderableComponent` must be a *child* of an `InstanceComponent`.
-/// - **Each `InstanceComponent` corresponds to exactly one `VisualWorld` `Instance`.**
-///   Multiple renderable children under the same `InstanceComponent` share that one instance.
-/// - The `InstanceComponent` stores the `InstanceHandle` which is assigned when the first
-///   renderable child registers.
-/// - Optional: if there is a sibling `TransformComponent` under the same `InstanceComponent`,
-///   we use it as the instance transform. Otherwise we fall back to `Transform::default()`.
+/// - A `RenderableComponent` is expected to be a *descendant* of a `TransformComponent`.
+///   (In practice we attach renderables directly under a transform.)
+/// - Each `RenderableComponent` corresponds to exactly one `VisualWorld` instance.
+/// - The world-space model matrix for that instance is computed by walking up the component
+///   tree and multiplying all ancestor `TransformComponent` model matrices.
 #[derive(Debug, Default)]
 pub struct RenderableSystem {
     renderables: Vec<ComponentId>,
@@ -26,22 +25,190 @@ pub struct RenderableSystem {
     /// Renderables that have been discovered/registered in ECS but not yet inserted into
     /// VisualWorld because their GPU mesh isn't ready.
     pending: HashMap<ComponentId, PendingRenderable>,
+
+    /// Per-vertex UV overrides for a renderable.
+    ///
+    /// Keyed by the RenderableComponent's ComponentId.
+    pending_uv: HashMap<ComponentId, Vec<[f32; 2]>>,
+
+    /// Per-instance color override for a renderable.
+    ///
+    /// Keyed by the RenderableComponent's ComponentId.
+    pending_color: HashMap<ComponentId, [f32; 4]>,
 }
 
 #[derive(Debug, Clone, Copy)]
 struct PendingRenderable {
     cpu_mesh: CpuMeshHandle,
     material: MaterialHandle,
-    instance_cid: ComponentId,
-    transform: crate::engine::graphics::primitives::Transform,
+    renderable_cid: ComponentId,
+}
+
+fn clone_mesh_with_uv_overrides(
+    render_assets: &mut RenderAssets,
+    base_mesh: CpuMeshHandle,
+    uvs: &[[f32; 2]],
+) -> Option<CpuMeshHandle> {
+    let mut mesh = render_assets.cpu_mesh(base_mesh)?.clone();
+
+    for (i, v) in mesh.vertices.iter_mut().enumerate() {
+        v.uv = uvs.get(i).copied().unwrap_or([0.0, 0.0]);
+    }
+
+    Some(render_assets.register_mesh(mesh))
 }
 
 impl RenderableSystem {
-    pub fn new() -> Self {
-        Self {
-            renderables: Vec::new(),
-            pending: HashMap::new(),
+    fn apply_pending_color_updates_to_registered_renderables(
+        &mut self,
+        world: &mut World,
+        visuals: &mut VisualWorld,
+    ) {
+        let color_keys: Vec<ComponentId> = self.pending_color.keys().copied().collect();
+        for renderable_cid in color_keys {
+            let Some(renderable_comp) =
+                world.get_component_by_id_as::<RenderableComponent>(renderable_cid)
+            else {
+                let _ = self.pending_color.remove(&renderable_cid);
+                continue;
+            };
+            let Some(handle) = renderable_comp.get_handle() else {
+                // Still pending; will be handled by the pending flush.
+                continue;
+            };
+
+            let Some(color) = self.pending_color.get(&renderable_cid).copied() else {
+                continue;
+            };
+
+            let _ = visuals.update_color(handle, color);
+            let _ = self.pending_color.remove(&renderable_cid);
         }
+    }
+
+    fn apply_pending_uv_updates_to_registered_renderables(
+        &mut self,
+        world: &mut World,
+        visuals: &mut VisualWorld,
+        render_assets: &mut RenderAssets,
+        uploader: &mut dyn MeshUploader,
+    ) {
+        // Apply UV updates to already-registered renderables.
+        let uv_keys: Vec<ComponentId> = self.pending_uv.keys().copied().collect();
+        for renderable_cid in uv_keys {
+            let Some(renderable_comp) =
+                world.get_component_by_id_as::<RenderableComponent>(renderable_cid)
+            else {
+                let _ = self.pending_uv.remove(&renderable_cid);
+                continue;
+            };
+            let Some(handle) = renderable_comp.get_handle() else {
+                // Still pending; will be handled by the pending flush.
+                continue;
+            };
+
+            let base_mesh = renderable_comp.renderable.mesh;
+            let material = renderable_comp.renderable.material;
+
+            let Some(uvs) = self.pending_uv.get(&renderable_cid).cloned() else {
+                continue;
+            };
+
+            let Some(new_mesh) = clone_mesh_with_uv_overrides(render_assets, base_mesh, &uvs)
+            else {
+                continue;
+            };
+
+            let mesh = match render_assets.gpu_mesh_handle(uploader, new_mesh) {
+                Ok(h) => h,
+                Err(err) => {
+                    println!(
+                        "[RenderableSystem]  -> gpu_mesh_handle failed for cpu_mesh={:?}: {:?}",
+                        new_mesh, err
+                    );
+                    continue;
+                }
+            };
+
+            let Some(model) = TransformSystem::world_model(world, renderable_cid) else {
+                continue;
+            };
+            let transform = Transform {
+                model,
+                ..Default::default()
+            };
+
+            let gpu_r = GpuRenderable { mesh, material };
+            let _ = visuals.update(handle, gpu_r, transform);
+
+            if let Some(renderable_comp) =
+                world.get_component_by_id_as_mut::<RenderableComponent>(renderable_cid)
+            {
+                renderable_comp.renderable.mesh = new_mesh;
+            }
+
+            let _ = self.pending_uv.remove(&renderable_cid);
+        }
+    }
+
+    pub fn register_color(
+        &mut self,
+        world: &mut World,
+        _visuals: &mut VisualWorld,
+        component: ComponentId,
+    ) {
+        let Some(color_comp) = world.get_component_by_id_as::<ColorComponent>(component) else {
+            return;
+        };
+        // Find the ancestor RenderableComponent that this ColorComponent should apply to.
+        let mut cur = component;
+        let mut renderable_cid: Option<ComponentId> = None;
+        while let Some(parent) = world.parent_of(cur) {
+            if world
+                .get_component_by_id_as::<RenderableComponent>(parent)
+                .is_some()
+            {
+                renderable_cid = Some(parent);
+                break;
+            }
+            cur = parent;
+        }
+        let Some(renderable_cid) = renderable_cid else {
+            return;
+        };
+
+        self.pending_color.insert(renderable_cid, color_comp.rgba);
+    }
+
+    pub fn register_uv(
+        &mut self,
+        world: &mut World,
+        _visuals: &mut VisualWorld,
+        component: ComponentId,
+    ) {
+        let Some(uv_comp) = world.get_component_by_id_as::<UVComponent>(component) else {
+            return;
+        };
+        // Find the ancestor RenderableComponent that this UVComponent should apply to.
+        let mut cur = component;
+        let mut renderable_cid: Option<ComponentId> = None;
+        while let Some(parent) = world.parent_of(cur) {
+            if world
+                .get_component_by_id_as::<RenderableComponent>(parent)
+                .is_some()
+            {
+                renderable_cid = Some(parent);
+                break;
+            }
+            cur = parent;
+        }
+        let Some(renderable_cid) = renderable_cid else {
+            return;
+        };
+
+        // Cache until we can apply it during `flush_pending` (which has access to RenderAssets
+        // and can safely clone meshes per-renderable).
+        self.pending_uv.insert(renderable_cid, uv_comp.uvs.clone());
     }
 
     /// Register a renderable component with this system.
@@ -53,11 +220,7 @@ impl RenderableSystem {
         visuals: &mut VisualWorld,
         component: ComponentId,
     ) {
-        if !self
-            .renderables
-            .iter()
-            .any(|c| *c == component)
-        {
+        if !self.renderables.iter().any(|c| *c == component) {
             self.renderables.push(component);
         }
 
@@ -71,53 +234,22 @@ impl RenderableSystem {
         visuals: &mut VisualWorld,
         component: ComponentId,
     ) {
-
-        // Each InstanceComponent (and its immediate children) defines a VisualWorld Instance.
-        // Renderables may be nested under other components; we walk up to find the nearest
-        // ancestor InstanceComponent.
-        let instance_cid = {
-            let mut cur = component;
-            loop {
-                let Some(parent) = world.parent_of(cur) else {
-                    println!(
-                        "[RenderableSystem]  -> no parent while walking to InstanceComponent (cur={:?})",
-                        cur
-                    );
-                    return;
-                };
-                if world.get_component_by_id_as::<InstanceComponent>(parent).is_some() {
-                    break parent;
-                }
-                cur = parent;
-            }
-        };
-        println!("[RenderableSystem]  -> instance_cid={:?}", instance_cid);
-
-        // First TransformComponent directly under the InstanceComponent (if present).
-        let transform_comp = world
-            .children_of(instance_cid)
-            .iter()
-            .find_map(|&cid| world.get_component_by_id_as::<TransformComponent>(cid));
-        let transform = if let Some(t) = transform_comp {
-            t.transform
-        } else {
-            crate::engine::graphics::primitives::Transform::default()
-        };
-        let inst = Instance { transform };
-
-        // Now mutably borrow the InstanceComponent to store the handle.
-        let Some(instance_comp) = world.get_component_by_id_as_mut::<InstanceComponent>(instance_cid) else {
-            return;
-        };
-
         // If it's already registered in VisualWorld, nothing else to do.
-        if instance_comp.get_handle().is_some() {
-            println!("[RenderableSystem]  -> instance already has VisualWorld handle; skipping");
-            return;
+        {
+            let Some(renderable_comp) =
+                world.get_component_by_id_as::<RenderableComponent>(component)
+            else {
+                println!("[RenderableSystem]  -> component is not RenderableComponent somehow");
+                return;
+            };
+            if renderable_comp.get_handle().is_some() {
+                return;
+            }
         }
 
         // Defer insertion into VisualWorld until the GPU mesh exists.
-        let Some(renderable_comp) = world.get_component_by_id_as::<RenderableComponent>(component) else {
+        let Some(renderable_comp) = world.get_component_by_id_as::<RenderableComponent>(component)
+        else {
             println!("[RenderableSystem]  -> component is not RenderableComponent somehow");
             return;
         };
@@ -127,8 +259,7 @@ impl RenderableSystem {
             PendingRenderable {
                 cpu_mesh: renderable_comp.renderable.mesh,
                 material: renderable_comp.renderable.material,
-                instance_cid,
-                transform: inst.transform,
+                renderable_cid: component,
             },
         );
         println!(
@@ -149,7 +280,7 @@ impl RenderableSystem {
         world: &mut World,
         visuals: &mut VisualWorld,
         render_assets: &mut RenderAssets,
-        renderer: &mut Renderer,
+        uploader: &mut dyn MeshUploader,
     ) {
         // println!(
         //     "[RenderableSystem] flush_pending: pending_len={} visuals.instances={} ",
@@ -163,44 +294,93 @@ impl RenderableSystem {
                 continue;
             };
 
+            let mut cpu_mesh = p.cpu_mesh;
+            if let Some(uvs) = self.pending_uv.get(&p.renderable_cid).cloned() {
+                if let Some(new_mesh) = clone_mesh_with_uv_overrides(render_assets, cpu_mesh, &uvs)
+                {
+                    cpu_mesh = new_mesh;
+                    if let Some(pending) = self.pending.get_mut(&key) {
+                        pending.cpu_mesh = cpu_mesh;
+                    }
+                    if let Some(renderable_comp) =
+                        world.get_component_by_id_as_mut::<RenderableComponent>(p.renderable_cid)
+                    {
+                        renderable_comp.renderable.mesh = cpu_mesh;
+                    }
+                }
+            }
+
             // Upload/resolve GPU mesh.
-            let mesh = match render_assets.gpu_mesh_handle(renderer, p.cpu_mesh) {
+            let mesh = match render_assets.gpu_mesh_handle(uploader, cpu_mesh) {
                 Ok(h) => h,
                 Err(err) => {
-                    println!("[RenderableSystem]  -> gpu_mesh_handle failed for cpu_mesh={:?}: {:?}", p.cpu_mesh, err);
+                    println!(
+                        "[RenderableSystem]  -> gpu_mesh_handle failed for cpu_mesh={:?}: {:?}",
+                        cpu_mesh, err
+                    );
                     continue;
                 }
             };
-
-            // If the instance component already got a handle (maybe through another renderable), skip.
-            let Some(instance_comp) = world.get_component_by_id_as_mut::<InstanceComponent>(p.instance_cid) else {
-                println!(
-                    "[RenderableSystem]  -> instance component {:?} missing during flush",
-                    p.instance_cid
-                );
-                continue;
-            };
-            if instance_comp.get_handle().is_some() {
-                self.pending.remove(&key);
-                continue;
-            }
 
             let gpu_r = GpuRenderable {
                 mesh,
                 material: p.material,
             };
-            let inst = Instance { transform: p.transform };
-            let handle = visuals.register(p.instance_cid, gpu_r, inst);
-            instance_comp.handle = Some(handle);
+
+            let model = match TransformSystem::world_model(world, p.renderable_cid) {
+                Some(m) => m,
+                None => {
+                    self.pending.remove(&key);
+                    continue;
+                }
+            };
+
+            let transform = Transform {
+                model,
+                ..Default::default()
+            };
+
+            let color = self
+                .pending_color
+                .get(&p.renderable_cid)
+                .copied()
+                .unwrap_or([1.0, 1.0, 1.0, 1.0]);
+
+            let handle = visuals.register(p.renderable_cid, gpu_r, transform, color, None);
+            if let Some(renderable_comp) =
+                world.get_component_by_id_as_mut::<RenderableComponent>(p.renderable_cid)
+            {
+                renderable_comp.handle = Some(handle);
+            }
+
+            // UVs have now been baked into the mesh, if present.
+            let _ = self.pending_uv.remove(&p.renderable_cid);
+
+            // Color has now been applied.
+            let _ = self.pending_color.remove(&p.renderable_cid);
 
             // (If you log ComponentId in a format string, use {:?}.)
             self.pending.remove(&key);
         }
+
+        self.apply_pending_uv_updates_to_registered_renderables(
+            world,
+            visuals,
+            render_assets,
+            uploader,
+        );
+        self.apply_pending_color_updates_to_registered_renderables(world, visuals);
     }
 }
 
 impl System for RenderableSystem {
-    fn tick(&mut self, _world: &mut World, _visuals: &mut VisualWorld, _input: &InputState, _dt_sec: f32) {
+    fn tick(
+        &mut self,
+        _world: &mut World,
+        _visuals: &mut VisualWorld,
+        _input: &InputState,
+        _dt_sec: f32,
+    ) {
         // Intentionally a no-op for now.
         //
         // Per your architecture: VisualWorld registration happens at component registration time

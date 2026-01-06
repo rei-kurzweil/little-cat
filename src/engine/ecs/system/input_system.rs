@@ -1,12 +1,15 @@
-use crate::engine::ecs::component::{InputComponent, TransformComponent, Camera2DComponent, InstanceComponent};
 use crate::engine::ecs::ComponentId;
-use crate::engine::ecs::system::System;
 use crate::engine::ecs::World;
+use crate::engine::ecs::component::{InputComponent, TransformComponent};
+use crate::engine::ecs::system::System;
 use crate::engine::graphics::VisualWorld;
 use crate::engine::user_input::InputState;
 use winit::keyboard::Key;
 
-/// System that processes input components and updates transforms or cameras based on WASD input.
+/// System that processes input components and updates transforms based on WASD input.
+///
+/// Intended topology (simple one-way data flow):
+/// InputComponent -> TransformComponent -> (Camera2DComponent, RenderableComponent, ...)
 #[derive(Debug, Default)]
 pub struct InputSystem {
     inputs: Vec<ComponentId>,
@@ -14,9 +17,7 @@ pub struct InputSystem {
 
 impl InputSystem {
     pub fn new() -> Self {
-        Self {
-            inputs: Vec::new(),
-        }
+        Self { inputs: Vec::new() }
     }
 
     /// Register an InputComponent.
@@ -26,7 +27,93 @@ impl InputSystem {
         }
     }
 
-    /// Process input and update transforms/cameras. Takes command queue to queue updates.
+    fn compute_transform(
+        &self,
+        speed_units_per_sec: f32,
+        input: &InputState,
+        dt_sec: f32,
+        transform: &mut crate::engine::graphics::primitives::Transform,
+    ) {
+        // Read movement keys.
+        let w = input.key_down(&Key::Character("w".into()))
+            || input.key_down(&Key::Character("W".into()));
+        let a = input.key_down(&Key::Character("a".into()))
+            || input.key_down(&Key::Character("A".into()));
+        let s = input.key_down(&Key::Character("s".into()))
+            || input.key_down(&Key::Character("S".into()));
+        let d = input.key_down(&Key::Character("d".into()))
+            || input.key_down(&Key::Character("D".into()));
+
+        // Roll keys.
+        let q = input.key_down(&Key::Character("q".into()))
+            || input.key_down(&Key::Character("Q".into()));
+        let e = input.key_down(&Key::Character("e".into()))
+            || input.key_down(&Key::Character("E".into()));
+
+        // Roll around Z first so translation happens "after" rotation.
+        if q || e {
+            const ROT_SPEED_RAD_PER_SEC: f32 = 1.5;
+            let dir = (e as i32) as f32 - (q as i32) as f32;
+            let dtheta = dir * ROT_SPEED_RAD_PER_SEC * dt_sec;
+            let (sz, cz) = (0.5 * dtheta).sin_cos();
+            let qz = [0.0f32, 0.0f32, sz, cz];
+
+            fn quat_mul(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
+                let (ax, ay, az, aw) = (a[0], a[1], a[2], a[3]);
+                let (bx, by, bz, bw) = (b[0], b[1], b[2], b[3]);
+                [
+                    aw * bx + ax * bw + ay * bz - az * by,
+                    aw * by - ax * bz + ay * bw + az * bx,
+                    aw * bz + ax * by - ay * bx + az * bw,
+                    aw * bw - ax * bx - ay * by - az * bz,
+                ]
+            }
+
+            // Apply local Z-roll increment.
+            transform.rotation = quat_mul(transform.rotation, qz);
+        }
+
+        // Translation delta.
+        let mut dx = 0.0f32;
+        let mut dy = 0.0f32;
+        if w {
+            dy -= 1.0;
+        }
+        if s {
+            dy += 1.0;
+        }
+        if a {
+            dx -= 1.0;
+        }
+        if d {
+            dx += 1.0;
+        }
+
+        // Normalize diagonal movement.
+        let len = (dx * dx + dy * dy).sqrt();
+        if len > 0.0 {
+            dx /= len;
+            dy /= len;
+        }
+
+        // Translate after rotation, in the transform's local (rotated) axes.
+        let speed = speed_units_per_sec * dt_sec;
+        let (qz, qw) = (transform.rotation[2], transform.rotation[3]);
+        let theta = 2.0 * qz.atan2(qw);
+        let (sin_theta, cos_theta) = theta.sin_cos();
+        let local_dx = cos_theta * dx - sin_theta * dy;
+        let local_dy = sin_theta * dx + cos_theta * dy;
+
+        transform.translation[0] += local_dx * speed;
+        transform.translation[1] += local_dy * speed;
+
+        transform.recompute_model();
+    }
+
+    /// Process input and queue at most one transform update per InputComponent.
+    ///
+    /// This only supports the intended topology:
+    /// InputComponent -> TransformComponent (child)
     pub fn process_input(
         &mut self,
         world: &mut World,
@@ -34,99 +121,65 @@ impl InputSystem {
         queue: &mut crate::engine::ecs::CommandQueue,
         dt_sec: f32,
     ) {
-        
-        // Check for WASD keys using Character variant
-        let w = input.key_down(&Key::Character("w".into())) || input.key_down(&Key::Character("W".into()));
-        let a = input.key_down(&Key::Character("a".into())) || input.key_down(&Key::Character("A".into()));
-        let s = input.key_down(&Key::Character("s".into())) || input.key_down(&Key::Character("S".into()));
-        let d = input.key_down(&Key::Character("d".into())) || input.key_down(&Key::Character("D".into()));
+        // We gate early to avoid scanning inputs if nothing relevant is pressed.
+        let any_move = input.key_down(&Key::Character("w".into()))
+            || input.key_down(&Key::Character("W".into()))
+            || input.key_down(&Key::Character("a".into()))
+            || input.key_down(&Key::Character("A".into()))
+            || input.key_down(&Key::Character("s".into()))
+            || input.key_down(&Key::Character("S".into()))
+            || input.key_down(&Key::Character("d".into()))
+            || input.key_down(&Key::Character("D".into()))
+            || input.key_down(&Key::Character("q".into()))
+            || input.key_down(&Key::Character("Q".into()))
+            || input.key_down(&Key::Character("e".into()))
+            || input.key_down(&Key::Character("E".into()));
 
-        // Debug: print key states
-        if w || a || s || d {
-            let mut keys = Vec::new();
-            if w { keys.push("W"); }
-            if a { keys.push("A"); }
-            if s { keys.push("S"); }
-            if d { keys.push("D"); }
-            //println!("[InputSystem] Keys pressed: {}", keys.join(", "));
+        if !any_move {
+            return;
         }
 
-        if !w && !a && !s && !d {
-            return; // No movement keys pressed
-        }
-
-        // Calculate movement delta
-        let mut dx = 0.0f32;
-        let mut dy = 0.0f32;
-        if w { dy -= 1.0; }
-        if s { dy += 1.0; }
-        if a { dx -= 1.0; }
-        if d { dx += 1.0; }
-
-        // Normalize diagonal movement
-        let len = (dx * dx + dy * dy).sqrt();
-        if len > 0.0 {
-            dx /= len;
-            dy /= len;
-        }
-
-        
         for &input_cid in &self.inputs {
-            let Some(input_comp) = world.get_component_by_id_as::<InputComponent>(input_cid) else {
-                println!("[InputSystem] Input component {:?} not found", input_cid);
+            let speed_units_per_sec =
+                match world.get_component_by_id_as::<InputComponent>(input_cid) {
+                    Some(input_comp) => input_comp.speed,
+                    None => continue,
+                };
+
+            // Find TransformComponent child. If absent, we don't compute.
+            let transform_child = world.children_of(input_cid).iter().copied().find(|&cid| {
+                world
+                    .get_component_by_id_as::<TransformComponent>(cid)
+                    .is_some()
+            });
+
+            let Some(transform_cid) = transform_child else {
                 continue;
             };
-            let speed = input_comp.speed * dt_sec; // Scale by delta time
 
-            // Check parent hierarchy
-            let Some(parent) = world.parent_of(input_cid) else {
-                println!("[InputSystem] Input component {:?} has no parent", input_cid);
-                continue;
-            };
-
-            // Check if parent is TransformComponent
-            if let Some(transform_comp) = world.get_component_by_id_as::<TransformComponent>(parent) {
-                let transform_parent = world.parent_of(parent);
-                
-                // Case 1: TransformComponent -> InstanceComponent (normal case)
-                if let Some(grandparent) = transform_parent {
-                    if world.get_component_by_id_as::<InstanceComponent>(grandparent).is_some() {
-                        println!("[InputSystem] Updating InstanceComponent via TransformComponent (dx={:.3}, dy={:.3}, speed={:.3})", dx * speed, dy * speed, speed);
-                        // Update TransformComponent and queue update command
-                        if let Some(transform_comp_mut) = world.get_component_by_id_as_mut::<TransformComponent>(parent) {
-                            transform_comp_mut.transform.translation[0] += dx * speed;
-                            transform_comp_mut.transform.translation[1] += dy * speed;
-                            transform_comp_mut.transform.recompute_model();
-                            // Queue update command - will be processed after tick
-                            queue.queue_update_transform(parent, transform_comp_mut.transform);
-                        }
-                    }
-                    // Case 2: TransformComponent -> Camera2DComponent (camera case)
-                    else if world.get_component_by_id_as::<Camera2DComponent>(grandparent).is_some() {
-                        // Update Camera2DComponent's TransformComponent directly
-                        // CameraSystem will pick this up in the same tick
-                        if let Some(transform_comp_mut) = world.get_component_by_id_as_mut::<TransformComponent>(parent) {
-                            transform_comp_mut.transform.translation[0] += dx * speed;
-                            transform_comp_mut.transform.translation[1] += dy * speed;
-                            transform_comp_mut.transform.recompute_model();
-                            // No need to queue - CameraSystem reads it directly in tick
-                        }
-                    } else {
-                        println!("[InputSystem] TransformComponent parent {:?} is neither InstanceComponent nor Camera2DComponent", grandparent);
-                    }
-                } else {
-                    println!("[InputSystem] TransformComponent {:?} has no parent", parent);
-                }
-            } else {
-                println!("[InputSystem] Input component {:?} parent {:?} is not a TransformComponent", input_cid, parent);
+            if let Some(transform_comp_mut) =
+                world.get_component_by_id_as_mut::<TransformComponent>(transform_cid)
+            {
+                self.compute_transform(
+                    speed_units_per_sec,
+                    input,
+                    dt_sec,
+                    &mut transform_comp_mut.transform,
+                );
+                queue.queue_update_transform(transform_cid, transform_comp_mut.transform);
             }
         }
     }
 }
 
 impl System for InputSystem {
-    fn tick(&mut self, _world: &mut World, _visuals: &mut VisualWorld, _input: &InputState, _dt_sec: f32) {
-        // InputSystem processes input via process_input which takes command queue
-        // This tick is a no-op since we need command queue access
+    fn tick(
+        &mut self,
+        _world: &mut World,
+        _visuals: &mut VisualWorld,
+        _input: &InputState,
+        _dt_sec: f32,
+    ) {
+        // InputSystem is driven by SystemWorld::tick calling process_input with a CommandQueue.
     }
 }
