@@ -1,7 +1,6 @@
 # Little-Cat-Engine 
 
-
-https://github.com/user-attachments/assets/ce4ac311-1087-4792-bec8-5dd012d848f2
+<img width="498" height="400" alt="Screenshot_20260106_094219" src="https://github.com/user-attachments/assets/83c00897-aa61-4520-8756-cd7263289800" />
 
 
 small game engine `[obstensively]` for making cats,
@@ -122,3 +121,7 @@ InputComponent {
               .expect("render failed");
   }
 ```
+
+
+https://github.com/user-attachments/assets/ce4ac311-1087-4792-bec8-5dd012d848f2
+
