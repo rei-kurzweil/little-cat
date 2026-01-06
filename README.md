@@ -30,9 +30,10 @@ using vulkan instanced rendering and several layers to describe game objects:
 + keeps a queue of CPUMesh from RenderableComponent that need to be converted to GpuMesh and uploaded into the GPU.
 
 ## VisualWorld
-+ stores a snapshot of Instances and GpuRenderables
++ stores a snapshot of GpuRenderables
 + and builds cache, sorted by material pipeline, mesh, and texture
-
+  + when ever RenderableSystem or LightSystem (or TransformSystem if involving renderables, lights or cameras) updates. 
+  
 #### RenderAssets
 + converts `CPUMesh` into `GPUMesh`
 
