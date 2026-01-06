@@ -1,21 +1,23 @@
-use crate::engine::{ecs, graphics};
-use crate::engine::user_input::InputState;
-use crate::engine::ecs::component::{ColorComponent, InputComponent, PointLightComponent, RenderableComponent, TextureComponent, TransformComponent};
+use crate::engine::ecs::component::{
+    ColorComponent, InputComponent, PointLightComponent, RenderableComponent, TextureComponent,
+    TransformComponent,
+};
 use crate::engine::graphics::mesh::MeshFactory;
 use crate::engine::graphics::primitives::MaterialHandle;
+use crate::engine::user_input::InputState;
+use crate::engine::{ecs, graphics};
 use std::sync::Arc;
 use winit::window::Window;
 
-
 pub struct Universe {
-    pub world:         ecs::World,
+    pub world: ecs::World,
     pub command_queue: ecs::CommandQueue,
-    pub systems:       ecs::SystemWorld,
+    pub systems: ecs::SystemWorld,
 
-    pub visuals:       graphics::VisualWorld,
+    pub visuals: graphics::VisualWorld,
     pub render_assets: graphics::RenderAssets,
 
-    renderer:          graphics::VulkanoRenderer,
+    renderer: graphics::VulkanoRenderer,
 }
 
 impl Universe {
@@ -23,11 +25,11 @@ impl Universe {
         let mut u = Self {
             world,
             command_queue: ecs::CommandQueue::new(),
-            systems:       ecs::SystemWorld::new(),
-            
-            visuals:       graphics::VisualWorld::new(),
+            systems: ecs::SystemWorld::new(),
+
+            visuals: graphics::VisualWorld::new(),
             render_assets: graphics::RenderAssets::new(),
-            renderer:      graphics::VulkanoRenderer::new(),
+            renderer: graphics::VulkanoRenderer::new(),
         };
 
         // Temporary: rebuild a demo scene directly in Universe creation.
@@ -36,13 +38,16 @@ impl Universe {
 
         u
     }
-    
+
     /// Initialize the renderer for a window.
     /// This must be called before rendering.
-    pub fn init_renderer_for_window(&mut self, window: &Arc<Window>) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn init_renderer_for_window(
+        &mut self,
+        window: &Arc<Window>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         self.renderer.init_for_window(window)
     }
-    
+
     /// Resize the renderer when the window is resized.
     pub fn resize_renderer(&mut self, size: winit::dpi::PhysicalSize<u32>) {
         self.renderer.resize(size);
@@ -71,7 +76,10 @@ impl Universe {
                     .with_rotation_euler(0.0, 0.0, r),
             );
             let renderable = world.add_component(RenderableComponent::new(
-                crate::engine::graphics::primitives::Renderable::new(mesh, MaterialHandle::TOON_MESH),
+                crate::engine::graphics::primitives::Renderable::new(
+                    mesh,
+                    MaterialHandle::TOON_MESH,
+                ),
             ));
             let color_c = world.add_component(ColorComponent { rgba: color });
 
@@ -93,10 +101,9 @@ impl Universe {
         // Spawn shapes.
         // One triangle is input-driven (WASD/QE). The point light is attached under the same
         // transform so it moves with the triangle.
-        let tri_root_transform = self.world.add_component(
-            TransformComponent::new()
-                .with_position(0.5, 0.50, 0.0)
-        );
+        let tri_root_transform = self
+            .world
+            .add_component(TransformComponent::new().with_position(0.5, 0.50, 0.0));
 
         // Visual transform under the root; this is where we apply rotation/scale.
         // Rotating by PI should visually flip the triangle while leaving its input-driven
@@ -104,33 +111,103 @@ impl Universe {
         let tri_visual_transform = self.world.add_component(
             TransformComponent::new()
                 .with_scale(0.30, 0.30, 1.0)
-                .with_rotation_euler(0.0, 0.0, (2.0 * 3.14159 / 3.0 ) + 3.14159),
+                .with_rotation_euler(0.0, 0.0, (2.0 * 3.14159 / 3.0) + 3.14159),
         );
         let tri_renderable = self.world.add_component(RenderableComponent::new(
-            crate::engine::graphics::primitives::Renderable::new(tri_mesh, MaterialHandle::TOON_MESH),
+            crate::engine::graphics::primitives::Renderable::new(
+                tri_mesh,
+                MaterialHandle::TOON_MESH,
+            ),
         ));
-        let tri_color = self.world.add_component(ColorComponent::rgba(0.2, 1.0, 0.2, 1.0));
-        let tri_light = self
+        let tri_color = self
             .world
-            .add_component(PointLightComponent::new()
-                    .with_distance(10.0).with_color(1.0, 0.0, 0.0));
+            .add_component(ColorComponent::rgba(0.2, 1.0, 0.2, 1.0));
+        let tri_light = self.world.add_component(
+            PointLightComponent::new()
+                .with_distance(10.0)
+                .with_color(1.0, 0.0, 0.0),
+        );
 
-        let _ = self.world.add_child(tri_root_transform, tri_visual_transform);
+        let _ = self
+            .world
+            .add_child(tri_root_transform, tri_visual_transform);
         let _ = self.world.add_child(tri_visual_transform, tri_renderable);
         let _ = self.world.add_child(tri_renderable, tri_color);
         let _ = self.world.add_child(tri_root_transform, tri_light);
 
-        let tri_input = self.world.add_component(InputComponent::new().with_speed(0.5));
+        let tri_input = self
+            .world
+            .add_component(InputComponent::new().with_speed(0.5));
         let _ = self.world.add_child(tri_input, tri_root_transform);
         self.world
             .init_component_tree(tri_input, &mut self.command_queue);
 
-        spawn(&mut self.world, &mut self.command_queue, square_mesh, -0.80, -0.30, 0.25, 0.0, [1.0, 0.2, 0.2, 1.0], false);
-        spawn(&mut self.world, &mut self.command_queue, square_mesh, -0.40, -0.30, 0.25, 0.0, [1.0, 0.6, 0.2, 1.0], false);
-        spawn(&mut self.world, &mut self.command_queue, square_mesh, 0.00, -0.30, 0.25, 0.0, [1.0, 1.0, 0.2, 1.0], false);
-        spawn(&mut self.world, &mut self.command_queue, square_mesh, 0.40, -0.30, 0.25, 0.0, [0.2, 0.6, 1.0, 1.0], false);
-        spawn(&mut self.world, &mut self.command_queue, square_mesh, 0.80, -0.30, 0.25, 0.0, [0.8, 0.2, 1.0, 1.0], false);
-        spawn(&mut self.world, &mut self.command_queue, tri_mesh, 0.30, 0.35, 0.30, -3.14159, [1.0, 1.0, 1.0, 1.0], false);
+        spawn(
+            &mut self.world,
+            &mut self.command_queue,
+            square_mesh,
+            -0.80,
+            -0.30,
+            0.25,
+            0.0,
+            [1.0, 0.2, 0.2, 1.0],
+            false,
+        );
+        spawn(
+            &mut self.world,
+            &mut self.command_queue,
+            square_mesh,
+            -0.40,
+            -0.30,
+            0.25,
+            0.0,
+            [1.0, 0.6, 0.2, 1.0],
+            false,
+        );
+        spawn(
+            &mut self.world,
+            &mut self.command_queue,
+            square_mesh,
+            0.00,
+            -0.30,
+            0.25,
+            0.0,
+            [1.0, 1.0, 0.2, 1.0],
+            false,
+        );
+        spawn(
+            &mut self.world,
+            &mut self.command_queue,
+            square_mesh,
+            0.40,
+            -0.30,
+            0.25,
+            0.0,
+            [0.2, 0.6, 1.0, 1.0],
+            false,
+        );
+        spawn(
+            &mut self.world,
+            &mut self.command_queue,
+            square_mesh,
+            0.80,
+            -0.30,
+            0.25,
+            0.0,
+            [0.8, 0.2, 1.0, 1.0],
+            false,
+        );
+        spawn(
+            &mut self.world,
+            &mut self.command_queue,
+            tri_mesh,
+            0.30,
+            0.35,
+            0.30,
+            -3.14159,
+            [1.0, 1.0, 1.0, 1.0],
+            false,
+        );
 
         // Textured square.
         let tex_transform = self.world.add_component(
@@ -139,7 +216,10 @@ impl Universe {
                 .with_scale(0.45, 0.45, 1.0),
         );
         let tex_renderable = self.world.add_component(RenderableComponent::new(
-            crate::engine::graphics::primitives::Renderable::new(square_mesh, MaterialHandle::TOON_MESH),
+            crate::engine::graphics::primitives::Renderable::new(
+                square_mesh,
+                MaterialHandle::TOON_MESH,
+            ),
         ));
         let tex_color = self
             .world
@@ -164,10 +244,17 @@ impl Universe {
         // 2. Let systems call methods on components,
         //      for example, to update transforms or renderables, which
         //      will update VisualWorld can update draw_batches and give Renderer a snapshot
-        self.systems.tick(&mut self.world, &mut self.visuals, input, &mut self.command_queue, dt_sec);
-        
+        self.systems.tick(
+            &mut self.world,
+            &mut self.visuals,
+            input,
+            &mut self.command_queue,
+            dt_sec,
+        );
+
         // Process commands after tick so any commands queued during tick are processed in the same frame
-        self.systems.process_commands(&mut self.world, &mut self.visuals, &mut self.command_queue);
+        self.systems
+            .process_commands(&mut self.world, &mut self.visuals, &mut self.command_queue);
     }
 
     pub fn render(&mut self) {
@@ -181,7 +268,8 @@ impl Universe {
 
         // TODO: rebuild inspector around component graph instead of entities.
 
-        self.renderer.render_visual_world(&mut self.visuals)
+        self.renderer
+            .render_visual_world(&mut self.visuals)
             .expect("render failed");
     }
 }

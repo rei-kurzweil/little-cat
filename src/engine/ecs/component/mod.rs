@@ -1,28 +1,27 @@
-pub mod renderable;
-pub mod transform;
-pub mod camera3d;
 pub mod camera2d;
-pub mod input;
-pub mod point_light;
-pub mod lit_voxel;
-pub mod uv;
+pub mod camera3d;
 pub mod color;
+pub mod input;
+pub mod lit_voxel;
+pub mod point_light;
+pub mod renderable;
 pub mod texture;
+pub mod transform;
+pub mod uv;
 
-pub use renderable::RenderableComponent;
-pub use transform::TransformComponent;
-pub use camera3d::Camera3DComponent;
 pub use camera2d::Camera2DComponent;
-pub use input::InputComponent;
-pub use point_light::PointLightComponent;
-pub use lit_voxel::LitVoxelComponent;
-pub use uv::UVComponent;
+pub use camera3d::Camera3DComponent;
 pub use color::ColorComponent;
+pub use input::InputComponent;
+pub use lit_voxel::LitVoxelComponent;
+pub use point_light::PointLightComponent;
+pub use renderable::RenderableComponent;
 pub use texture::TextureComponent;
+pub use transform::TransformComponent;
+pub use uv::UVComponent;
 
 /// For now, our "LightComponent" is a point light.
 pub type LightComponent = point_light::PointLightComponent;
-
 
 /// World-owned record for a component payload plus its topology.
 ///
@@ -58,7 +57,7 @@ impl ComponentNode {
 }
 
 /// Component interface.
-/// `init` runs when the component is registered 
+/// `init` runs when the component is registered
 pub trait Component: std::any::Any {
     fn as_any(&self) -> &dyn std::any::Any;
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
@@ -66,11 +65,7 @@ pub trait Component: std::any::Any {
     /// Short debug/type name for this component kind (e.g. "transform", "camera").
     fn name(&self) -> &'static str;
 
-    fn set_id(
-        &mut self,
-        _component: crate::engine::ecs::ComponentId,
-    ) {
-    }
+    fn set_id(&mut self, _component: crate::engine::ecs::ComponentId) {}
 
     /// Called when component is added to the World
     fn init(

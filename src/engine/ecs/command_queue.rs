@@ -1,7 +1,7 @@
 /**
- * Queue for commands (methods on components) 
+ * Queue for commands (methods on components)
  * which reach systems after all components have been interacted, before rendering the next frame.
- * 
+ *
  */
 
 pub struct CommandQueue {
@@ -15,30 +15,19 @@ impl CommandQueue {
         }
     }
 
-    
     /// Queue a register renderable command.
-    pub fn queue_register_renderable(
-        &mut self,
-        component_id: crate::engine::ecs::ComponentId,
-    ) {
+    pub fn queue_register_renderable(&mut self, component_id: crate::engine::ecs::ComponentId) {
         self.commands.push(ComponentCommand {
             component_id,
-            command: Command::REGISTER_RENDERABLE {
-                component_id,
-            },
+            command: Command::REGISTER_RENDERABLE { component_id },
         });
     }
 
     /// Queue a register transform command.
-    pub fn queue_register_transform(
-        &mut self,
-        component_id: crate::engine::ecs::ComponentId,
-    ) {
+    pub fn queue_register_transform(&mut self, component_id: crate::engine::ecs::ComponentId) {
         self.commands.push(ComponentCommand {
             component_id,
-            command: Command::REGISTER_TRANSFORM {
-                component_id,
-            },
+            command: Command::REGISTER_TRANSFORM { component_id },
         });
     }
 
@@ -57,12 +46,8 @@ impl CommandQueue {
         });
     }
 
-
     /// Queue a register 3D camera command.
-    pub fn queue_register_camera_3d(
-        &mut self,
-        component_id: crate::engine::ecs::ComponentId,
-    ) {
+    pub fn queue_register_camera_3d(&mut self, component_id: crate::engine::ecs::ComponentId) {
         self.commands.push(ComponentCommand {
             component_id,
             command: Command::REGISTER_CAMERA_3D { component_id },
@@ -70,10 +55,7 @@ impl CommandQueue {
     }
 
     /// Queue a register camera2d command.
-    pub fn queue_register_camera2d(
-        &mut self,
-        component_id: crate::engine::ecs::ComponentId,
-    ) {
+    pub fn queue_register_camera2d(&mut self, component_id: crate::engine::ecs::ComponentId) {
         self.commands.push(ComponentCommand {
             component_id,
             command: Command::REGISTER_CAMERA2D { component_id },
@@ -81,10 +63,7 @@ impl CommandQueue {
     }
 
     /// Queue a make active camera command.
-    pub fn queue_make_active_camera(
-        &mut self,
-        component_id: crate::engine::ecs::ComponentId,
-    ) {
+    pub fn queue_make_active_camera(&mut self, component_id: crate::engine::ecs::ComponentId) {
         self.commands.push(ComponentCommand {
             component_id,
             command: Command::MAKE_ACTIVE_CAMERA { component_id },
@@ -92,10 +71,7 @@ impl CommandQueue {
     }
 
     /// Queue a register input command.
-    pub fn queue_register_input(
-        &mut self,
-        component_id: crate::engine::ecs::ComponentId,
-    ) {
+    pub fn queue_register_input(&mut self, component_id: crate::engine::ecs::ComponentId) {
         self.commands.push(ComponentCommand {
             component_id,
             command: Command::REGISTER_INPUT { component_id },
@@ -103,10 +79,7 @@ impl CommandQueue {
     }
 
     /// Queue a register UV command.
-    pub fn queue_register_uv(
-        &mut self,
-        component_id: crate::engine::ecs::ComponentId,
-    ) {
+    pub fn queue_register_uv(&mut self, component_id: crate::engine::ecs::ComponentId) {
         self.commands.push(ComponentCommand {
             component_id,
             command: Command::REGISTER_UV { component_id },
@@ -114,10 +87,7 @@ impl CommandQueue {
     }
 
     /// Queue a register point light command.
-    pub fn queue_register_light(
-        &mut self,
-        component_id: crate::engine::ecs::ComponentId,
-    ) {
+    pub fn queue_register_light(&mut self, component_id: crate::engine::ecs::ComponentId) {
         self.commands.push(ComponentCommand {
             component_id,
             command: Command::REGISTER_LIGHT { component_id },
@@ -125,10 +95,7 @@ impl CommandQueue {
     }
 
     /// Queue a register color command.
-    pub fn queue_register_color(
-        &mut self,
-        component_id: crate::engine::ecs::ComponentId,
-    ) {
+    pub fn queue_register_color(&mut self, component_id: crate::engine::ecs::ComponentId) {
         self.commands.push(ComponentCommand {
             component_id,
             command: Command::REGISTER_COLOR { component_id },
@@ -136,10 +103,7 @@ impl CommandQueue {
     }
 
     /// Queue a register texture command.
-    pub fn queue_register_texture(
-        &mut self,
-        component_id: crate::engine::ecs::ComponentId,
-    ) {
+    pub fn queue_register_texture(&mut self, component_id: crate::engine::ecs::ComponentId) {
         self.commands.push(ComponentCommand {
             component_id,
             command: Command::REGISTER_TEXTURE { component_id },
@@ -159,7 +123,10 @@ impl CommandQueue {
                 Command::REGISTER_TRANSFORM { component_id } => {
                     systems.transform_changed(world, visuals, component_id);
                 }
-                Command::UPDATE_TRANSFORM { component_id, transform } => {
+                Command::UPDATE_TRANSFORM {
+                    component_id,
+                    transform,
+                } => {
                     systems.update_transform(world, visuals, component_id, transform);
                 }
                 Command::REMOVE_TRANSFORM { component_id } => {

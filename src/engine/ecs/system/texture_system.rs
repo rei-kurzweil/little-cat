@@ -4,13 +4,11 @@ use crate::engine::graphics::{TextureHandle, TextureUploader, VisualWorld};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-
 #[derive(Debug, Clone)]
 struct TextureRecord {
     uri: String,
     gpu: Option<TextureHandle>,
 }
-
 
 #[derive(Debug, Default)]
 pub struct TextureSystem {
@@ -19,7 +17,6 @@ pub struct TextureSystem {
     /// RenderableComponent cid -> TextureComponent cid
     pending_attach: HashMap<ComponentId, ComponentId>,
 }
-
 
 impl TextureSystem {
     pub fn new() -> Self {
@@ -66,11 +63,8 @@ impl TextureSystem {
         visuals: &mut VisualWorld,
         uploader: &mut dyn TextureUploader,
     ) {
-        let pairs: Vec<(ComponentId, ComponentId)> = self
-            .pending_attach
-            .iter()
-            .map(|(&r, &t)| (r, t))
-            .collect();
+        let pairs: Vec<(ComponentId, ComponentId)> =
+            self.pending_attach.iter().map(|(&r, &t)| (r, t)).collect();
 
         for (renderable_cid, texture_cid) in pairs {
             let Some(renderable_comp) =

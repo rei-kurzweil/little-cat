@@ -1,7 +1,6 @@
-
-use crate::engine::ecs::system::System;
 use crate::engine::ecs::ComponentId;
-use crate::engine::ecs::{World};
+use crate::engine::ecs::World;
+use crate::engine::ecs::system::System;
 use crate::engine::graphics::VisualWorld;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -42,7 +41,12 @@ impl Camera3D {
     /// Assumptions:
     /// - Column-major mat4 (matches how we pack instance matrices / GLSL default).
     /// - NDC depth range is Vulkan-style: z in [0, 1].
-    pub fn perspective_rh_zo(fov_y_radians: f32, aspect: f32, z_near: f32, z_far: f32) -> [[f32; 4]; 4] {
+    pub fn perspective_rh_zo(
+        fov_y_radians: f32,
+        aspect: f32,
+        z_near: f32,
+        z_far: f32,
+    ) -> [[f32; 4]; 4] {
         // Based on the standard RH, zero-to-one depth projection.
         // Maps camera forward -Z.
         let f = 1.0 / (0.5 * fov_y_radians).tan();
@@ -68,7 +72,6 @@ pub struct CameraSystem {
     cameras: Vec<(CameraHandle, AnyCamera)>,
     camera2d_components: std::collections::HashMap<CameraHandle, ComponentId>,
     pub active_camera: Option<CameraHandle>,
-    
 }
 
 impl CameraSystem {
@@ -128,14 +131,21 @@ impl CameraSystem {
         camera2d_component_id: ComponentId,
         transform_component_id: ComponentId,
     ) {
-        let Some(camera2d_comp) = world.get_component_by_id_as::<crate::engine::ecs::component::Camera2DComponent>(camera2d_component_id) else {
+        let Some(camera2d_comp) = world
+            .get_component_by_id_as::<crate::engine::ecs::component::Camera2DComponent>(
+                camera2d_component_id,
+            )
+        else {
             return;
         };
 
         if let Some(handle) = camera2d_comp.handle {
             if self.active_camera == Some(handle) {
-                let Some(transform_comp) 
-                    = world.get_component_by_id_as::<crate::engine::ecs::component::TransformComponent>(transform_component_id) else {
+                let Some(transform_comp) = world
+                    .get_component_by_id_as::<crate::engine::ecs::component::TransformComponent>(
+                        transform_component_id,
+                    )
+                else {
                     return;
                 };
 
@@ -167,7 +177,7 @@ impl CameraSystem {
                 let camera_2d = [
                     [a00, a10, 0.0, 0.0],
                     [a01, a11, 0.0, 0.0],
-                    [t0,  t1,  1.0, 0.0],
+                    [t0, t1, 1.0, 0.0],
                 ];
                 visuals.set_camera_2d(camera_2d);
             }
@@ -238,7 +248,13 @@ fn invert_rigid_transform(m: &[[f32; 4]; 4]) -> [[f32; 4]; 4] {
 }
 
 impl System for CameraSystem {
-    fn tick(&mut self, world: &mut World, visuals: &mut VisualWorld, _input: &crate::engine::user_input::InputState, _dt_sec: f32) {
+    fn tick(
+        &mut self,
+        world: &mut World,
+        visuals: &mut VisualWorld,
+        _input: &crate::engine::user_input::InputState,
+        _dt_sec: f32,
+    ) {
         // If there's an active Camera2DComponent, read its parent TransformComponent.
         if let Some(active_handle) = self.active_camera {
             // If the handle is in camera2d_components, it's a Camera2D
@@ -247,10 +263,17 @@ impl System for CameraSystem {
                     return;
                 };
                 if world
-                    .get_component_by_id_as::<crate::engine::ecs::component::TransformComponent>(parent)
+                    .get_component_by_id_as::<crate::engine::ecs::component::TransformComponent>(
+                        parent,
+                    )
                     .is_some()
                 {
-                    self.update_camera_2d_from_parent_transform(world, visuals, *camera2d_component_id, parent);
+                    self.update_camera_2d_from_parent_transform(
+                        world,
+                        visuals,
+                        *camera2d_component_id,
+                        parent,
+                    );
                 }
             }
         }

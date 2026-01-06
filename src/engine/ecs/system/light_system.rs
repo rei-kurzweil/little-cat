@@ -26,7 +26,8 @@ impl LightSystem {
             return;
         };
 
-        let position_ws = TransformSystem::world_position(world, component).unwrap_or([0.0, 0.0, 0.0]);
+        let position_ws =
+            TransformSystem::world_position(world, component).unwrap_or([0.0, 0.0, 0.0]);
 
         visuals.upsert_point_light(
             component,
@@ -48,7 +49,6 @@ impl LightSystem {
         visuals: &mut VisualWorld,
         component: ComponentId,
     ) {
-        
         let mut visited_nodes = 0usize;
         let mut updated_lights = 0usize;
 
@@ -61,7 +61,7 @@ impl LightSystem {
                     let position_ws =
                         TransformSystem::world_position(world, child).unwrap_or([0.0, 0.0, 0.0]);
                     updated_lights += 1;
-                    
+
                     visuals.upsert_point_light(
                         child,
                         crate::engine::graphics::visual_world::VisualPointLight {
@@ -74,12 +74,17 @@ impl LightSystem {
                 }
             }
         }
-
     }
 }
 
 impl System for LightSystem {
-    fn tick(&mut self, _world: &mut World, _visuals: &mut VisualWorld, _input: &InputState, _dt_sec: f32) {
+    fn tick(
+        &mut self,
+        _world: &mut World,
+        _visuals: &mut VisualWorld,
+        _input: &InputState,
+        _dt_sec: f32,
+    ) {
         // No-op for now.
     }
 }

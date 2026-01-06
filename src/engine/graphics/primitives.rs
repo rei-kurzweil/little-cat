@@ -1,6 +1,5 @@
 /// Mesh helpers / basic primitives placeholder.
 
-
 /// Minimal transform (placeholder).
 #[derive(Debug, Clone, Copy)]
 pub struct Transform {
@@ -76,8 +75,6 @@ impl Transform {
     }
 }
 
-
-
 /// Renderable component: references renderer-managed resources.
 /// Vulkan-minded: material -> pipeline/layout + descriptors.
 ///
@@ -110,7 +107,6 @@ impl GpuRenderable {
         Self { mesh, material }
     }
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BufferHandle(pub u32);
@@ -155,8 +151,6 @@ pub struct GpuMesh {
     pub vertex_layout: &'static VertexLayout,
 }
 
-
-
 /// Renderer-owned resource handles (lightweight ids into renderer/asset tables).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MeshHandle(pub u32);
@@ -180,7 +174,6 @@ pub struct InstanceHandle(pub u32);
 pub struct Material {
     pub vertex_shader: &'static str,
     pub fragment_shader: &'static str,
-
     // Later:
     // pub pipeline_config: PipelineConfig,
     // pub uniforms: MaterialUniforms,
@@ -188,7 +181,6 @@ pub struct Material {
 
 // Optional convenience: built-in material names/paths.
 impl Material {
-    
     /// Unlit material intended for normal mesh rendering (vertex/index buffers + transforms).
     pub const UNLIT_MESH: Material = Material {
         vertex_shader: "engine/graphics/shaders/unlit-mesh.vert",
@@ -201,7 +193,6 @@ impl Material {
         fragment_shader: "engine/graphics/shaders/toon-mesh.frag",
     };
 }
-
 
 impl MaterialHandle {
     /// Unlit mesh material (see `Material::UNLIT_MESH`).

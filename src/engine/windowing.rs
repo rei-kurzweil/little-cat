@@ -1,8 +1,8 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use crate::engine::{EngineError, EngineResult};
 use crate::engine::user_input::UserInput;
+use crate::engine::{EngineError, EngineResult};
 
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, KeyEvent, WindowEvent};
@@ -14,10 +14,7 @@ use winit::window::{Window, WindowAttributes, WindowId};
 pub struct Windowing;
 
 impl Windowing {
-    pub fn run_app(
-        universe: crate::engine::Universe,
-        user_input: UserInput,
-    ) -> EngineResult<()> {
+    pub fn run_app(universe: crate::engine::Universe, user_input: UserInput) -> EngineResult<()> {
         let event_loop = EventLoop::new().map_err(|_| EngineError::NotImplemented)?;
         event_loop.set_control_flow(ControlFlow::Poll);
 

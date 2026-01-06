@@ -1,6 +1,6 @@
 use super::Component;
-use crate::engine::ecs::ComponentId;
 use crate::engine::ecs::CommandQueue;
+use crate::engine::ecs::ComponentId;
 use crate::engine::graphics::primitives::Transform;
 
 #[derive(Debug, Clone, Copy)]
@@ -23,7 +23,7 @@ impl TransformComponent {
     fn recompute_model(&mut self) {
         self.transform.recompute_model();
     }
-    
+
     pub fn with_position(mut self, x: f32, y: f32, z: f32) -> Self {
         self.transform.translation = [x, y, z];
         self.recompute_model();
@@ -71,7 +71,6 @@ impl TransformComponent {
         self.recompute_model();
     }
 
-
     /// Set rotation from Euler angles (radians), XYZ order, and queue update.
     pub fn set_rotation_euler(
         &mut self,
@@ -82,35 +81,29 @@ impl TransformComponent {
     ) {
         self.set_rotation_euler_internal(pitch_x, yaw_y, roll_z);
 
-        let Some(cid) = self.component else { return; };
+        let Some(cid) = self.component else {
+            return;
+        };
         queue.queue_update_transform(cid, self.transform);
     }
 
     /// Set translation and queue update.
-    pub fn set_position(
-        &mut self,
-        queue: &mut CommandQueue,
-        x: f32,
-        y: f32,
-        z: f32,
-    ) {
+    pub fn set_position(&mut self, queue: &mut CommandQueue, x: f32, y: f32, z: f32) {
         self.transform.translation = [x, y, z];
         self.recompute_model();
-        let Some(cid) = self.component else { return; };
+        let Some(cid) = self.component else {
+            return;
+        };
         queue.queue_update_transform(cid, self.transform);
     }
 
     /// Set non-uniform scale and queue update.
-    pub fn set_scale(
-        &mut self,
-        queue: &mut CommandQueue,
-        x: f32,
-        y: f32,
-        z: f32,
-    ) {
+    pub fn set_scale(&mut self, queue: &mut CommandQueue, x: f32, y: f32, z: f32) {
         self.transform.scale = [x, y, z];
         self.recompute_model();
-        let Some(cid) = self.component else { return; };
+        let Some(cid) = self.component else {
+            return;
+        };
         queue.queue_update_transform(cid, self.transform);
     }
 }
@@ -132,11 +125,7 @@ impl Component for TransformComponent {
         self
     }
 
-    fn init(
-        &mut self,
-        queue: &mut CommandQueue,
-        component: ComponentId,
-    ) {
+    fn init(&mut self, queue: &mut CommandQueue, component: ComponentId) {
         // Queue registration command so transform system knows about this component
         queue.queue_register_transform(component);
     }

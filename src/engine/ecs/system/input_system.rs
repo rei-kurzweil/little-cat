@@ -1,7 +1,7 @@
-use crate::engine::ecs::component::{InputComponent, TransformComponent};
 use crate::engine::ecs::ComponentId;
-use crate::engine::ecs::system::System;
 use crate::engine::ecs::World;
+use crate::engine::ecs::component::{InputComponent, TransformComponent};
+use crate::engine::ecs::system::System;
 use crate::engine::graphics::VisualWorld;
 use crate::engine::user_input::InputState;
 use winit::keyboard::Key;
@@ -140,17 +140,18 @@ impl InputSystem {
         }
 
         for &input_cid in &self.inputs {
-            let speed_units_per_sec = match world.get_component_by_id_as::<InputComponent>(input_cid) {
-                Some(input_comp) => input_comp.speed,
-                None => continue,
-            };
+            let speed_units_per_sec =
+                match world.get_component_by_id_as::<InputComponent>(input_cid) {
+                    Some(input_comp) => input_comp.speed,
+                    None => continue,
+                };
 
             // Find TransformComponent child. If absent, we don't compute.
-            let transform_child = world
-                .children_of(input_cid)
-                .iter()
-                .copied()
-                .find(|&cid| world.get_component_by_id_as::<TransformComponent>(cid).is_some());
+            let transform_child = world.children_of(input_cid).iter().copied().find(|&cid| {
+                world
+                    .get_component_by_id_as::<TransformComponent>(cid)
+                    .is_some()
+            });
 
             let Some(transform_cid) = transform_child else {
                 continue;
@@ -159,7 +160,12 @@ impl InputSystem {
             if let Some(transform_comp_mut) =
                 world.get_component_by_id_as_mut::<TransformComponent>(transform_cid)
             {
-                self.compute_transform(speed_units_per_sec, input, dt_sec, &mut transform_comp_mut.transform);
+                self.compute_transform(
+                    speed_units_per_sec,
+                    input,
+                    dt_sec,
+                    &mut transform_comp_mut.transform,
+                );
                 queue.queue_update_transform(transform_cid, transform_comp_mut.transform);
             }
         }

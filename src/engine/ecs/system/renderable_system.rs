@@ -1,13 +1,13 @@
 use crate::engine::ecs::ComponentId;
 use crate::engine::ecs::component::{ColorComponent, RenderableComponent, UVComponent};
 
+use crate::engine::ecs::World;
 use crate::engine::ecs::system::System;
 use crate::engine::ecs::system::TransformSystem;
-use crate::engine::ecs::World;
-use crate::engine::graphics::{GpuRenderable, VisualWorld};
-use crate::engine::graphics::{RenderAssets, MeshUploader};
-use crate::engine::user_input::InputState;
 use crate::engine::graphics::primitives::{CpuMeshHandle, MaterialHandle, Transform};
+use crate::engine::graphics::{GpuRenderable, VisualWorld};
+use crate::engine::graphics::{MeshUploader, RenderAssets};
+use crate::engine::user_input::InputState;
 use std::collections::HashMap;
 
 /// System that registers/updates renderables in the `VisualWorld`.
@@ -66,7 +66,9 @@ impl RenderableSystem {
     ) {
         let color_keys: Vec<ComponentId> = self.pending_color.keys().copied().collect();
         for renderable_cid in color_keys {
-            let Some(renderable_comp) = world.get_component_by_id_as::<RenderableComponent>(renderable_cid) else {
+            let Some(renderable_comp) =
+                world.get_component_by_id_as::<RenderableComponent>(renderable_cid)
+            else {
                 let _ = self.pending_color.remove(&renderable_cid);
                 continue;
             };
@@ -94,7 +96,9 @@ impl RenderableSystem {
         // Apply UV updates to already-registered renderables.
         let uv_keys: Vec<ComponentId> = self.pending_uv.keys().copied().collect();
         for renderable_cid in uv_keys {
-            let Some(renderable_comp) = world.get_component_by_id_as::<RenderableComponent>(renderable_cid) else {
+            let Some(renderable_comp) =
+                world.get_component_by_id_as::<RenderableComponent>(renderable_cid)
+            else {
                 let _ = self.pending_uv.remove(&renderable_cid);
                 continue;
             };
@@ -110,7 +114,8 @@ impl RenderableSystem {
                 continue;
             };
 
-            let Some(new_mesh) = clone_mesh_with_uv_overrides(render_assets, base_mesh, &uvs) else {
+            let Some(new_mesh) = clone_mesh_with_uv_overrides(render_assets, base_mesh, &uvs)
+            else {
                 continue;
             };
 
@@ -128,12 +133,17 @@ impl RenderableSystem {
             let Some(model) = TransformSystem::world_model(world, renderable_cid) else {
                 continue;
             };
-            let transform = Transform { model, ..Default::default() };
+            let transform = Transform {
+                model,
+                ..Default::default()
+            };
 
             let gpu_r = GpuRenderable { mesh, material };
             let _ = visuals.update(handle, gpu_r, transform);
 
-            if let Some(renderable_comp) = world.get_component_by_id_as_mut::<RenderableComponent>(renderable_cid) {
+            if let Some(renderable_comp) =
+                world.get_component_by_id_as_mut::<RenderableComponent>(renderable_cid)
+            {
                 renderable_comp.renderable.mesh = new_mesh;
             }
 
@@ -154,7 +164,10 @@ impl RenderableSystem {
         let mut cur = component;
         let mut renderable_cid: Option<ComponentId> = None;
         while let Some(parent) = world.parent_of(cur) {
-            if world.get_component_by_id_as::<RenderableComponent>(parent).is_some() {
+            if world
+                .get_component_by_id_as::<RenderableComponent>(parent)
+                .is_some()
+            {
                 renderable_cid = Some(parent);
                 break;
             }
@@ -180,7 +193,10 @@ impl RenderableSystem {
         let mut cur = component;
         let mut renderable_cid: Option<ComponentId> = None;
         while let Some(parent) = world.parent_of(cur) {
-            if world.get_component_by_id_as::<RenderableComponent>(parent).is_some() {
+            if world
+                .get_component_by_id_as::<RenderableComponent>(parent)
+                .is_some()
+            {
                 renderable_cid = Some(parent);
                 break;
             }
@@ -204,11 +220,7 @@ impl RenderableSystem {
         visuals: &mut VisualWorld,
         component: ComponentId,
     ) {
-        if !self
-            .renderables
-            .iter()
-            .any(|c| *c == component)
-        {
+        if !self.renderables.iter().any(|c| *c == component) {
             self.renderables.push(component);
         }
 
@@ -224,7 +236,9 @@ impl RenderableSystem {
     ) {
         // If it's already registered in VisualWorld, nothing else to do.
         {
-            let Some(renderable_comp) = world.get_component_by_id_as::<RenderableComponent>(component) else {
+            let Some(renderable_comp) =
+                world.get_component_by_id_as::<RenderableComponent>(component)
+            else {
                 println!("[RenderableSystem]  -> component is not RenderableComponent somehow");
                 return;
             };
@@ -234,7 +248,8 @@ impl RenderableSystem {
         }
 
         // Defer insertion into VisualWorld until the GPU mesh exists.
-        let Some(renderable_comp) = world.get_component_by_id_as::<RenderableComponent>(component) else {
+        let Some(renderable_comp) = world.get_component_by_id_as::<RenderableComponent>(component)
+        else {
             println!("[RenderableSystem]  -> component is not RenderableComponent somehow");
             return;
         };
@@ -281,12 +296,15 @@ impl RenderableSystem {
 
             let mut cpu_mesh = p.cpu_mesh;
             if let Some(uvs) = self.pending_uv.get(&p.renderable_cid).cloned() {
-                if let Some(new_mesh) = clone_mesh_with_uv_overrides(render_assets, cpu_mesh, &uvs) {
+                if let Some(new_mesh) = clone_mesh_with_uv_overrides(render_assets, cpu_mesh, &uvs)
+                {
                     cpu_mesh = new_mesh;
                     if let Some(pending) = self.pending.get_mut(&key) {
                         pending.cpu_mesh = cpu_mesh;
                     }
-                    if let Some(renderable_comp) = world.get_component_by_id_as_mut::<RenderableComponent>(p.renderable_cid) {
+                    if let Some(renderable_comp) =
+                        world.get_component_by_id_as_mut::<RenderableComponent>(p.renderable_cid)
+                    {
                         renderable_comp.renderable.mesh = cpu_mesh;
                     }
                 }
@@ -317,7 +335,10 @@ impl RenderableSystem {
                 }
             };
 
-            let transform = Transform { model, ..Default::default() };
+            let transform = Transform {
+                model,
+                ..Default::default()
+            };
 
             let color = self
                 .pending_color
@@ -326,7 +347,9 @@ impl RenderableSystem {
                 .unwrap_or([1.0, 1.0, 1.0, 1.0]);
 
             let handle = visuals.register(p.renderable_cid, gpu_r, transform, color, None);
-            if let Some(renderable_comp) = world.get_component_by_id_as_mut::<RenderableComponent>(p.renderable_cid) {
+            if let Some(renderable_comp) =
+                world.get_component_by_id_as_mut::<RenderableComponent>(p.renderable_cid)
+            {
                 renderable_comp.handle = Some(handle);
             }
 
@@ -340,13 +363,24 @@ impl RenderableSystem {
             self.pending.remove(&key);
         }
 
-        self.apply_pending_uv_updates_to_registered_renderables(world, visuals, render_assets, uploader);
+        self.apply_pending_uv_updates_to_registered_renderables(
+            world,
+            visuals,
+            render_assets,
+            uploader,
+        );
         self.apply_pending_color_updates_to_registered_renderables(world, visuals);
     }
 }
 
 impl System for RenderableSystem {
-    fn tick(&mut self, _world: &mut World, _visuals: &mut VisualWorld, _input: &InputState, _dt_sec: f32) {
+    fn tick(
+        &mut self,
+        _world: &mut World,
+        _visuals: &mut VisualWorld,
+        _input: &InputState,
+        _dt_sec: f32,
+    ) {
         // Intentionally a no-op for now.
         //
         // Per your architecture: VisualWorld registration happens at component registration time

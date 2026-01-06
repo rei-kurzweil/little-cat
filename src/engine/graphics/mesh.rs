@@ -153,16 +153,11 @@ impl MeshFactory {
         // 12 triangles (2 per face), CCW when looking at the outside
         let indices = vec![
             // -Z face
-            0, 2, 1, 0, 3, 2,
-            // +Z face
-            4, 5, 6, 4, 6, 7,
-            // -X face
-            0, 4, 7, 0, 7, 3,
-            // +X face
-            1, 2, 6, 1, 6, 5,
-            // -Y face
-            0, 1, 5, 0, 5, 4,
-            // +Y face
+            0, 2, 1, 0, 3, 2, // +Z face
+            4, 5, 6, 4, 6, 7, // -X face
+            0, 4, 7, 0, 7, 3, // +X face
+            1, 2, 6, 1, 6, 5, // -Y face
+            0, 1, 5, 0, 5, 4, // +Y face
             3, 7, 6, 3, 6, 2,
         ];
 
@@ -195,9 +190,7 @@ impl MeshFactory {
         // 4 faces, CCW as seen from outside
         let indices = vec![
             0, 2, 1, // base-ish
-            0, 1, 3,
-            0, 3, 2,
-            1, 2, 3,
+            0, 1, 3, 0, 3, 2, 1, 2, 3,
         ];
 
         CpuMesh::new(vertices, indices)

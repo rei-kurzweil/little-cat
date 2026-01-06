@@ -1,5 +1,5 @@
-use crate::engine::ecs::component::Component;
 use crate::engine::ecs::ComponentId;
+use crate::engine::ecs::component::Component;
 
 /// 3D camera component.
 ///
@@ -49,11 +49,7 @@ impl Component for Camera3DComponent {
         self
     }
 
-    fn init(
-        &mut self,
-        queue: &mut crate::engine::ecs::CommandQueue,
-        component: ComponentId,
-    ) {
+    fn init(&mut self, queue: &mut crate::engine::ecs::CommandQueue, component: ComponentId) {
         queue.queue_register_camera_3d(component);
     }
 }

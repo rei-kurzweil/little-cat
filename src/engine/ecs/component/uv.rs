@@ -1,5 +1,5 @@
-use crate::engine::ecs::component::Component;
 use crate::engine::ecs::ComponentId;
+use crate::engine::ecs::component::Component;
 
 /// Per-vertex UVs for a renderable.
 ///
@@ -57,11 +57,7 @@ impl Component for UVComponent {
         self
     }
 
-    fn init(
-        &mut self,
-        queue: &mut crate::engine::ecs::CommandQueue,
-        component: ComponentId,
-    ) {
+    fn init(&mut self, queue: &mut crate::engine::ecs::CommandQueue, component: ComponentId) {
         queue.queue_register_uv(component);
     }
 }

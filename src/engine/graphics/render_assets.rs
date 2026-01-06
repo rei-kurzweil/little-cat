@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
+use crate::engine::graphics::MeshUploader;
 use crate::engine::graphics::mesh::CpuMesh;
 use crate::engine::graphics::primitives::{CpuMeshHandle, MeshHandle};
-use crate::engine::graphics::MeshUploader;
 
 /// Renderer-side asset registry used by ECS systems.
 ///

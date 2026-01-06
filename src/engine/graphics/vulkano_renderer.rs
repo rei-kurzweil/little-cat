@@ -1,9 +1,9 @@
+use crate::engine::graphics::MeshUploader;
+use crate::engine::graphics::TextureUploader;
 use crate::engine::graphics::mesh::CpuMesh;
 use crate::engine::graphics::primitives::MeshHandle;
 use crate::engine::graphics::primitives::TextureHandle;
 use crate::engine::graphics::visual_world::VisualWorld;
-use crate::engine::graphics::MeshUploader;
-use crate::engine::graphics::TextureUploader;
 use std::sync::Arc;
 use winit::window::Window;
 
@@ -19,14 +19,9 @@ mod vulkano_backend {
     use crate::engine::graphics::visual_world::VisualWorld;
     use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer};
     use vulkano::command_buffer::{
+        AutoCommandBufferBuilder, CommandBufferUsage, CopyBufferInfo, PrimaryCommandBufferAbstract,
+        RenderPassBeginInfo, SubpassBeginInfo, SubpassEndInfo,
         allocator::StandardCommandBufferAllocator,
-        AutoCommandBufferBuilder,
-        CommandBufferUsage,
-        CopyBufferInfo,
-        PrimaryCommandBufferAbstract,
-        RenderPassBeginInfo,
-        SubpassBeginInfo,
-        SubpassEndInfo,
     };
     use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
     use vulkano::descriptor_set::{DescriptorSet, WriteDescriptorSet};
@@ -48,18 +43,20 @@ mod vulkano_backend {
     };
     use vulkano::pipeline::graphics::viewport::{Scissor, Viewport, ViewportState};
     use vulkano::pipeline::layout::{PipelineLayout, PipelineLayoutCreateInfo};
-    
-    use vulkano::pipeline::{DynamicState, GraphicsPipeline, Pipeline, PipelineBindPoint, PipelineShaderStageCreateInfo};
+
+    use vulkano::DeviceSize;
+    use vulkano::command_buffer::CopyBufferToImageInfo;
+    use vulkano::format::Format;
+    use vulkano::image::sampler::{Sampler, SamplerCreateInfo};
+    use vulkano::pipeline::{
+        DynamicState, GraphicsPipeline, Pipeline, PipelineBindPoint, PipelineShaderStageCreateInfo,
+    };
     use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass, Subpass};
     use vulkano::swapchain::{self, Surface, Swapchain, SwapchainCreateInfo, SwapchainPresentInfo};
     use vulkano::sync::{self, GpuFuture};
     use vulkano::{Validated, VulkanError};
-    use vulkano::DeviceSize;
-    use vulkano::format::Format;
-    use vulkano::image::sampler::{Sampler, SamplerCreateInfo};
     use vulkano_util::context::{VulkanoConfig, VulkanoContext};
     use winit::window::Window;
-    use vulkano::command_buffer::CopyBufferToImageInfo;
 
     mod toon_mesh_vs {
         vulkano_shaders::shader! {
@@ -96,7 +93,14 @@ mod vulkano_backend {
         _pad0: [u32; 2],
     }
 
-    #[derive(BufferContents, vulkano::pipeline::graphics::vertex_input::Vertex, Clone, Copy, Debug, Default)]
+    #[derive(
+        BufferContents,
+        vulkano::pipeline::graphics::vertex_input::Vertex,
+        Clone,
+        Copy,
+        Debug,
+        Default,
+    )]
     #[repr(C)]
     pub struct InstanceData {
         #[format(R32G32B32A32_SFLOAT)]
@@ -397,7 +401,8 @@ mod vulkano_backend {
                 );
 
             let subpass = Subpass::from(render_pass.clone(), 0).ok_or("missing subpass 0")?;
-            let mut pipeline_ci = vulkano::pipeline::graphics::GraphicsPipelineCreateInfo::layout(layout);
+            let mut pipeline_ci =
+                vulkano::pipeline::graphics::GraphicsPipelineCreateInfo::layout(layout);
             pipeline_ci.stages = stages.into();
             pipeline_ci.vertex_input_state = Some(vertex_input_state);
             pipeline_ci.input_assembly_state = Some(InputAssemblyState::default());
@@ -485,9 +490,7 @@ mod vulkano_backend {
                 return Ok(());
             }
 
-            let (new_swapchain, new_images) 
-                = match self.swapchain.recreate(SwapchainCreateInfo 
-            {
+            let (new_swapchain, new_images) = match self.swapchain.recreate(SwapchainCreateInfo {
                 image_extent: new_dimensions.into(),
                 ..self.swapchain.create_info()
             }) {
@@ -505,8 +508,7 @@ mod vulkano_backend {
             self.swapchain = new_swapchain;
             self.swapchain_views = new_images
                 .into_iter()
-                .map(|image| ImageView::new_default(image)
-                .map_err(|e| e.into()))
+                .map(|image| ImageView::new_default(image).map_err(|e| e.into()))
                 .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?;
 
             self.framebuffers = self
@@ -528,17 +530,16 @@ mod vulkano_backend {
             Ok(())
         }
 
-        pub fn render_visual_world(&mut self, visual_world: &mut VisualWorld) 
-            -> Result<(), Box<dyn std::error::Error>> 
-        {
+        pub fn render_visual_world(
+            &mut self,
+            visual_world: &mut VisualWorld,
+        ) -> Result<(), Box<dyn std::error::Error>> {
             self.recreate_swapchain_if_needed()?;
 
             let device = self.context.device().clone();
             let queue = self.context.graphics_queue().clone();
 
-            if let Some(previous_frame_end) = 
-                self.previous_frame_end.as_mut() 
-            {
+            if let Some(previous_frame_end) = self.previous_frame_end.as_mut() {
                 previous_frame_end.cleanup_finished();
             }
 
@@ -584,8 +585,8 @@ mod vulkano_backend {
                     ..Default::default()
                 },
                 AllocationCreateInfo {
-                    memory_type_filter:
-                        MemoryTypeFilter::PREFER_HOST | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                    memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                        | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
                     ..Default::default()
                 },
                 instance_data_iter,
@@ -621,8 +622,8 @@ mod vulkano_backend {
                     ..Default::default()
                 },
                 AllocationCreateInfo {
-                    memory_type_filter:
-                        MemoryTypeFilter::PREFER_HOST | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                    memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                        | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
                     ..Default::default()
                 },
                 camera_ubo,
@@ -635,11 +636,15 @@ mod vulkano_backend {
             lights_ssbo.count = count as u32;
             for (i, l) in lights.iter().take(count).enumerate() {
                 lights_ssbo.lights[i] = GpuPointLight {
-                    pos_intensity: [l.position_ws[0], l.position_ws[1], l.position_ws[2], l.intensity],
+                    pos_intensity: [
+                        l.position_ws[0],
+                        l.position_ws[1],
+                        l.position_ws[2],
+                        l.intensity,
+                    ],
                     color_distance: [l.color[0], l.color[1], l.color[2], l.distance],
                 };
             }
-
 
             let lights_buffer: Subbuffer<LightsSSBO> = Buffer::from_data(
                 self.context.memory_allocator().clone(),
@@ -648,8 +653,8 @@ mod vulkano_backend {
                     ..Default::default()
                 },
                 AllocationCreateInfo {
-                    memory_type_filter:
-                        MemoryTypeFilter::PREFER_HOST | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                    memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                        | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
                     ..Default::default()
                 },
                 lights_ssbo,
@@ -839,8 +844,8 @@ mod vulkano_backend {
                     ..Default::default()
                 },
                 AllocationCreateInfo {
-                    memory_type_filter:
-                        MemoryTypeFilter::PREFER_HOST | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                    memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                        | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
                     ..Default::default()
                 },
                 rgba.iter().copied(),
@@ -908,8 +913,8 @@ mod vulkano_backend {
                     ..Default::default()
                 },
                 AllocationCreateInfo {
-                    memory_type_filter:
-                        MemoryTypeFilter::PREFER_HOST | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                    memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                        | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
                     ..Default::default()
                 },
                 mesh.vertices.iter().copied(),
@@ -922,8 +927,8 @@ mod vulkano_backend {
                     ..Default::default()
                 },
                 AllocationCreateInfo {
-                    memory_type_filter:
-                        MemoryTypeFilter::PREFER_HOST | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                    memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                        | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
                     ..Default::default()
                 },
                 mesh.indices_u32.iter().copied(),
@@ -1005,7 +1010,10 @@ impl VulkanoRenderer {
         }
     }
 
-    pub fn init_for_window(&mut self, window: &Arc<Window>) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn init_for_window(
+        &mut self,
+        window: &Arc<Window>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         if self.vulkano.is_none() {
             self.vulkano = Some(vulkano_backend::VulkanoState::new(window.clone())?);
             println!("[VulkanoRenderer] Vulkano swapchain/render-pass initialized");
@@ -1021,7 +1029,10 @@ impl VulkanoRenderer {
         }
     }
 
-    pub fn upload_mesh(&mut self, mesh: &CpuMesh) -> Result<MeshHandle, Box<dyn std::error::Error>> {
+    pub fn upload_mesh(
+        &mut self,
+        mesh: &CpuMesh,
+    ) -> Result<MeshHandle, Box<dyn std::error::Error>> {
         let Some(vulkano) = self.vulkano.as_mut() else {
             return Err("VulkanoRenderer not initialized (call init_for_window first)".into());
         };
@@ -1033,7 +1044,10 @@ impl VulkanoRenderer {
         Ok(handle)
     }
 
-    pub fn render_visual_world(&mut self, visual_world: &mut VisualWorld) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn render_visual_world(
+        &mut self,
+        visual_world: &mut VisualWorld,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let Some(vulkano) = self.vulkano.as_mut() else {
             return Err("VulkanoRenderer not initialized (call init_for_window first)".into());
         };

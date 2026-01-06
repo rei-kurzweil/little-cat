@@ -1,17 +1,19 @@
-pub mod primitives;
 pub mod mesh;
+pub mod pipeline_descriptor_set_layouts;
+pub mod primitives;
 pub mod render_assets;
 pub mod render_info;
-pub mod pipeline_descriptor_set_layouts;
-pub mod vulkano_renderer;
 pub mod visual_world;
+pub mod vulkano_renderer;
 
-pub use primitives::{GpuRenderable, Material, MaterialHandle, MeshHandle, Renderable, TextureHandle, Transform};
 pub use mesh::{CpuMesh, CpuVertex, MeshFactory};
+pub use primitives::{
+    GpuRenderable, Material, MaterialHandle, MeshHandle, Renderable, TextureHandle, Transform,
+};
 
 pub use render_assets::RenderAssets;
-pub use vulkano_renderer::VulkanoRenderer;
 pub use visual_world::VisualWorld;
+pub use vulkano_renderer::VulkanoRenderer;
 
 pub use render_info::RenderInfo;
 /// Trait for uploading CPU meshes to GPU.
@@ -46,4 +48,3 @@ impl Graphics {
         Self
     }
 }
-

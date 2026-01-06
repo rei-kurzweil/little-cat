@@ -1,5 +1,5 @@
-use crate::engine::ecs::component::Component;
 use crate::engine::ecs::ComponentId;
+use crate::engine::ecs::component::Component;
 use crate::engine::graphics::mesh::MeshFactory;
 use crate::engine::graphics::primitives::{InstanceHandle, MaterialHandle, Renderable};
 
@@ -23,7 +23,10 @@ impl RenderableComponent {
         }
     }
 
-    fn from_cpu_mesh_handle(h: crate::engine::graphics::primitives::CpuMeshHandle, material: MaterialHandle) -> Self {
+    fn from_cpu_mesh_handle(
+        h: crate::engine::graphics::primitives::CpuMeshHandle,
+        material: MaterialHandle,
+    ) -> Self {
         Self::new(Renderable::new(h, material))
     }
 
@@ -79,11 +82,7 @@ impl Component for RenderableComponent {
         self
     }
 
-    fn init(
-        &mut self,
-        queue: &mut crate::engine::ecs::CommandQueue,
-        component: ComponentId,
-    ) {
+    fn init(&mut self, queue: &mut crate::engine::ecs::CommandQueue, component: ComponentId) {
         // Queue registration command instead of immediately registering
         queue.queue_register_renderable(component);
     }

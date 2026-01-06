@@ -37,7 +37,7 @@ pub struct VisualWorld {
     /// True when per-instance data (e.g. model matrices) changed and any cached GPU instance
     /// buffer should be rebuilt/uploaded.
     dirty_instance_data: bool,
-    draw_order: Vec<u32>,     // indices into `instances`
+    draw_order: Vec<u32>, // indices into `instances`
     draw_batches: Vec<DrawBatch>,
 }
 
@@ -365,7 +365,12 @@ impl VisualWorld {
         }
     }
 
-    pub fn update(&mut self, handle: InstanceHandle, renderable: GpuRenderable, transform: Transform) -> bool {
+    pub fn update(
+        &mut self,
+        handle: InstanceHandle,
+        renderable: GpuRenderable,
+        transform: Transform,
+    ) -> bool {
         if let Some(&idx) = self.handle_to_index.get(&handle) {
             // Preserve per-instance color when updating renderable/transform.
             let color = self.instances[idx].color;

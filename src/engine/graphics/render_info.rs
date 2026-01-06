@@ -19,7 +19,9 @@ impl RenderInfo {
         start: u32,
         count: u32,
     ) {
-        if std::env::var("LC_PRINT_PIPELINE_LAYOUTS").ok().as_deref() != Some("1") || current_frame != 0 {
+        if std::env::var("LC_PRINT_PIPELINE_LAYOUTS").ok().as_deref() != Some("1")
+            || current_frame != 0
+        {
             return;
         }
 

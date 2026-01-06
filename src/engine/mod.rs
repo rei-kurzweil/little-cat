@@ -1,13 +1,13 @@
 pub mod ecs;
 pub mod graphics;
 pub mod networking;
+pub mod universe;
 pub mod user_input;
 pub mod windowing;
 pub mod xr;
-pub mod universe;
 
-pub use windowing::Windowing;
 pub use universe::Universe;
+pub use windowing::Windowing;
 
 /// Engine-level error type placeholder.
 #[derive(Debug)]

@@ -1,7 +1,7 @@
-use crate::engine::ecs::component::{Camera2DComponent, RenderableComponent, TransformComponent};
 use crate::engine::ecs::ComponentId;
-use crate::engine::ecs::system::System;
 use crate::engine::ecs::World;
+use crate::engine::ecs::component::{Camera2DComponent, RenderableComponent, TransformComponent};
+use crate::engine::ecs::system::System;
 use crate::engine::graphics::VisualWorld;
 use crate::engine::user_input::InputState;
 
@@ -23,10 +23,8 @@ impl TransformSystem {
         let mut out = [[0.0f32; 4]; 4];
         for c in 0..4 {
             for r in 0..4 {
-                out[c][r] = a[0][r] * b[c][0]
-                    + a[1][r] * b[c][1]
-                    + a[2][r] * b[c][2]
-                    + a[3][r] * b[c][3];
+                out[c][r] =
+                    a[0][r] * b[c][0] + a[1][r] * b[c][1] + a[2][r] * b[c][2] + a[3][r] * b[c][3];
             }
         }
         out
@@ -79,13 +77,17 @@ impl TransformSystem {
         light_system: &mut crate::engine::ecs::system::LightSystem,
     ) {
         // If this transform has a Camera2D child, update camera translation.
-        if let Some(camera2d_cid) = world
-            .children_of(component)
-            .iter()
-            .copied()
-            .find(|&cid| world.get_component_by_id_as::<Camera2DComponent>(cid).is_some())
-        {
-            camera_system.update_camera_2d_from_parent_transform(world, visuals, camera2d_cid, component);
+        if let Some(camera2d_cid) = world.children_of(component).iter().copied().find(|&cid| {
+            world
+                .get_component_by_id_as::<Camera2DComponent>(cid)
+                .is_some()
+        }) {
+            camera_system.update_camera_2d_from_parent_transform(
+                world,
+                visuals,
+                camera2d_cid,
+                component,
+            );
         }
 
         // If any point lights live under this transform, update their world-space position.
@@ -97,7 +99,10 @@ impl TransformSystem {
             for &child in world.children_of(node) {
                 stack.push(child);
 
-                if world.get_component_by_id_as::<RenderableComponent>(child).is_some() {
+                if world
+                    .get_component_by_id_as::<RenderableComponent>(child)
+                    .is_some()
+                {
                     let Some(handle) = world
                         .get_component_by_id_as::<RenderableComponent>(child)
                         .and_then(|r| r.get_handle())
@@ -115,7 +120,13 @@ impl TransformSystem {
 }
 
 impl System for TransformSystem {
-    fn tick(&mut self, _world: &mut World, _visuals: &mut VisualWorld, _input: &InputState, _dt_sec: f32) {
+    fn tick(
+        &mut self,
+        _world: &mut World,
+        _visuals: &mut VisualWorld,
+        _input: &InputState,
+        _dt_sec: f32,
+    ) {
         // No-op. Transform updates are event-driven via `transform_changed`.
     }
 }
