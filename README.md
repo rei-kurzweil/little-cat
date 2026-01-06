@@ -1,4 +1,4 @@
-# Little-Cat-Engine 0.2
+# Little-Cat-Engine ₀.₂
 
 <img width="498" height="400" alt="Screenshot_20260106_094219" src="https://github.com/user-attachments/assets/83c00897-aa61-4520-8756-cd7263289800" />
 
