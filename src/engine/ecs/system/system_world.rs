@@ -37,6 +37,36 @@ impl SystemWorld {
             .register_renderable(world, visuals, component);
     }
 
+    /// Register a UVComponent and apply it to its ancestor RenderableComponent.
+    pub fn register_uv(
+        &mut self,
+        world: &mut World,
+        visuals: &mut VisualWorld,
+        component: ComponentId,
+    ) {
+        self.renderable.register_uv(world, visuals, component);
+    }
+
+    /// Register a ColorComponent and apply it to its ancestor RenderableComponent.
+    pub fn register_color(
+        &mut self,
+        world: &mut World,
+        visuals: &mut VisualWorld,
+        component: ComponentId,
+    ) {
+        self.renderable.register_color(world, visuals, component);
+    }
+
+    /// Register a PointLightComponent instance with the LightSystem.
+    pub fn register_light(
+        &mut self,
+        world: &mut World,
+        visuals: &mut VisualWorld,
+        component: ComponentId,
+    ) {
+        self.light.register_light(world, visuals, component);
+    }
+
 
     /// Prepare render state before issuing a frame.
     ///
@@ -61,7 +91,7 @@ impl SystemWorld {
         component: ComponentId,
     ) {
         self.transform
-            .transform_changed(world, visuals, component, &mut self.camera);
+            .transform_changed(world, visuals, component, &mut self.camera, &mut self.light);
     }
 
     /// Update a transform component's transform value and notify systems.
@@ -104,7 +134,7 @@ impl SystemWorld {
         let handle = self.camera.register_camera(world, visuals, component);
         // Store the handle in the component
         if let Some(camera_comp) = 
-            world.get_component_by_id_as_mut::<crate::engine::ecs::component::CameraComponent>(component) 
+            world.get_component_by_id_as_mut::<crate::engine::ecs::component::Camera3DComponent>(component) 
         {
             camera_comp.handle = Some(handle);
         }
@@ -150,9 +180,9 @@ impl SystemWorld {
         visuals: &mut VisualWorld,
         component: ComponentId,
     ) {
-        // Try CameraComponent first
+        // Try Camera3DComponent first
         if let Some(camera_comp) = 
-            _world.get_component_by_id_as::<crate::engine::ecs::component::CameraComponent>(component) 
+            _world.get_component_by_id_as::<crate::engine::ecs::component::Camera3DComponent>(component) 
         {
             if let Some(handle) = camera_comp.handle {
                 self.camera.set_active_camera(visuals, handle);

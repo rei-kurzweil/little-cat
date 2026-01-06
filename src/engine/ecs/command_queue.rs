@@ -58,14 +58,14 @@ impl CommandQueue {
     }
 
 
-    /// Queue a register camera command.
-    pub fn queue_register_camera(
+    /// Queue a register 3D camera command.
+    pub fn queue_register_camera_3d(
         &mut self,
         component_id: crate::engine::ecs::ComponentId,
     ) {
         self.commands.push(ComponentCommand {
             component_id,
-            command: Command::REGISTER_CAMERA { component_id },
+            command: Command::REGISTER_CAMERA_3D { component_id },
         });
     }
 
@@ -102,6 +102,39 @@ impl CommandQueue {
         });
     }
 
+    /// Queue a register UV command.
+    pub fn queue_register_uv(
+        &mut self,
+        component_id: crate::engine::ecs::ComponentId,
+    ) {
+        self.commands.push(ComponentCommand {
+            component_id,
+            command: Command::REGISTER_UV { component_id },
+        });
+    }
+
+    /// Queue a register point light command.
+    pub fn queue_register_light(
+        &mut self,
+        component_id: crate::engine::ecs::ComponentId,
+    ) {
+        self.commands.push(ComponentCommand {
+            component_id,
+            command: Command::REGISTER_LIGHT { component_id },
+        });
+    }
+
+    /// Queue a register color command.
+    pub fn queue_register_color(
+        &mut self,
+        component_id: crate::engine::ecs::ComponentId,
+    ) {
+        self.commands.push(ComponentCommand {
+            component_id,
+            command: Command::REGISTER_COLOR { component_id },
+        });
+    }
+
     /// Flush all queued commands, executing them through the systems.
     pub fn flush(
         &mut self,
@@ -121,7 +154,7 @@ impl CommandQueue {
                 Command::REMOVE_TRANSFORM { component_id } => {
                     systems.remove_transform(world, visuals, component_id);
                 }
-                Command::REGISTER_CAMERA { component_id } => {
+                Command::REGISTER_CAMERA_3D { component_id } => {
                     systems.register_camera(world, visuals, component_id);
                 }
                 Command::REGISTER_CAMERA2D { component_id } => {
@@ -135,6 +168,15 @@ impl CommandQueue {
                 }
                 Command::REGISTER_RENDERABLE { component_id } => {
                     systems.register_renderable(world, visuals, component_id);
+                }
+                Command::REGISTER_UV { component_id } => {
+                    systems.register_uv(world, visuals, component_id);
+                }
+                Command::REGISTER_LIGHT { component_id } => {
+                    systems.register_light(world, visuals, component_id);
+                }
+                Command::REGISTER_COLOR { component_id } => {
+                    systems.register_color(world, visuals, component_id);
                 }
                 Command::REMOVE_RENDERABLE { component_id: _ } => {
                     // TODO: implement when needed
@@ -163,10 +205,19 @@ enum Command {
     REGISTER_INPUT {
         component_id: crate::engine::ecs::ComponentId,
     },
-    REGISTER_CAMERA {
+    REGISTER_CAMERA_3D {
         component_id: crate::engine::ecs::ComponentId,
     },
     REGISTER_CAMERA2D {
+        component_id: crate::engine::ecs::ComponentId,
+    },
+    REGISTER_UV {
+        component_id: crate::engine::ecs::ComponentId,
+    },
+    REGISTER_LIGHT {
+        component_id: crate::engine::ecs::ComponentId,
+    },
+    REGISTER_COLOR {
         component_id: crate::engine::ecs::ComponentId,
     },
     REMOVE_RENDERABLE {

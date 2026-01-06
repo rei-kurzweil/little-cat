@@ -59,6 +59,14 @@ impl Component for PointLightComponent {
         "point_light"
     }
 
+    fn init(
+        &mut self,
+        queue: &mut crate::engine::ecs::CommandQueue,
+        component: crate::engine::ecs::ComponentId,
+    ) {
+        queue.queue_register_light(component);
+    }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

@@ -73,6 +73,18 @@ mod vulkano_backend {
         pub proj: [[f32; 4]; 4],
         // std140 mat3 = 3x vec4 columns.
         pub camera2d: [[f32; 4]; 3],
+        // Swapchain size in pixels (width, height). Used for aspect correction in 2D.
+        pub viewport: [f32; 2],
+        pub _pad0: [f32; 2],
+    }
+
+    #[derive(BufferContents, Clone, Copy, Debug, Default)]
+    #[repr(C, align(16))]
+    struct MaterialUBO {
+        base_color: [f32; 4],
+        quant_steps: f32,
+        emissive: u32,
+        _pad0: [u32; 2],
     }
 
     #[derive(BufferContents, vulkano::pipeline::graphics::vertex_input::Vertex, Clone, Copy, Debug, Default)]
@@ -86,6 +98,8 @@ mod vulkano_backend {
         pub i_model_c2: [f32; 4],
         #[format(R32G32B32A32_SFLOAT)]
         pub i_model_c3: [f32; 4],
+        #[format(R32G32B32A32_SFLOAT)]
+        pub i_color: [f32; 4],
     }
 
     pub struct VulkanoGpuMesh {
@@ -132,7 +146,55 @@ mod vulkano_backend {
         pub previous_frame_end: Option<Box<dyn GpuFuture>>,
     }
 
+    const MAX_POINT_LIGHTS: usize = 64;
+
+    #[derive(BufferContents, Clone, Copy, Debug, Default)]
+    #[repr(C, align(16))]
+    struct GpuPointLight {
+        // xyz position (world), w intensity
+        pos_intensity: [f32; 4],
+        // rgb color, w distance
+        color_distance: [f32; 4],
+    }
+
+    #[derive(BufferContents, Clone, Copy, Debug)]
+    #[repr(C, align(16))]
+    struct LightsSSBO {
+        count: u32,
+        _pad0: [u32; 3],
+        lights: [GpuPointLight; MAX_POINT_LIGHTS],
+    }
+
+    impl Default for LightsSSBO {
+        fn default() -> Self {
+            Self {
+                count: 0,
+                _pad0: [0, 0, 0],
+                lights: [GpuPointLight::default(); MAX_POINT_LIGHTS],
+            }
+        }
+    }
+
     impl VulkanoState {
+        fn create_material_ubo(material: crate::engine::graphics::MaterialHandle) -> MaterialUBO {
+            match material {
+                crate::engine::graphics::MaterialHandle::TOON_MESH => MaterialUBO {
+                    base_color: [1.0, 0.7, 0.2, 1.0],
+                    quant_steps: 4.0,
+                    emissive: 0,
+                    _pad0: [0, 0],
+                },
+                // While migrating, treat UNLIT as a simple toon material too.
+                crate::engine::graphics::MaterialHandle::UNLIT_MESH => MaterialUBO {
+                    base_color: [1.0, 1.0, 1.0, 1.0],
+                    quant_steps: 1.0,
+                    emissive: 1,
+                    _pad0: [0, 0],
+                },
+                _ => MaterialUBO::default(),
+            }
+        }
+
         pub fn new(window: Arc<Window>) -> Result<Self, Box<dyn std::error::Error>> {
             // Prefer the helper context while we're migrating: it enables surface extensions
             // and sets up graphics/compute queues and allocators.
@@ -233,9 +295,9 @@ mod vulkano_backend {
                 },
             )?;
 
-            // Important: `CpuVertex` currently contains more than just position (e.g. UV),
-            // but the shader expects ONLY location 0 to be position. We therefore declare
-            // only the attributes we actually use, and use locations 1-4 for per-instance data.
+            // Important: `CpuVertex` contains more than just position (e.g. UV).
+            // We explicitly declare which attributes are consumed by the shader.
+            // Instance data occupies locations 1-4.
             let vertex_input_state = VertexInputState::new()
                 .binding(
                     0,
@@ -259,6 +321,15 @@ mod vulkano_backend {
                         binding: 0,
                         format: Format::R32G32B32_SFLOAT,
                         offset: 0,
+                        ..Default::default()
+                    },
+                )
+                .attribute(
+                    5,
+                    VertexInputAttributeDescription {
+                        binding: 0,
+                        format: Format::R32G32_SFLOAT,
+                        offset: 12,
                         ..Default::default()
                     },
                 )
@@ -295,6 +366,15 @@ mod vulkano_backend {
                         binding: 1,
                         format: Format::R32G32B32A32_SFLOAT,
                         offset: 48,
+                        ..Default::default()
+                    },
+                )
+                .attribute(
+                    6,
+                    VertexInputAttributeDescription {
+                        binding: 1,
+                        format: Format::R32G32B32A32_SFLOAT,
+                        offset: 64,
                         ..Default::default()
                     },
                 );
@@ -440,16 +520,16 @@ mod vulkano_backend {
             // Build instance buffer in draw order so each DrawBatch maps to a contiguous range.
             let instance_count = visual_world.draw_order().len();
             let instances_ref = visual_world.instances();
-            let instance_data_iter =    visual_world.draw_order()
-                                                                                        .iter()
-                                                                                        .map(|&idx| {
-                let (_, transform) = instances_ref[idx as usize];
-                let m = transform.model;
+
+            let instance_data_iter = visual_world.draw_order().iter().map(|&idx| {
+                let inst = instances_ref[idx as usize];
+                let m = inst.transform.model;
                 InstanceData {
                     i_model_c0: m[0],
                     i_model_c1: m[1],
                     i_model_c2: m[2],
                     i_model_c3: m[3],
+                    i_color: inst.color,
                 }
             });
 
@@ -480,10 +560,14 @@ mod vulkano_backend {
             };
 
             // Camera uniform buffer (set=0, binding=0).
+            // `camera2d` currently feeds the 2D path directly; we also pass the current
+            // swapchain extent so shaders can correct for aspect ratio.
             let camera_ubo = CameraUBO {
                 view: visual_world.camera_view(),
                 proj: visual_world.camera_proj(),
                 camera2d: visual_world.camera_2d(),
+                viewport: [extent[0] as f32, extent[1] as f32],
+                _pad0: [0.0, 0.0],
             };
 
             let camera_buffer: Subbuffer<CameraUBO> = Buffer::from_data(
@@ -501,8 +585,19 @@ mod vulkano_backend {
             )?;
 
             // Lights storage buffer (set=0, binding=1). Placeholder for now.
-            // Layout is intentionally minimal until LightSystem is wired in.
-            let lights_buffer: Subbuffer<[u32; 4]> = Buffer::from_data(
+            let mut lights_ssbo = LightsSSBO::default();
+            let lights = visual_world.point_lights();
+            let count = (lights.len()).min(MAX_POINT_LIGHTS);
+            lights_ssbo.count = count as u32;
+            for (i, l) in lights.iter().take(count).enumerate() {
+                lights_ssbo.lights[i] = GpuPointLight {
+                    pos_intensity: [l.position_ws[0], l.position_ws[1], l.position_ws[2], l.intensity],
+                    color_distance: [l.color[0], l.color[1], l.color[2], l.distance],
+                };
+            }
+
+
+            let lights_buffer: Subbuffer<LightsSSBO> = Buffer::from_data(
                 self.context.memory_allocator().clone(),
                 BufferCreateInfo {
                     usage: BufferUsage::STORAGE_BUFFER,
@@ -513,7 +608,7 @@ mod vulkano_backend {
                         MemoryTypeFilter::PREFER_HOST | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
                     ..Default::default()
                 },
-                [0, 0, 0, 0],
+                lights_ssbo,
             )?;
 
             let global_set = DescriptorSet::new(
@@ -523,45 +618,6 @@ mod vulkano_backend {
                     WriteDescriptorSet::buffer(0, camera_buffer),
                     WriteDescriptorSet::buffer(1, lights_buffer),
                 ],
-                [],
-            )?;
-
-            #[derive(BufferContents, Clone, Copy, Debug, Default)]
-            #[repr(C, align(16))]
-            struct MaterialUBO {
-                base_color: [f32; 4],
-                light_dir_ws: [f32; 3],
-                quant_steps: f32,
-                unlit: u32,
-                _pad0: [f32; 3],
-            }
-
-            let material_ubo = MaterialUBO {
-                base_color: [1.0, 0.7, 0.2, 1.0],
-                light_dir_ws: [0.6, 0.4, 0.7],
-                quant_steps: 4.0,
-                unlit: 0,
-                _pad0: [0.0, 0.0, 0.0],
-            };
-
-            let material_buffer: Subbuffer<MaterialUBO> = Buffer::from_data(
-                self.context.memory_allocator().clone(),
-                BufferCreateInfo {
-                    usage: BufferUsage::UNIFORM_BUFFER,
-                    ..Default::default()
-                },
-                AllocationCreateInfo {
-                    memory_type_filter:
-                        MemoryTypeFilter::PREFER_HOST | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-                    ..Default::default()
-                },
-                material_ubo,
-            )?;
-
-            let material_set = DescriptorSet::new(
-                self.descriptor_set_allocator.clone(),
-                self.set_layouts.material.clone(),
-                [WriteDescriptorSet::buffer(0, material_buffer)],
                 [],
             )?;
 
@@ -584,16 +640,54 @@ mod vulkano_backend {
                 .into(),
             )?;
 
-            cbb.bind_pipeline_graphics(self.pipeline_toon_mesh.clone())?;
-            cbb.bind_descriptor_sets(
-                PipelineBindPoint::Graphics,
-                self.pipeline_toon_mesh.layout().clone(),
-                0,
-                (global_set, material_set),
-            )?;
+            // Bind pipeline per material. For now, TOON_MESH is the primary bring-up pipeline.
+            // UNLIT_MESH is treated as an alias to TOON_MESH for compatibility while migrating.
+            let mut bound_material: Option<crate::engine::graphics::MaterialHandle> = None;
 
-            // For now we only support UNLIT_MESH; VisualWorld batches already group by material.
             for batch in visual_world.draw_batches() {
+                if bound_material != Some(batch.material) {
+                    match batch.material {
+                        crate::engine::graphics::MaterialHandle::TOON_MESH
+                        | crate::engine::graphics::MaterialHandle::UNLIT_MESH => {
+                            let material_ubo = Self::create_material_ubo(batch.material);
+                            let material_buffer: Subbuffer<MaterialUBO> = Buffer::from_data(
+                                self.context.memory_allocator().clone(),
+                                BufferCreateInfo {
+                                    usage: BufferUsage::UNIFORM_BUFFER,
+                                    ..Default::default()
+                                },
+                                AllocationCreateInfo {
+                                    memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                                        | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                                    ..Default::default()
+                                },
+                                material_ubo,
+                            )?;
+
+                            let material_set = DescriptorSet::new(
+                                self.descriptor_set_allocator.clone(),
+                                self.set_layouts.material.clone(),
+                                [WriteDescriptorSet::buffer(0, material_buffer)],
+                                [],
+                            )?;
+
+                            cbb.bind_pipeline_graphics(self.pipeline_toon_mesh.clone())?;
+                            cbb.bind_descriptor_sets(
+                                PipelineBindPoint::Graphics,
+                                self.pipeline_toon_mesh.layout().clone(),
+                                0,
+                                (global_set.clone(), material_set),
+                            )?;
+                        }
+                        _ => {
+                            // Unknown material: skip this batch.
+                            continue;
+                        }
+                    }
+
+                    bound_material = Some(batch.material);
+                }
+
                 let Some(mesh) = self.meshes.get(&batch.mesh) else {
                     continue;
                 };

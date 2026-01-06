@@ -1,18 +1,22 @@
 pub mod renderable;
 pub mod transform;
-pub mod camera;
+pub mod camera3d;
 pub mod camera2d;
 pub mod input;
 pub mod point_light;
 pub mod lit_voxel;
+pub mod uv;
+pub mod color;
 
 pub use renderable::RenderableComponent;
 pub use transform::TransformComponent;
-pub use camera::CameraComponent;
+pub use camera3d::Camera3DComponent;
 pub use camera2d::Camera2DComponent;
 pub use input::InputComponent;
 pub use point_light::PointLightComponent;
 pub use lit_voxel::LitVoxelComponent;
+pub use uv::UVComponent;
+pub use color::ColorComponent;
 
 /// For now, our "LightComponent" is a point light.
 pub type LightComponent = point_light::PointLightComponent;

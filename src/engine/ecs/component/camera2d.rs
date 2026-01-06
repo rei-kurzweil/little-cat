@@ -3,7 +3,7 @@ use crate::engine::ecs::ComponentId;
 
 /// 2D camera component.
 ///
-/// This is a sibling of `CameraComponent` (3D-ish view/proj camera).
+/// This is a sibling of `Camera3DComponent` (3D-ish view/proj camera).
 /// The 2D camera drives a global NDC translation used by the mesh vertex shader.
 #[derive(Debug, Clone, Default)]
 pub struct Camera2DComponent {

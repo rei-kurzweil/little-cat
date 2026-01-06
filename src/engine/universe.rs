@@ -1,6 +1,6 @@
 use crate::engine::{ecs, graphics};
 use crate::engine::user_input::InputState;
-use crate::engine::ecs::component::{RenderableComponent, TransformComponent, Camera2DComponent, InputComponent};
+use crate::engine::ecs::component::{ColorComponent, InputComponent, PointLightComponent, RenderableComponent, TransformComponent};
 use crate::engine::graphics::mesh::MeshFactory;
 use crate::engine::graphics::primitives::MaterialHandle;
 use std::sync::Arc;
@@ -52,52 +52,80 @@ impl Universe {
         // Register CPU meshes once and reuse handles.
         let tri_mesh = self.render_assets.register_mesh(MeshFactory::triangle_2d());
         let square_mesh = self.render_assets.register_mesh(MeshFactory::quad_2d());
-        
-        // Helper closure to spawn a shape with the common component tree structure.
-        // Returns the transform ComponentId so we can add additional components if needed.
-        let mut spawn = |mesh, x: f32, y: f32, s: f32, r: f32| -> ecs::ComponentId {
-            let transform = self.world.add_component(
+
+        fn spawn(
+            world: &mut ecs::World,
+            queue: &mut ecs::CommandQueue,
+            mesh: crate::engine::graphics::primitives::CpuMeshHandle,
+            x: f32,
+            y: f32,
+            s: f32,
+            r: f32,
+            color: [f32; 4],
+            input_driven: bool,
+        ) -> ecs::ComponentId {
+            let transform = world.add_component(
                 TransformComponent::new()
                     .with_position(x, y, 0.0)
                     .with_scale(s, s, 1.0)
-                    .with_rotation_euler(0.0, 0.0, r)
+                    .with_rotation_euler(0.0, 0.0, r),
             );
-            let renderable = self.world.add_component(RenderableComponent::new(
-                crate::engine::graphics::primitives::Renderable::new(mesh, MaterialHandle::UNLIT_MESH),
+            let renderable = world.add_component(RenderableComponent::new(
+                crate::engine::graphics::primitives::Renderable::new(mesh, MaterialHandle::TOON_MESH),
             ));
+            let color_c = world.add_component(ColorComponent { rgba: color });
 
-            // Topology: Transform -> Renderable
-            let _ = self.world.add_child(transform, renderable);
+            // Topology: (optional Input) -> Transform -> Renderable
+            let _ = world.add_child(transform, renderable);
+            let _ = world.add_child(renderable, color_c);
 
-            // Initialize the component tree starting from the transform root.
-            self.world.init_component_tree(transform, &mut self.command_queue);
-            
+            if input_driven {
+                let input = world.add_component(InputComponent::new().with_speed(0.5));
+                let _ = world.add_child(input, transform);
+                world.init_component_tree(input, queue);
+            } else {
+                world.init_component_tree(transform, queue);
+            }
+
             transform
-        };
+        }
 
-        // Spawn all shapes using the common spawn function
-        let _first_triangle_transform = spawn(tri_mesh, -0.20, 0.35, 0.30, 3.14159 / 2.0);
-        spawn(square_mesh, -0.80, -0.30, 0.25, 0.0);
-        spawn(square_mesh, -0.40, -0.30, 0.25, 0.0);
-        spawn(square_mesh, 0.00, -0.30, 0.25, 0.0);
-        spawn(square_mesh, 0.40, -0.30, 0.25, 0.0);
-        spawn(square_mesh, 0.80, -0.30, 0.25, 0.0);
-        spawn(tri_mesh, 0.30, 0.35, 0.30, -3.14159);
-        
-        // Create a movable Camera2D rig.
-        // Preferred topology (simple one-way data flow):
-        // InputComponent -> TransformComponent -> Camera2DComponent
-        let camera_input = self.world.add_component(InputComponent::new().with_speed(0.5));
-        let camera_transform = self.world.add_component(
-            TransformComponent::new().with_position(0.0, 0.0, 0.0),
+        // Spawn shapes.
+        // One triangle is input-driven (WASD/QE). The point light is attached under the same
+        // transform so it moves with the triangle.
+        let tri_transform = self.world.add_component(
+            TransformComponent::new()
+                .with_position(0.5, 0.50, 0.0)
+                .with_scale(0.30, 0.30, 1.0)
+                .with_rotation_euler(0.0, 0.0, 3.14159 / 2.0),
         );
-        let camera2d = self.world.add_component(Camera2DComponent::new());
+        let tri_renderable = self.world.add_component(RenderableComponent::new(
+            crate::engine::graphics::primitives::Renderable::new(tri_mesh, MaterialHandle::TOON_MESH),
+        ));
+        let tri_color = self.world.add_component(ColorComponent::rgba(0.2, 1.0, 0.2, 1.0));
+        let tri_light = self
+            .world
+            .add_component(PointLightComponent::new()
+                    .with_distance(10.0).with_color(1.0, 0.0, 0.0));
 
-        let _ = self.world.add_child(camera_input, camera_transform);
-        let _ = self.world.add_child(camera_transform, camera2d);
+        let _ = self.world.add_child(tri_transform, tri_renderable);
+        let _ = self.world.add_child(tri_renderable, tri_color);
+        let _ = self.world.add_child(tri_transform, tri_light);
 
-        // Initialize the component tree starting from the input root.
-        self.world.init_component_tree(camera_input, &mut self.command_queue);
+        let tri_input = self.world.add_component(InputComponent::new().with_speed(0.5));
+        let _ = self.world.add_child(tri_input, tri_transform);
+        self.world
+            .init_component_tree(tri_input, &mut self.command_queue);
+
+        spawn(&mut self.world, &mut self.command_queue, square_mesh, -0.80, -0.30, 0.25, 0.0, [1.0, 0.2, 0.2, 1.0], false);
+        spawn(&mut self.world, &mut self.command_queue, square_mesh, -0.40, -0.30, 0.25, 0.0, [1.0, 0.6, 0.2, 1.0], false);
+        spawn(&mut self.world, &mut self.command_queue, square_mesh, 0.00, -0.30, 0.25, 0.0, [1.0, 1.0, 0.2, 1.0], false);
+        spawn(&mut self.world, &mut self.command_queue, square_mesh, 0.40, -0.30, 0.25, 0.0, [0.2, 0.6, 1.0, 1.0], false);
+        spawn(&mut self.world, &mut self.command_queue, square_mesh, 0.80, -0.30, 0.25, 0.0, [0.8, 0.2, 1.0, 1.0], false);
+        spawn(&mut self.world, &mut self.command_queue, tri_mesh, 0.30, 0.35, 0.30, -3.14159, [1.0, 1.0, 1.0, 1.0], false);
+
+        // NOTE: This demo intentionally does not spawn a camera.
+        // VisualWorld defaults to an identity 2D camera transform.
     }
 
     /// Game/update step

@@ -2,16 +2,40 @@
 
 layout(location = 0) in vec3 v_world_pos;
 layout(location = 1) in vec3 v_normal;
+layout(location = 2) in vec2 v_uv;
+layout(location = 3) in vec4 v_color;
 
 layout(location = 0) out vec4 f_color;
+
+// Compile-time debug selector:
+// 0 = normal lighting
+// 1 = show SSBO light0.pos_intensity.rgb
+// 2 = show SSBO light0.color_distance.rgb
+// 3 = show interpolated normal (remapped)
+// 4 = show light_count as grayscale
+const uint LC_DEBUG_OUTPUT = 0u;
+
+struct PointLight {
+    vec4 pos_intensity;  // xyz position (world), w intensity
+    vec4 color_distance; // rgb color, w distance
+};
+
+layout(set = 0, binding = 1, std430) readonly buffer LightsSSBO {
+    uint count;
+    // IMPORTANT: keep this header exactly 16 bytes to match the Rust side.
+    // Using `uvec3` here changes alignment/offset rules in std430 and will shift `lights`.
+    uint _pad0;
+    uint _pad1;
+    uint _pad2;
+    PointLight lights[64];
+} g_lights;
 
 // Set 1: material params (no textures yet; those can be added later).
 layout(set = 1, binding = 0) uniform MaterialUBO {
     vec4 base_color;
-    vec3 light_dir_ws;
     float quant_steps;
-    uint unlit;
-    vec3 _pad0;
+    uint emissive;
+    uvec2 _pad0;
 } mat;
 
 float quantize(float x, float steps) {
@@ -20,20 +44,26 @@ float quantize(float x, float steps) {
 }
 
 void main() {
-    vec3 base = mat.base_color.rgb;
+    vec4 base_rgba = mat.base_color * v_color;
+    vec3 base = base_rgba.rgb; // * vec3(fract(v_uv.x), fract(v_uv.y), 1.0);
 
-    if (mat.unlit != 0u) {
-        f_color = vec4(base, mat.base_color.a);
+    if (mat.emissive != 0u) {
+        f_color = vec4(base, base_rgba.a);
         return;
     }
 
-    vec3 n = normalize(v_normal);
-    vec3 l = normalize(mat.light_dir_ws);
+    uint light_count = min(g_lights.count, 64u);
+    if (light_count == 0u) {
+        // No lights: show black so it's obvious.
+        f_color = vec4(0.0, 0.0, 0.0, 1.0);
+        return;
+    }
 
-    float ndotl = max(dot(n, l), 0.0);
-    float q = quantize(ndotl, mat.quant_steps);
+    vec3 light_pos = g_lights.lights[0].pos_intensity.xyz;
+    vec3 light_color = g_lights.lights[0].color_distance.rgb;
 
-    vec3 lit = base * (0.15 + 0.85 * q);
 
-    f_color = vec4(lit, mat.base_color.a);
+
+    vec3 out_rgb = base;
+    f_color = vec4(out_rgb, base_rgba.a);
 }

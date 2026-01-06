@@ -8,18 +8,18 @@ use crate::engine::graphics::VisualWorld;
 pub struct CameraHandle(pub u32);
 
 #[derive(Debug, Clone, Copy)]
-pub struct Camera {
+pub struct Camera3D {
     pub view: [[f32; 4]; 4],
     pub proj: [[f32; 4]; 4],
 }
 
 #[derive(Debug, Clone, Copy)]
 enum AnyCamera {
-    Camera3D(Camera),
+    Camera3D(Camera3D),
     Camera2D,
 }
 
-impl Camera {
+impl Camera3D {
     pub fn identity() -> Self {
         Self {
             view: [
@@ -88,7 +88,7 @@ impl CameraSystem {
         // NOTE: Debug step: force BOTH view and projection to identity to fully isolate
         // whether the camera path (push constants, shader bindings, etc.) is the cause.
         // (So we also intentionally ignore any camera transform for now.)
-        let cam = Camera::identity();
+        let cam = Camera3D::identity();
 
         let h = CameraHandle(self.next_handle);
         self.next_handle = self.next_handle.wrapping_add(1);

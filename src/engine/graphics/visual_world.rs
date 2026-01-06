@@ -13,7 +13,11 @@ pub struct DrawBatch {
 }
 
 pub struct VisualWorld {
-    instances: Vec<(GpuRenderable, Transform)>,
+    instances: Vec<VisualInstance>,
+
+    point_lights: Vec<VisualPointLight>,
+    point_light_index_by_component: std::collections::HashMap<ComponentId, usize>,
+    dirty_lights: bool,
 
     // Active camera state (owned by CameraSystem, mirrored here for renderer snapshot).
     camera_view: [[f32; 4]; 4],
@@ -36,10 +40,21 @@ pub struct VisualWorld {
     draw_batches: Vec<DrawBatch>,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct VisualInstance {
+    pub renderable: GpuRenderable,
+    pub transform: Transform,
+    pub color: [f32; 4],
+}
+
 impl Default for VisualWorld {
     fn default() -> Self {
         Self {
             instances: Vec::new(),
+
+            point_lights: Vec::new(),
+            point_light_index_by_component: std::collections::HashMap::new(),
+            dirty_lights: true,
 
             camera_view: [
                 [1.0, 0.0, 0.0, 0.0],
@@ -72,6 +87,14 @@ impl Default for VisualWorld {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct VisualPointLight {
+    pub position_ws: [f32; 3],
+    pub intensity: f32,
+    pub distance: f32,
+    pub color: [f32; 3],
+}
+
 impl VisualWorld {
     pub fn new() -> Self {
         Self::default()
@@ -83,11 +106,40 @@ impl VisualWorld {
         self.component_to_handle.clear();
         self.next_handle = 0;
 
+        self.point_lights.clear();
+        self.point_light_index_by_component.clear();
+        self.dirty_lights = true;
+
         self.dirty_draw_cache = true;
         self.dirty_instance_data = true;
         self.dirty_camera = true;
         self.draw_order.clear();
         self.draw_batches.clear();
+    }
+
+    pub fn lights_dirty(&self) -> bool {
+        self.dirty_lights
+    }
+
+    pub fn take_lights_dirty(&mut self) -> bool {
+        let v = self.dirty_lights;
+        self.dirty_lights = false;
+        v
+    }
+
+    pub fn point_lights(&self) -> &[VisualPointLight] {
+        &self.point_lights
+    }
+
+    pub fn upsert_point_light(&mut self, cid: ComponentId, light: VisualPointLight) {
+        if let Some(&idx) = self.point_light_index_by_component.get(&cid) {
+            self.point_lights[idx] = light;
+        } else {
+            let idx = self.point_lights.len();
+            self.point_lights.push(light);
+            self.point_light_index_by_component.insert(cid, idx);
+        }
+        self.dirty_lights = true;
     }
 
     pub fn camera_dirty(&self) -> bool {
@@ -144,7 +196,7 @@ impl VisualWorld {
         v
     }
 
-    pub fn instances(&self) -> &[(GpuRenderable, Transform)] {
+    pub fn instances(&self) -> &[VisualInstance] {
         &self.instances
     }
 
@@ -170,7 +222,7 @@ impl VisualWorld {
 
         // Sort by (material, mesh). Stable sort keeps relative order for identical keys.
         self.draw_order.sort_by_key(|&i| {
-            let (r, _inst) = self.instances[i as usize];
+            let r = self.instances[i as usize].renderable;
             // pack into u64: material in high bits, mesh in low bits
             ((r.material.0 as u64) << 32) | (r.mesh.0 as u64)
         });
@@ -179,7 +231,7 @@ impl VisualWorld {
         let mut cursor = 0usize;
         while cursor < self.draw_order.len() {
             let idx0 = self.draw_order[cursor] as usize;
-            let (r0, _) = self.instances[idx0];
+            let r0 = self.instances[idx0].renderable;
             let material = r0.material;
             let mesh = r0.mesh;
 
@@ -188,7 +240,7 @@ impl VisualWorld {
 
             while cursor < self.draw_order.len() {
                 let idx = self.draw_order[cursor] as usize;
-                let (r, _) = self.instances[idx];
+                let r = self.instances[idx].renderable;
                 if r.material == material && r.mesh == mesh {
                     cursor += 1;
                 } else {
@@ -213,12 +265,17 @@ impl VisualWorld {
         cid: ComponentId,
         renderable: GpuRenderable,
         transform: Transform,
+        color: [f32; 4],
     ) -> InstanceHandle {
         let handle = InstanceHandle(self.next_handle);
         self.next_handle = self.next_handle.wrapping_add(1);
 
         let idx = self.instances.len();
-        self.instances.push((renderable, transform));
+        self.instances.push(VisualInstance {
+            renderable,
+            transform,
+            color,
+        });
         self.handle_to_index.insert(handle, idx);
         self.component_to_handle.insert(cid, handle);
 
@@ -254,7 +311,7 @@ impl VisualWorld {
 
     pub fn update_transform(&mut self, handle: InstanceHandle, transform: Transform) -> bool {
         if let Some(&idx) = self.handle_to_index.get(&handle) {
-            self.instances[idx].1 = transform;
+            self.instances[idx].transform = transform;
             self.dirty_instance_data = true;
             // transform-only doesn’t affect batching by (material, mesh)
             true
@@ -265,7 +322,7 @@ impl VisualWorld {
 
     pub fn update_model(&mut self, handle: InstanceHandle, model: [[f32; 4]; 4]) -> bool {
         if let Some(&idx) = self.handle_to_index.get(&handle) {
-            self.instances[idx].1.model = model;
+            self.instances[idx].transform.model = model;
             self.dirty_instance_data = true;
             // model-only doesn’t affect batching by (material, mesh)
             true
@@ -274,9 +331,25 @@ impl VisualWorld {
         }
     }
 
+    pub fn update_color(&mut self, handle: InstanceHandle, color: [f32; 4]) -> bool {
+        if let Some(&idx) = self.handle_to_index.get(&handle) {
+            self.instances[idx].color = color;
+            self.dirty_instance_data = true;
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn update(&mut self, handle: InstanceHandle, renderable: GpuRenderable, transform: Transform) -> bool {
         if let Some(&idx) = self.handle_to_index.get(&handle) {
-            self.instances[idx] = (renderable, transform);
+            // Preserve per-instance color when updating renderable/transform.
+            let color = self.instances[idx].color;
+            self.instances[idx] = VisualInstance {
+                renderable,
+                transform,
+                color,
+            };
             self.dirty_draw_cache = true; // renderable changes likely affect sort/batch
             self.dirty_instance_data = true;
             true

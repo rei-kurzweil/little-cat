@@ -6,7 +6,7 @@ pub mod system_world;
 pub mod light_system;
 pub mod lit_voxel_system;
 
-pub use camera_system::{Camera, CameraHandle, CameraSystem};
+pub use camera_system::{Camera3D, CameraHandle, CameraSystem};
 pub use renderable_system::RenderableSystem;
 pub use transform_system::TransformSystem;
 pub use input_system::InputSystem;

@@ -191,10 +191,19 @@ impl Material {
         vertex_shader: "engine/graphics/shaders/unlit-mesh.vert",
         fragment_shader: "engine/graphics/shaders/unlit-mesh.frag",
     };
+
+    /// Toon material used by the Vulkano renderer bring-up pipeline.
+    pub const TOON_MESH: Material = Material {
+        vertex_shader: "engine/graphics/shaders/toon-mesh.vert",
+        fragment_shader: "engine/graphics/shaders/toon-mesh.frag",
+    };
 }
 
 
 impl MaterialHandle {
     /// Unlit mesh material (see `Material::UNLIT_MESH`).
     pub const UNLIT_MESH: MaterialHandle = MaterialHandle(0);
+
+    /// Toon mesh material (see `Material::TOON_MESH`).
+    pub const TOON_MESH: MaterialHandle = MaterialHandle(1);
 }

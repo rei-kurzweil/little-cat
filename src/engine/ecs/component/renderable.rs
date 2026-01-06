@@ -34,31 +34,31 @@ impl RenderableComponent {
     /// Predefined renderable: 2D triangle (placeholder handle).
     pub fn triangle(mesh: crate::engine::graphics::primitives::CpuMeshHandle) -> Self {
         let _ = MeshFactory::triangle_2d();
-        Self::from_cpu_mesh_handle(mesh, MaterialHandle::UNLIT_MESH)
+        Self::from_cpu_mesh_handle(mesh, MaterialHandle::TOON_MESH)
     }
 
     /// Predefined renderable: 2D square/quad (placeholder handle).
     pub fn square(mesh: crate::engine::graphics::primitives::CpuMeshHandle) -> Self {
         let _ = MeshFactory::quad_2d();
-        Self::from_cpu_mesh_handle(mesh, MaterialHandle::UNLIT_MESH)
+        Self::from_cpu_mesh_handle(mesh, MaterialHandle::TOON_MESH)
     }
 
     /// Predefined renderable: cube primitive (placeholder handles for now).
     pub fn cube(mesh: crate::engine::graphics::primitives::CpuMeshHandle) -> Self {
         let _ = MeshFactory::cube();
-        Self::from_cpu_mesh_handle(mesh, MaterialHandle::UNLIT_MESH)
+        Self::from_cpu_mesh_handle(mesh, MaterialHandle::TOON_MESH)
     }
 
     /// Predefined renderable: tetrahedron primitive (placeholder handles for now).
     pub fn tetrahedron(mesh: crate::engine::graphics::primitives::CpuMeshHandle) -> Self {
         let _ = MeshFactory::tetrahedron();
-        Self::from_cpu_mesh_handle(mesh, MaterialHandle::UNLIT_MESH)
+        Self::from_cpu_mesh_handle(mesh, MaterialHandle::TOON_MESH)
     }
 
     /// Predefined renderable: tetrahedron (alias of `tetrahedron`).
     pub fn color_tetrahedron(mesh: crate::engine::graphics::primitives::CpuMeshHandle) -> Self {
         let _ = MeshFactory::tetrahedron();
-        Self::from_cpu_mesh_handle(mesh, MaterialHandle::UNLIT_MESH)
+        Self::from_cpu_mesh_handle(mesh, MaterialHandle::TOON_MESH)
     }
 }
 
