@@ -34,7 +34,10 @@ mod vulkano_backend {
     use vulkano::image::view::ImageView;
     use vulkano::image::{Image, ImageCreateInfo, ImageType, ImageUsage};
     use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter};
-    use vulkano::pipeline::graphics::color_blend::ColorBlendState;
+    use vulkano::pipeline::graphics::color_blend::{
+        AttachmentBlend, BlendFactor, BlendOp, ColorBlendAttachmentState, ColorBlendState,
+        ColorComponents,
+    };
     use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
     use vulkano::pipeline::graphics::multisample::MultisampleState;
     use vulkano::pipeline::graphics::rasterization::RasterizationState;
@@ -402,7 +405,23 @@ mod vulkano_backend {
             pipeline_ci.rasterization_state = Some(RasterizationState::default());
             pipeline_ci.multisample_state = Some(MultisampleState::default());
             pipeline_ci.depth_stencil_state = None;
-            pipeline_ci.color_blend_state = Some(ColorBlendState::with_attachment_states(1, Default::default()));
+            // Enable alpha blending so textures with transparency (e.g. PNG alpha) render correctly.
+            // Uses straight alpha: out.rgb = src.rgb * src.a + dst.rgb * (1-src.a)
+            pipeline_ci.color_blend_state = Some(ColorBlendState::with_attachment_states(
+                1,
+                ColorBlendAttachmentState {
+                    blend: Some(AttachmentBlend {
+                        src_color_blend_factor: BlendFactor::SrcAlpha,
+                        dst_color_blend_factor: BlendFactor::OneMinusSrcAlpha,
+                        color_blend_op: BlendOp::Add,
+                        src_alpha_blend_factor: BlendFactor::One,
+                        dst_alpha_blend_factor: BlendFactor::OneMinusSrcAlpha,
+                        alpha_blend_op: BlendOp::Add,
+                    }),
+                    color_write_enable: true,
+                    color_write_mask: ColorComponents::all(),
+                },
+            ));
             pipeline_ci.dynamic_state = [DynamicState::Viewport, DynamicState::Scissor]
                 .into_iter()
                 .collect();

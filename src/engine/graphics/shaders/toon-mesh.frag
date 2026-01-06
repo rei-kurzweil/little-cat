@@ -47,8 +47,8 @@ float quantize(float x, float steps) {
 
 void main() {
     vec4 tex_rgba = texture(base_tex, v_uv);
-    vec4 base_rgba = mat.base_color * v_color * tex_rgba;
-    vec3 base = base_rgba.rgb; // * vec3(fract(v_uv.x), fract(v_uv.y), 1.0);
+    vec4 base_rgba = tex_rgba * v_color;
+    vec3 base = base_rgba.rgb;
 
     if (mat.emissive != 0u) {
         f_color = vec4(base, base_rgba.a);
