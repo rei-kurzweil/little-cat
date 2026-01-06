@@ -58,13 +58,19 @@ using vulkan instanced rendering and several layers to describe game objects:
 + InputComponent
   + Recieves keyboard or other input sources and passes that info to relevant child components
   + TODO: set up key mappings and movement / transform modes beyond the defaults.
-
-+ CameraComponent
-  + add child TransformComponent to move the camera
-  + TODO: InputComponent to read InputState and set Transform on TransformComponent on CameraComponent
-
 + Camera2DComponent
-  + add child TransformComponent to move the camera
++ Camera3DComponent
+  + add to TransformComponent to use that transform's model matrix for the camera
+  + add to TransformComponent and add that TransformComponent to an InputComponent to control the camera with the keyboard.
+
+```
+// input example
+InputComponent {
+    TransformComponent {
+        Camera2DComponent { }
+    }
+}
+```
 
 + ColorComponent
   + Per-instance RGBA tint.
