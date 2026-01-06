@@ -48,11 +48,7 @@ impl LightSystem {
         visuals: &mut VisualWorld,
         component: ComponentId,
     ) {
-        let debug = std::env::var_os("LC_DEBUG_LIGHTS").is_some();
-        if debug {
-            println!("[LightSystem] transform_changed root={:?}", component);
-        }
-
+        
         let mut visited_nodes = 0usize;
         let mut updated_lights = 0usize;
 
@@ -65,13 +61,6 @@ impl LightSystem {
                     let position_ws =
                         TransformSystem::world_position(world, child).unwrap_or([0.0, 0.0, 0.0]);
                     updated_lights += 1;
-
-                    if debug {
-                        println!(
-                            "[LightSystem]  -> update light={:?} pos={:?} intensity={} distance={} color={:?}",
-                            child, position_ws, light.intensity, light.distance, light.color
-                        );
-                    }
                     
                     visuals.upsert_point_light(
                         child,
@@ -86,12 +75,6 @@ impl LightSystem {
             }
         }
 
-        if debug {
-            println!(
-                "[LightSystem] transform_changed done visited_nodes={} updated_lights={}",
-                visited_nodes, updated_lights
-            );
-        }
     }
 }
 

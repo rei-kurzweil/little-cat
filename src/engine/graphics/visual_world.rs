@@ -7,6 +7,7 @@ use crate::engine::graphics::primitives::InstanceHandle;
 pub struct DrawBatch {
     pub material: crate::engine::graphics::MaterialHandle,
     pub mesh: crate::engine::graphics::primitives::MeshHandle,
+    pub texture: Option<crate::engine::graphics::TextureHandle>,
     /// Range into `draw_order`
     pub start: usize,
     pub count: usize,
@@ -45,6 +46,7 @@ pub struct VisualInstance {
     pub renderable: GpuRenderable,
     pub transform: Transform,
     pub color: [f32; 4],
+    pub texture: Option<crate::engine::graphics::TextureHandle>,
 }
 
 impl Default for VisualWorld {
@@ -222,26 +224,30 @@ impl VisualWorld {
 
         // Sort by (material, mesh). Stable sort keeps relative order for identical keys.
         self.draw_order.sort_by_key(|&i| {
-            let r = self.instances[i as usize].renderable;
-            // pack into u64: material in high bits, mesh in low bits
-            ((r.material.0 as u64) << 32) | (r.mesh.0 as u64)
+            let inst = self.instances[i as usize];
+            let r = inst.renderable;
+            let tex = inst.texture.map(|t| t.0).unwrap_or(u32::MAX);
+            (r.material.0, r.mesh.0, tex)
         });
 
         self.draw_batches.clear();
         let mut cursor = 0usize;
         while cursor < self.draw_order.len() {
             let idx0 = self.draw_order[cursor] as usize;
-            let r0 = self.instances[idx0].renderable;
+            let inst0 = self.instances[idx0];
+            let r0 = inst0.renderable;
             let material = r0.material;
             let mesh = r0.mesh;
+            let texture = inst0.texture;
 
             let start = cursor;
             cursor += 1;
 
             while cursor < self.draw_order.len() {
                 let idx = self.draw_order[cursor] as usize;
-                let r = self.instances[idx].renderable;
-                if r.material == material && r.mesh == mesh {
+                let inst = self.instances[idx];
+                let r = inst.renderable;
+                if r.material == material && r.mesh == mesh && inst.texture == texture {
                     cursor += 1;
                 } else {
                     break;
@@ -251,6 +257,7 @@ impl VisualWorld {
             self.draw_batches.push(DrawBatch {
                 material,
                 mesh,
+                texture,
                 start,
                 count: cursor - start,
             });
@@ -266,6 +273,7 @@ impl VisualWorld {
         renderable: GpuRenderable,
         transform: Transform,
         color: [f32; 4],
+        texture: Option<crate::engine::graphics::TextureHandle>,
     ) -> InstanceHandle {
         let handle = InstanceHandle(self.next_handle);
         self.next_handle = self.next_handle.wrapping_add(1);
@@ -275,6 +283,7 @@ impl VisualWorld {
             renderable,
             transform,
             color,
+            texture,
         });
         self.handle_to_index.insert(handle, idx);
         self.component_to_handle.insert(cid, handle);
@@ -341,14 +350,31 @@ impl VisualWorld {
         }
     }
 
+    pub fn update_texture(
+        &mut self,
+        handle: InstanceHandle,
+        texture: Option<crate::engine::graphics::TextureHandle>,
+    ) -> bool {
+        if let Some(&idx) = self.handle_to_index.get(&handle) {
+            self.instances[idx].texture = texture;
+            // Texture affects batching (descriptor binding), but not instance vertex data.
+            self.dirty_draw_cache = true;
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn update(&mut self, handle: InstanceHandle, renderable: GpuRenderable, transform: Transform) -> bool {
         if let Some(&idx) = self.handle_to_index.get(&handle) {
             // Preserve per-instance color when updating renderable/transform.
             let color = self.instances[idx].color;
+            let texture = self.instances[idx].texture;
             self.instances[idx] = VisualInstance {
                 renderable,
                 transform,
                 color,
+                texture,
             };
             self.dirty_draw_cache = true; // renderable changes likely affect sort/batch
             self.dirty_instance_data = true;

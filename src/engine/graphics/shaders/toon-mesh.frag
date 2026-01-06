@@ -38,13 +38,16 @@ layout(set = 1, binding = 0) uniform MaterialUBO {
     uvec2 _pad0;
 } mat;
 
+layout(set = 1, binding = 1) uniform sampler2D base_tex;
+
 float quantize(float x, float steps) {
     float s = max(1.0, steps);
     return floor(clamp(x, 0.0, 1.0) * s) / s;
 }
 
 void main() {
-    vec4 base_rgba = mat.base_color * v_color;
+    vec4 tex_rgba = texture(base_tex, v_uv);
+    vec4 base_rgba = mat.base_color * v_color * tex_rgba;
     vec3 base = base_rgba.rgb; // * vec3(fract(v_uv.x), fract(v_uv.y), 1.0);
 
     if (mat.emissive != 0u) {

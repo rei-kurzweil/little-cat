@@ -5,6 +5,7 @@ pub mod input_system;
 pub mod system_world;
 pub mod light_system;
 pub mod lit_voxel_system;
+pub mod texture_system;
 
 pub use camera_system::{Camera3D, CameraHandle, CameraSystem};
 pub use renderable_system::RenderableSystem;
@@ -13,6 +14,7 @@ pub use input_system::InputSystem;
 pub use system_world::SystemWorld;
 pub use light_system::LightSystem;
 pub use lit_voxel_system::LitVoxelSystem;
+pub use texture_system::TextureSystem;
 
 use super::World;
 use crate::engine::user_input::InputState;

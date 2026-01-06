@@ -325,7 +325,7 @@ impl RenderableSystem {
                 .copied()
                 .unwrap_or([1.0, 1.0, 1.0, 1.0]);
 
-            let handle = visuals.register(p.renderable_cid, gpu_r, transform, color);
+            let handle = visuals.register(p.renderable_cid, gpu_r, transform, color, None);
             if let Some(renderable_comp) = world.get_component_by_id_as_mut::<RenderableComponent>(p.renderable_cid) {
                 renderable_comp.handle = Some(handle);
             }

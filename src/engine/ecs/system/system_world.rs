@@ -7,7 +7,8 @@ use crate::engine::ecs::system::TransformSystem;
 use crate::engine::ecs::system::InputSystem;
 use crate::engine::ecs::system::LightSystem;
 use crate::engine::ecs::system::LitVoxelSystem;
-use crate::engine::graphics::{RenderAssets, MeshUploader, VisualWorld};
+use crate::engine::ecs::system::TextureSystem;
+use crate::engine::graphics::{RenderAssets, RenderUploader, VisualWorld};
 use crate::engine::user_input::InputState;
 
 /// System world that holds and runs all registered systems.
@@ -19,6 +20,7 @@ pub struct SystemWorld {
     pub input: InputSystem,
     pub light: LightSystem,
     pub lit_voxel: LitVoxelSystem,
+    pub texture: TextureSystem,
 }
 
 impl SystemWorld {
@@ -57,6 +59,16 @@ impl SystemWorld {
         self.renderable.register_color(world, visuals, component);
     }
 
+    /// Register a TextureComponent and apply it to its ancestor RenderableComponent.
+    pub fn register_texture(
+        &mut self,
+        world: &mut World,
+        visuals: &mut VisualWorld,
+        component: ComponentId,
+    ) {
+        self.texture.register_texture(world, visuals, component);
+    }
+
     /// Register a PointLightComponent instance with the LightSystem.
     pub fn register_light(
         &mut self,
@@ -77,10 +89,14 @@ impl SystemWorld {
         world: &mut World,
         visuals: &mut VisualWorld,
         render_assets: &mut RenderAssets,
-        uploader: &mut dyn MeshUploader,
+        uploader: &mut dyn RenderUploader,
     ) {
         self.renderable
             .flush_pending(world, visuals, render_assets, uploader);
+
+        // Must run after renderables are flushed so instance handles exist.
+        self.texture
+            .flush_pending(world, visuals, uploader);
     }
 
     /// Called when a TransformComponent changes.

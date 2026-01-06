@@ -7,6 +7,7 @@ pub mod point_light;
 pub mod lit_voxel;
 pub mod uv;
 pub mod color;
+pub mod texture;
 
 pub use renderable::RenderableComponent;
 pub use transform::TransformComponent;
@@ -17,6 +18,7 @@ pub use point_light::PointLightComponent;
 pub use lit_voxel::LitVoxelComponent;
 pub use uv::UVComponent;
 pub use color::ColorComponent;
+pub use texture::TextureComponent;
 
 /// For now, our "LightComponent" is a point light.
 pub type LightComponent = point_light::PointLightComponent;

@@ -1,7 +1,9 @@
 use crate::engine::graphics::mesh::CpuMesh;
 use crate::engine::graphics::primitives::MeshHandle;
+use crate::engine::graphics::primitives::TextureHandle;
 use crate::engine::graphics::visual_world::VisualWorld;
 use crate::engine::graphics::MeshUploader;
+use crate::engine::graphics::TextureUploader;
 use std::sync::Arc;
 use winit::window::Window;
 
@@ -13,6 +15,7 @@ mod vulkano_backend {
     use crate::engine::graphics::mesh::{CpuMesh, CpuVertex};
     use crate::engine::graphics::pipeline_descriptor_set_layouts::PipelineDescriptorSetLayouts;
     use crate::engine::graphics::primitives::MeshHandle;
+    use crate::engine::graphics::primitives::TextureHandle;
     use crate::engine::graphics::visual_world::VisualWorld;
     use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer};
     use vulkano::command_buffer::{
@@ -29,6 +32,7 @@ mod vulkano_backend {
     use vulkano::descriptor_set::{DescriptorSet, WriteDescriptorSet};
     use vulkano::format::ClearValue;
     use vulkano::image::view::ImageView;
+    use vulkano::image::{Image, ImageCreateInfo, ImageType, ImageUsage};
     use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter};
     use vulkano::pipeline::graphics::color_blend::ColorBlendState;
     use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
@@ -49,8 +53,10 @@ mod vulkano_backend {
     use vulkano::{Validated, VulkanError};
     use vulkano::DeviceSize;
     use vulkano::format::Format;
+    use vulkano::image::sampler::{Sampler, SamplerCreateInfo};
     use vulkano_util::context::{VulkanoConfig, VulkanoContext};
     use winit::window::Window;
+    use vulkano::command_buffer::CopyBufferToImageInfo;
 
     mod toon_mesh_vs {
         vulkano_shaders::shader! {
@@ -111,6 +117,10 @@ mod vulkano_backend {
         pub index_count: u32,
     }
 
+    pub struct VulkanoGpuTexture {
+        pub view: Arc<ImageView>,
+    }
+
     pub struct VulkanoState {
         #[allow(dead_code)]
         pub context: VulkanoContext,
@@ -138,6 +148,10 @@ mod vulkano_backend {
 
         #[allow(dead_code)]
         pub meshes: HashMap<MeshHandle, VulkanoGpuMesh>,
+
+        pub textures: HashMap<TextureHandle, VulkanoGpuTexture>,
+        pub sampler: Arc<Sampler>,
+        pub default_white_texture: TextureHandle,
 
         pub pipeline_toon_mesh: Arc<GraphicsPipeline>,
 
@@ -406,7 +420,9 @@ mod vulkano_backend {
                 Default::default(),
             ));
 
-            Ok(Self {
+            let sampler = Sampler::new(device.clone(), SamplerCreateInfo::simple_repeat_linear())?;
+
+            let mut state = Self {
                 context,
                 window,
                 surface,
@@ -419,6 +435,10 @@ mod vulkano_backend {
                 descriptor_set_allocator,
                 meshes: HashMap::new(),
 
+                textures: HashMap::new(),
+                sampler,
+                default_white_texture: TextureHandle(0),
+
                 set_layouts,
 
                 pipeline_toon_mesh,
@@ -426,7 +446,12 @@ mod vulkano_backend {
                 window_resized: false,
                 recreate_swapchain: false,
                 previous_frame_end: Some(sync::now(device).boxed()),
-            })
+            };
+
+            // Default texture: 1x1 white so untextured materials can still bind a sampler.
+            state.upload_texture_rgba8(TextureHandle(0), &[255, 255, 255, 255], 1, 1)?;
+
+            Ok(state)
         }
 
         fn recreate_swapchain_if_needed(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -640,15 +665,24 @@ mod vulkano_backend {
                 .into(),
             )?;
 
-            // Bind pipeline per material. For now, TOON_MESH is the primary bring-up pipeline.
+            // Bind pipeline/descriptor sets per (material, texture).
+            // For now, TOON_MESH is the primary bring-up pipeline.
             // UNLIT_MESH is treated as an alias to TOON_MESH for compatibility while migrating.
             let mut bound_material: Option<crate::engine::graphics::MaterialHandle> = None;
+            let mut bound_texture: Option<TextureHandle> = None;
 
             for batch in visual_world.draw_batches() {
-                if bound_material != Some(batch.material) {
+                let texture_handle = batch.texture.unwrap_or(self.default_white_texture);
+
+                if bound_material != Some(batch.material) || bound_texture != Some(texture_handle) {
                     match batch.material {
                         crate::engine::graphics::MaterialHandle::TOON_MESH
                         | crate::engine::graphics::MaterialHandle::UNLIT_MESH => {
+                            let Some(tex) = self.textures.get(&texture_handle) else {
+                                // Missing texture: skip this batch.
+                                continue;
+                            };
+
                             let material_ubo = Self::create_material_ubo(batch.material);
                             let material_buffer: Subbuffer<MaterialUBO> = Buffer::from_data(
                                 self.context.memory_allocator().clone(),
@@ -667,7 +701,14 @@ mod vulkano_backend {
                             let material_set = DescriptorSet::new(
                                 self.descriptor_set_allocator.clone(),
                                 self.set_layouts.material.clone(),
-                                [WriteDescriptorSet::buffer(0, material_buffer)],
+                                [
+                                    WriteDescriptorSet::buffer(0, material_buffer),
+                                    WriteDescriptorSet::image_view_sampler(
+                                        1,
+                                        tex.view.clone(),
+                                        self.sampler.clone(),
+                                    ),
+                                ],
                                 [],
                             )?;
 
@@ -686,6 +727,7 @@ mod vulkano_backend {
                     }
 
                     bound_material = Some(batch.material);
+                    bound_texture = Some(texture_handle);
                 }
 
                 let Some(mesh) = self.meshes.get(&batch.mesh) else {
@@ -740,6 +782,83 @@ mod vulkano_backend {
                 }
             }
 
+            Ok(())
+        }
+
+        pub fn upload_texture_rgba8(
+            &mut self,
+            handle: TextureHandle,
+            rgba: &[u8],
+            width: u32,
+            height: u32,
+        ) -> Result<(), Box<dyn std::error::Error>> {
+            if self.textures.contains_key(&handle) {
+                return Ok(());
+            }
+
+            if width == 0 || height == 0 {
+                return Err("texture has zero size".into());
+            }
+
+            let expected_len = width as usize * height as usize * 4;
+            if rgba.len() != expected_len {
+                return Err(format!(
+                    "texture rgba length mismatch: got={}, expected={}",
+                    rgba.len(),
+                    expected_len
+                )
+                .into());
+            }
+
+            let memory_allocator = self.context.memory_allocator().clone();
+            let queue = self.context.graphics_queue().clone();
+
+            let staging = Buffer::from_iter(
+                memory_allocator.clone(),
+                BufferCreateInfo {
+                    usage: BufferUsage::TRANSFER_SRC,
+                    ..Default::default()
+                },
+                AllocationCreateInfo {
+                    memory_type_filter:
+                        MemoryTypeFilter::PREFER_HOST | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                    ..Default::default()
+                },
+                rgba.iter().copied(),
+            )?;
+
+            let image = Image::new(
+                memory_allocator,
+                ImageCreateInfo {
+                    image_type: ImageType::Dim2d,
+                    format: Format::R8G8B8A8_UNORM,
+                    extent: [width, height, 1],
+                    usage: ImageUsage::TRANSFER_DST | ImageUsage::SAMPLED,
+                    ..Default::default()
+                },
+                AllocationCreateInfo {
+                    memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
+                    ..Default::default()
+                },
+            )?;
+
+            let mut cbb = AutoCommandBufferBuilder::primary(
+                self.command_buffer_allocator.clone(),
+                queue.queue_family_index(),
+                CommandBufferUsage::OneTimeSubmit,
+            )?;
+
+            cbb.copy_buffer_to_image(CopyBufferToImageInfo::buffer_image(staging, image.clone()))?;
+
+            let cb = cbb.build()?;
+
+            cb.execute(queue.clone())?
+                .then_signal_fence_and_flush()?
+                .wait(None)?;
+
+            let view = ImageView::new_default(image)
+                .map_err(|e| -> Box<dyn std::error::Error> { format!("{e:?}").into() })?;
+            self.textures.insert(handle, VulkanoGpuTexture { view });
             Ok(())
         }
 
@@ -852,6 +971,7 @@ mod vulkano_backend {
 pub struct VulkanoRenderer {
     vulkano: Option<vulkano_backend::VulkanoState>,
     next_mesh_handle: u32,
+    next_texture_handle: u32,
     did_enable_present_loop_log: bool,
 }
 
@@ -860,6 +980,8 @@ impl VulkanoRenderer {
         Self {
             vulkano: None,
             next_mesh_handle: 0,
+            // Reserve handle 0 for the default white texture.
+            next_texture_handle: 1,
             did_enable_present_loop_log: false,
         }
     }
@@ -909,5 +1031,24 @@ impl VulkanoRenderer {
 impl MeshUploader for VulkanoRenderer {
     fn upload_mesh(&mut self, mesh: &CpuMesh) -> Result<MeshHandle, Box<dyn std::error::Error>> {
         self.upload_mesh(mesh)
+    }
+}
+
+impl TextureUploader for VulkanoRenderer {
+    fn upload_texture_rgba8(
+        &mut self,
+        rgba: &[u8],
+        width: u32,
+        height: u32,
+    ) -> Result<TextureHandle, Box<dyn std::error::Error>> {
+        let Some(vulkano) = self.vulkano.as_mut() else {
+            return Err("VulkanoRenderer not initialized (call init_for_window first)".into());
+        };
+
+        let handle = TextureHandle(self.next_texture_handle);
+        self.next_texture_handle = self.next_texture_handle.wrapping_add(1);
+
+        vulkano.upload_texture_rgba8(handle, rgba, width, height)?;
+        Ok(handle)
     }
 }

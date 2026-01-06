@@ -49,14 +49,21 @@ impl PipelineDescriptorSetLayouts {
             },
         )?;
 
-        // Set 1 (material): for now just `binding 0` uniform buffer (MaterialUBO).
-        // Textures/matcaps/shadow maps can be added later as additional bindings.
+        // Set 1 (material):
+        // - binding 0: uniform buffer (MaterialUBO)
+        // - binding 1: combined image sampler (base color texture)
         let mut material_bindings = BTreeMap::new();
         let mut material_params =
             DescriptorSetLayoutBinding::descriptor_type(DescriptorType::UniformBuffer);
         material_params.descriptor_count = 1;
         material_params.stages = ShaderStages::FRAGMENT;
         material_bindings.insert(0, material_params);
+
+        let mut base_color_tex =
+            DescriptorSetLayoutBinding::descriptor_type(DescriptorType::CombinedImageSampler);
+        base_color_tex.descriptor_count = 1;
+        base_color_tex.stages = ShaderStages::FRAGMENT;
+        material_bindings.insert(1, base_color_tex);
 
         let material = DescriptorSetLayout::new(
             device.clone(),
