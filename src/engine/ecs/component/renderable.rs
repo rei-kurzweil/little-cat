@@ -86,4 +86,34 @@ impl Component for RenderableComponent {
         // Queue registration command instead of immediately registering
         queue.queue_register_renderable(component);
     }
+
+    fn encode(&self) -> std::collections::HashMap<String, serde_json::Value> {
+        let mut map = std::collections::HashMap::new();
+        map.insert(
+            "mesh".to_string(),
+            serde_json::json!(self.renderable.mesh.0),
+        );
+        map.insert(
+            "material".to_string(),
+            serde_json::json!(self.renderable.material.0),
+        );
+        map
+    }
+
+    fn decode(
+        &mut self,
+        data: &std::collections::HashMap<String, serde_json::Value>,
+    ) -> Result<(), String> {
+        if let Some(mesh) = data.get("mesh") {
+            let mesh_id: u32 = serde_json::from_value(mesh.clone())
+                .map_err(|e| format!("Failed to decode mesh: {}", e))?;
+            self.renderable.mesh = crate::engine::graphics::primitives::CpuMeshHandle(mesh_id);
+        }
+        if let Some(material) = data.get("material") {
+            let material_id: u32 = serde_json::from_value(material.clone())
+                .map_err(|e| format!("Failed to decode material: {}", e))?;
+            self.renderable.material = MaterialHandle(material_id);
+        }
+        Ok(())
+    }
 }

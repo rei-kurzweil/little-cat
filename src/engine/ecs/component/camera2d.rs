@@ -32,4 +32,17 @@ impl Component for Camera2DComponent {
     fn init(&mut self, queue: &mut crate::engine::ecs::CommandQueue, component: ComponentId) {
         queue.queue_register_camera2d(component);
     }
+
+    fn encode(&self) -> std::collections::HashMap<String, serde_json::Value> {
+        // Camera2D has no persistent state beyond the handle (which is runtime-only)
+        std::collections::HashMap::new()
+    }
+
+    fn decode(
+        &mut self,
+        _data: &std::collections::HashMap<String, serde_json::Value>,
+    ) -> Result<(), String> {
+        // Handle will be regenerated during init()
+        Ok(())
+    }
 }

@@ -1,5 +1,6 @@
 pub mod command_queue;
 pub mod component;
+pub mod component_codec;
 pub mod system;
 
 #[cfg(test)]
@@ -18,6 +19,7 @@ new_key_type! {
 pub use crate::engine::graphics::primitives::{Renderable, Transform};
 
 pub use command_queue::CommandQueue;
+pub use component_codec::ComponentCodec;
 pub use system::{System, SystemWorld};
 
 /// Bundle of mutable engine state passed to component mutation APIs.
@@ -104,6 +106,14 @@ impl World {
         id: ComponentId,
     ) -> Option<&crate::engine::ecs::component::ComponentNode> {
         self.components.get(id)
+    }
+
+    /// Alias for `get_component_record` (used by ComponentCodec).
+    pub fn get_component_node(
+        &self,
+        id: ComponentId,
+    ) -> Option<&crate::engine::ecs::component::ComponentNode> {
+        self.get_component_record(id)
     }
 
     pub fn get_component_record_mut(

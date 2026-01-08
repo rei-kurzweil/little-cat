@@ -82,4 +82,21 @@ pub trait Component: std::any::Any {
         _component: crate::engine::ecs::ComponentId,
     ) {
     }
+
+    /// Encode component data to a HashMap for serialization.
+    ///
+    /// Components should serialize their data fields (not runtime handles).
+    fn encode(&self) -> std::collections::HashMap<String, serde_json::Value> {
+        std::collections::HashMap::new()
+    }
+
+    /// Decode component data from a HashMap after deserialization.
+    ///
+    /// Components should restore their data fields from the map.
+    fn decode(
+        &mut self,
+        _data: &std::collections::HashMap<String, serde_json::Value>,
+    ) -> Result<(), String> {
+        Ok(())
+    }
 }

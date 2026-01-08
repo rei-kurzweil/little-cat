@@ -41,4 +41,21 @@ impl Component for TextureComponent {
     fn init(&mut self, queue: &mut crate::engine::ecs::CommandQueue, component: ComponentId) {
         queue.queue_register_texture(component);
     }
+
+    fn encode(&self) -> std::collections::HashMap<String, serde_json::Value> {
+        let mut map = std::collections::HashMap::new();
+        map.insert("uri".to_string(), serde_json::json!(self.uri));
+        map
+    }
+
+    fn decode(
+        &mut self,
+        data: &std::collections::HashMap<String, serde_json::Value>,
+    ) -> Result<(), String> {
+        if let Some(uri) = data.get("uri") {
+            self.uri = serde_json::from_value(uri.clone())
+                .map_err(|e| format!("Failed to decode uri: {}", e))?;
+        }
+        Ok(())
+    }
 }
