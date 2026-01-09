@@ -132,15 +132,7 @@ impl Component for TransformComponent {
 
     fn encode(&self) -> std::collections::HashMap<String, serde_json::Value> {
         let mut map = std::collections::HashMap::new();
-        map.insert(
-            "translation".to_string(),
-            serde_json::json!(self.transform.translation),
-        );
-        map.insert(
-            "rotation".to_string(),
-            serde_json::json!(self.transform.rotation),
-        );
-        map.insert("scale".to_string(), serde_json::json!(self.transform.scale));
+        map.insert("model".to_string(), serde_json::json!(self.transform.model));
         map
     }
 
@@ -148,19 +140,10 @@ impl Component for TransformComponent {
         &mut self,
         data: &std::collections::HashMap<String, serde_json::Value>,
     ) -> Result<(), String> {
-        if let Some(translation) = data.get("translation") {
-            self.transform.translation = serde_json::from_value(translation.clone())
-                .map_err(|e| format!("Failed to decode translation: {}", e))?;
+        if let Some(model) = data.get("model") {
+            self.transform.model = serde_json::from_value(model.clone())
+                .map_err(|e| format!("Failed to decode model matrix: {}", e))?;
         }
-        if let Some(rotation) = data.get("rotation") {
-            self.transform.rotation = serde_json::from_value(rotation.clone())
-                .map_err(|e| format!("Failed to decode rotation: {}", e))?;
-        }
-        if let Some(scale) = data.get("scale") {
-            self.transform.scale = serde_json::from_value(scale.clone())
-                .map_err(|e| format!("Failed to decode scale: {}", e))?;
-        }
-        self.recompute_model();
         Ok(())
     }
 }

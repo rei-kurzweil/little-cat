@@ -128,6 +128,11 @@ impl World {
         self.get_component_record(c)?.parent
     }
 
+    /// Iterator over all component IDs in the world.
+    pub fn all_components(&self) -> impl Iterator<Item = ComponentId> + '_ {
+        self.components.keys()
+    }
+
     pub fn children_of(&self, c: ComponentId) -> &[ComponentId] {
         static EMPTY: [ComponentId; 0] = [];
         self.get_component_record(c)

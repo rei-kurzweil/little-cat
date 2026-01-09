@@ -3,7 +3,6 @@ use crate::engine::ecs::ComponentId;
 use crate::engine::ecs::system::CameraSystem;
 use crate::engine::ecs::system::InputSystem;
 use crate::engine::ecs::system::LightSystem;
-use crate::engine::ecs::system::LitVoxelSystem;
 use crate::engine::ecs::system::RenderableSystem;
 use crate::engine::ecs::system::System;
 use crate::engine::ecs::system::TextureSystem;
@@ -14,13 +13,14 @@ use crate::engine::user_input::InputState;
 /// System world that holds and runs all registered systems.
 #[derive(Debug, Default)]
 pub struct SystemWorld {
-    pub camera: CameraSystem,
+    pub transform:  TransformSystem,
     pub renderable: RenderableSystem,
-    pub transform: TransformSystem,
-    pub input: InputSystem,
-    pub light: LightSystem,
-    pub lit_voxel: LitVoxelSystem,
-    pub texture: TextureSystem,
+
+    pub camera:     CameraSystem,
+    pub input:      InputSystem,
+    pub light:      LightSystem,
+    
+    pub texture:    TextureSystem,
 }
 
 impl SystemWorld {
@@ -247,7 +247,6 @@ impl SystemWorld {
         self.camera.tick(world, visuals, input, dt_sec);
 
         self.light.tick(world, visuals, input, dt_sec);
-        self.lit_voxel.tick(world, visuals, input, dt_sec);
     }
 
     /// Process commands from the command queue.

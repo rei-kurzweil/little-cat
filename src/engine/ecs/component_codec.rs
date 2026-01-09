@@ -9,6 +9,12 @@ use std::collections::HashMap;
 /// On decode, all components get fresh IDs from the World.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComponentDataNode {
+    /// Component GUID (globally unique identifier).
+    pub guid: uuid::Uuid,
+
+    /// Component name (may have _N suffix if duplicate at same level).
+    pub name: String,
+
     /// Component type name (e.g., "transform", "renderable").
     pub type_name: String,
 
@@ -19,10 +25,62 @@ pub struct ComponentDataNode {
     pub components: Vec<ComponentDataNode>,
 }
 
+/// A scene containing multiple root component trees.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Scene {
+    /// All root component trees in the scene.
+    pub components: Vec<ComponentDataNode>,
+}
+
 /// Codec for encoding/decoding component trees to/from JSON files.
 pub struct ComponentCodec;
 
 impl ComponentCodec {
+    /// Encode multiple component trees (scene roots) to a JSON file.
+    ///
+    /// Returns an error if any component doesn't exist or file I/O fails.
+    pub fn encode_scene(
+        world: &World,
+        root_ids: &[ComponentId],
+        output_file: &str,
+    ) -> Result<(), String> {
+        let mut components = Vec::new();
+        for &root_id in root_ids {
+            components.push(Self::encode_subtree(world, root_id)?);
+        }
+
+        let scene = Scene { components };
+        let json = serde_json::to_string_pretty(&scene)
+            .map_err(|e| format!("Failed to serialize scene to JSON: {}", e))?;
+
+        std::fs::write(output_file, json)
+            .map_err(|e| format!("Failed to write file '{}': {}", output_file, e))?;
+
+        Ok(())
+    }
+
+    /// Decode a scene from a JSON file and attach all roots to the world.
+    ///
+    /// Returns the ComponentIds of all loaded roots.
+    pub fn decode_scene(
+        world: &mut World,
+        input_file: &str,
+    ) -> Result<Vec<ComponentId>, String> {
+        let json = std::fs::read_to_string(input_file)
+            .map_err(|e| format!("Failed to read file '{}': {}", input_file, e))?;
+
+        let scene: Scene = serde_json::from_str(&json)
+            .map_err(|e| format!("Failed to parse scene JSON: {}", e))?;
+
+        let mut root_ids = Vec::new();
+        for root_node in &scene.components {
+            let root_id = Self::decode_subtree(world, None, root_node)?;
+            root_ids.push(root_id);
+        }
+
+        Ok(root_ids)
+    }
+
     /// Encode a component subtree rooted at `root_id` to a JSON file.
     ///
     /// Returns an error if the component doesn't exist or file I/O fails.
@@ -66,14 +124,29 @@ impl ComponentCodec {
 
         let component = &node.component;
         let type_name = component.name().to_string();
+        let base_name = node.name.to_string();
         let data = component.encode();
 
+        // Encode children, tracking names to handle duplicates.
+        let mut name_counts: HashMap<String, usize> = HashMap::new();
         let mut child_nodes = Vec::new();
+        
         for &child_id in &node.children {
-            child_nodes.push(Self::encode_subtree(world, child_id)?);
+            let mut child_node = Self::encode_subtree(world, child_id)?;
+            
+            // Track name usage and append _N if duplicate.
+            let count = name_counts.entry(child_node.name.clone()).or_insert(0);
+            if *count > 0 {
+                child_node.name = format!("{}_{}", child_node.name, count);
+            }
+            *count += 1;
+            
+            child_nodes.push(child_node);
         }
 
         Ok(ComponentDataNode {
+            guid: node.guid,
+            name: base_name,
             type_name,
             data,
             components: child_nodes,
@@ -94,7 +167,8 @@ impl ComponentCodec {
         // Decode component-specific data.
         component.decode(&node.data)?;
 
-        // Add to world (this assigns a fresh ComponentId).
+        // Add to world with the stored name (this assigns a fresh ComponentId).
+        // Note: The name might have _N suffix which we preserve.
         let new_id = world.add_component_boxed(component);
 
         // Set parent if specified.

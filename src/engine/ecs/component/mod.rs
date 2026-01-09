@@ -2,7 +2,6 @@ pub mod camera2d;
 pub mod camera3d;
 pub mod color;
 pub mod input;
-pub mod lit_voxel;
 pub mod point_light;
 pub mod renderable;
 pub mod texture;
@@ -13,7 +12,6 @@ pub use camera2d::Camera2DComponent;
 pub use camera3d::Camera3DComponent;
 pub use color::ColorComponent;
 pub use input::InputComponent;
-pub use lit_voxel::LitVoxelComponent;
 pub use point_light::PointLightComponent;
 pub use renderable::RenderableComponent;
 pub use texture::TextureComponent;
@@ -29,6 +27,7 @@ pub type LightComponent = point_light::PointLightComponent;
 /// in `World`, each record carrying its own parent/children handles.
 
 pub struct ComponentNode {
+    pub guid: uuid::Uuid,
     pub name: &'static str,
     pub component: Box<dyn Component>,
     pub parent: Option<crate::engine::ecs::ComponentId>,
@@ -39,6 +38,7 @@ impl ComponentNode {
     pub fn new(component: Box<dyn Component>) -> Self {
         let name = component.name();
         Self {
+            guid: uuid::Uuid::new_v4(),
             name,
             component,
             parent: None,
@@ -48,6 +48,7 @@ impl ComponentNode {
 
     pub fn new_named(name: &'static str, component: Box<dyn Component>) -> Self {
         Self {
+            guid: uuid::Uuid::new_v4(),
             name,
             component,
             parent: None,

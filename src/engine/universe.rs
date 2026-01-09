@@ -22,7 +22,7 @@ pub struct Universe {
 
 impl Universe {
     pub fn new(world: ecs::World) -> Self {
-        let mut u = Self {
+        Self {
             world,
             command_queue: ecs::CommandQueue::new(),
             systems: ecs::SystemWorld::new(),
@@ -30,13 +30,7 @@ impl Universe {
             visuals: graphics::VisualWorld::new(),
             render_assets: graphics::RenderAssets::new(),
             renderer: graphics::VulkanoRenderer::new(),
-        };
-
-        // Temporary: rebuild a demo scene directly in Universe creation.
-        // This keeps runtime visuals alive while we finalize a proper scene/level layer.
-        u.build_demo_scene_7_shapes();
-
-        u
+        }
     }
 
     /// Initialize the renderer for a window.
@@ -53,7 +47,9 @@ impl Universe {
         self.renderer.resize(size);
     }
 
-    fn build_demo_scene_7_shapes(&mut self) {
+    /// Build the demo scene with 7 shapes and a textured square.
+    /// This can be called from main.rs after Universe creation.
+    pub fn build_demo_scene_7_shapes(&mut self) {
         // Register CPU meshes once and reuse handles.
         let tri_mesh = self.render_assets.register_mesh(MeshFactory::triangle_2d());
         let square_mesh = self.render_assets.register_mesh(MeshFactory::quad_2d());

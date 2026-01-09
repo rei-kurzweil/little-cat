@@ -1,3 +1,4 @@
+pub mod cli;
 pub mod ecs;
 pub mod graphics;
 pub mod networking;
@@ -6,6 +7,7 @@ pub mod user_input;
 pub mod windowing;
 pub mod xr;
 
+pub use cli::CLI;
 pub use universe::Universe;
 pub use windowing::Windowing;
 
