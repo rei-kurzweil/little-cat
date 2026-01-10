@@ -68,6 +68,32 @@ using vulkan instanced rendering and several layers to describe game objects:
   + add to TransformComponent and add that TransformComponent to an InputComponent to control the camera with the keyboard.
 
 ```
+// input example
+InputComponent {
+    TransformComponent {
+        Camera2DComponent { }
+    }
+}
+```
+
++ ColorComponent
+  + Per-instance RGBA tint.
+  + Routed into the instanced vertex buffer, so it does not split draw batches.
+  + Useful for quick “team color” / debug visualization without creating new materials.
+
++ UVComponent
+  + Supplies UVs for a mesh so shaders can sample textures.
+
++ TextureComponent
+  + References a texture by `uri` (e.g. `"assets/cat-face-neutral.png"`).
+  + Loaded/decoded via the `image` crate and uploaded to the GPU.
+  + Textures are deduplicated by `uri` (multiple components can share the same GPU texture).
+  + Texture affects batching: draw calls are grouped by (material, mesh, texture).
+
++ PointLightComponent
+  + Adds a point light to the scene (fed to the shader via an SSBO).
+
+
 
 # REPL / CLI
 
@@ -101,30 +127,6 @@ Pipes use `|` but they pipe *component objects* (ComponentIds), not strings.
 
 - Example: `ls | grep color`
 - Example: `cat /6v1:input | grep camera`
-// input example
-InputComponent {
-    TransformComponent {
-        Camera2DComponent { }
-    }
-}
-```
-
-+ ColorComponent
-  + Per-instance RGBA tint.
-  + Routed into the instanced vertex buffer, so it does not split draw batches.
-  + Useful for quick “team color” / debug visualization without creating new materials.
-
-+ UVComponent
-  + Supplies UVs for a mesh so shaders can sample textures.
-
-+ TextureComponent
-  + References a texture by `uri` (e.g. `"assets/cat-face-neutral.png"`).
-  + Loaded/decoded via the `image` crate and uploaded to the GPU.
-  + Textures are deduplicated by `uri` (multiple components can share the same GPU texture).
-  + Texture affects batching: draw calls are grouped by (material, mesh, texture).
-
-+ PointLightComponent
-  + Adds a point light to the scene (fed to the shader via an SSBO).
 
 
 # Lifecycle
