@@ -36,6 +36,14 @@ pub struct Scene {
 pub struct ComponentCodec;
 
 impl ComponentCodec {
+    /// Encode a component subtree rooted at `root_id` into a `ComponentDataNode`.
+    ///
+    /// This is the same encoding used for file-based save operations, but returns the
+    /// in-memory representation instead of writing to disk.
+    pub fn encode_subtree_node(world: &World, root_id: ComponentId) -> Result<ComponentDataNode, String> {
+        Self::encode_subtree(world, root_id)
+    }
+
     /// Encode multiple component trees (scene roots) to a JSON file.
     ///
     /// Returns an error if any component doesn't exist or file I/O fails.
@@ -124,7 +132,7 @@ impl ComponentCodec {
 
         let component = &node.component;
         let type_name = component.name().to_string();
-        let base_name = node.name.to_string();
+        let base_name = node.name.clone();
         let data = component.encode();
 
         // Encode children, tracking names to handle duplicates.
@@ -167,9 +175,9 @@ impl ComponentCodec {
         // Decode component-specific data.
         component.decode(&node.data)?;
 
-        // Add to world with the stored name (this assigns a fresh ComponentId).
+        // Add to world with restored GUID + stored name (assigns a fresh ComponentId).
         // Note: The name might have _N suffix which we preserve.
-        let new_id = world.add_component_boxed(component);
+        let new_id = world.add_component_boxed_with_guid_named(node.guid, node.name.clone(), component);
 
         // Set parent if specified.
         if let Some(parent) = parent_id {

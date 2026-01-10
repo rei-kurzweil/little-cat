@@ -28,7 +28,7 @@ pub type LightComponent = point_light::PointLightComponent;
 
 pub struct ComponentNode {
     pub guid: uuid::Uuid,
-    pub name: &'static str,
+    pub name: String,
     pub component: Box<dyn Component>,
     pub parent: Option<crate::engine::ecs::ComponentId>,
     pub children: Vec<crate::engine::ecs::ComponentId>,
@@ -36,7 +36,7 @@ pub struct ComponentNode {
 
 impl ComponentNode {
     pub fn new(component: Box<dyn Component>) -> Self {
-        let name = component.name();
+        let name = component.name().to_string();
         Self {
             guid: uuid::Uuid::new_v4(),
             name,
@@ -46,10 +46,24 @@ impl ComponentNode {
         }
     }
 
-    pub fn new_named(name: &'static str, component: Box<dyn Component>) -> Self {
+    pub fn new_named(name: impl Into<String>, component: Box<dyn Component>) -> Self {
         Self {
             guid: uuid::Uuid::new_v4(),
-            name,
+            name: name.into(),
+            component,
+            parent: None,
+            children: Vec::new(),
+        }
+    }
+
+    pub fn new_with_guid_named(
+        guid: uuid::Uuid,
+        name: impl Into<String>,
+        component: Box<dyn Component>,
+    ) -> Self {
+        Self {
+            guid,
+            name: name.into(),
             component,
             parent: None,
             children: Vec::new(),

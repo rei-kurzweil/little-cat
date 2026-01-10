@@ -17,6 +17,9 @@ pub struct Universe {
     pub visuals: graphics::VisualWorld,
     pub render_assets: graphics::RenderAssets,
 
+    repl: Option<crate::engine::repl::Repl>,
+    repl_backend: Option<crate::engine::repl::ReplBackend>,
+
     renderer: graphics::VulkanoRenderer,
 }
 
@@ -30,7 +33,25 @@ impl Universe {
             visuals: graphics::VisualWorld::new(),
             render_assets: graphics::RenderAssets::new(),
             renderer: graphics::VulkanoRenderer::new(),
+
+            repl: None,
+            repl_backend: None,
         }
+    }
+
+    pub fn enable_repl(&mut self) {
+        if self.repl.is_none() {
+            self.repl = Some(crate::engine::repl::Repl::new());
+            self.repl_backend = Some(crate::engine::repl::ReplBackend::new());
+            println!("[REPL] Ready. Commands: ls, cd <name>, cd .., cd /, pwd, help");
+        }
+    }
+
+    fn sync_repl(&mut self) {
+        let (Some(repl), Some(backend)) = (&self.repl, self.repl_backend.as_mut()) else {
+            return;
+        };
+        backend.exec_all(&self.world, repl.try_recv_all());
     }
 
     /// Initialize the renderer for a window.
@@ -236,6 +257,8 @@ impl Universe {
 
     /// Game/update step
     pub fn update(&mut self, dt_sec: f32, input: &InputState) {
+        self.sync_repl();
+
         // 1. Process input events (handled inside systems for now).
         // 2. Let systems call methods on components,
         //      for example, to update transforms or renderables, which

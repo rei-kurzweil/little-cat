@@ -68,6 +68,39 @@ using vulkan instanced rendering and several layers to describe game objects:
   + add to TransformComponent and add that TransformComponent to an InputComponent to control the camera with the keyboard.
 
 ```
+
+# REPL / CLI
+
+There is a small stdin-driven REPL (processed on the main thread in `Universe::update()`) for inspecting the component tree.
+
+## Commands
+
+- `help` — print commands
+- `ls` — list children of the current working component (or roots at `/`)
+- `cd <name|index|guid|path>` — change working component
+  - `cd /` goes to root
+  - `cd ..` goes to parent
+  - `cd /7v1:root/8v1:child` walks by `ComponentId` tokens and names
+  - `cd <guid>` supports a global jump by GUID
+- `pwd` — print a copy-pastable path for the current working component
+- `cat [path]` — pretty-print JSON serialization of the subtree
+  - `cat` with no args prints from the current working component
+  - `cat /` prints the whole scene (all roots)
+- `clear` / `cls` — clear the terminal
+
+## Pipes
+
+Pipes use `|` but they pipe *component objects* (ComponentIds), not strings.
+
+- A trailing `|` prints an `ls`-style summary of the piped components.
+  - Example: `cat / |`
+
+### `grep`
+
+`grep <pattern>` filters the piped components by matching against component properties (including `name`, `type`, `guid`, and encoded fields), and prints the full serialized value of any matching property.
+
+- Example: `ls | grep color`
+- Example: `cat /6v1:input | grep camera`
 // input example
 InputComponent {
     TransformComponent {
