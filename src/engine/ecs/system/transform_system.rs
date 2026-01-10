@@ -5,6 +5,7 @@ use crate::engine::ecs::component::{
 };
 use crate::engine::ecs::system::System;
 use crate::engine::graphics::VisualWorld;
+use crate::engine::graphics::primitives::TransformMatrix;
 use crate::engine::user_input::InputState;
 
 /// System responsible for syncing `TransformComponent` changes into `VisualWorld`.
@@ -21,7 +22,16 @@ impl TransformSystem {
         Self
     }
 
-    fn mat4_mul(a: [[f32; 4]; 4], b: [[f32; 4]; 4]) -> [[f32; 4]; 4] {
+    fn mat4_identity() -> TransformMatrix {
+        [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]
+    }
+
+    fn mat4_mul(a: TransformMatrix, b: TransformMatrix) -> TransformMatrix {
         let mut out = [[0.0f32; 4]; 4];
         for c in 0..4 {
             for r in 0..4 {
@@ -36,26 +46,21 @@ impl TransformSystem {
     /// and multiplying all ancestor `TransformComponent` model matrices.
     ///
     /// Returns `None` if there are no ancestor transforms.
-    pub fn world_model(world: &World, cid: ComponentId) -> Option<[[f32; 4]; 4]> {
-        let mut transforms: Vec<[[f32; 4]; 4]> = Vec::new();
+    pub fn world_model(world: &World, cid: ComponentId) -> Option<TransformMatrix> {
+        // If this node is a transform, its cached world matrix is the answer.
+        if let Some(t) = world.get_component_by_id_as::<TransformComponent>(cid) {
+            return Some(t.transform.matrix_world);
+        }
+
+        // Otherwise, return the cached world matrix of the nearest ancestor TransformComponent.
         let mut cur = cid;
         while let Some(parent) = world.parent_of(cur) {
             if let Some(t) = world.get_component_by_id_as::<TransformComponent>(parent) {
-                transforms.push(t.transform.model);
+                return Some(t.transform.matrix_world);
             }
             cur = parent;
         }
-
-        if transforms.is_empty() {
-            return None;
-        }
-
-        transforms.reverse();
-        let mut model = transforms[0];
-        for m in transforms.into_iter().skip(1) {
-            model = Self::mat4_mul(model, m);
-        }
-        Some(model)
+        None
     }
 
     /// Compute the world-space position (translation) for a component.
@@ -78,17 +83,70 @@ impl TransformSystem {
         camera_system: &mut crate::engine::ecs::system::CameraSystem,
         light_system: &mut crate::engine::ecs::system::LightSystem,
     ) {
-        // If this transform changed, any cameras under it may need their view recomputed.
-        // We'll discover them during the subtree walk below.
+        // Recompute cached world matrices for this transform and all descendant transforms.
+        // Then update any dependent renderables/cameras under the subtree.
 
-        // If any point lights live under this transform, update their world-space position.
-        light_system.transform_changed(world, visuals, component);
+        // Build the chain of ancestor transforms (including `component`) from root -> leaf,
+        // and update cached `matrix_world` along that chain so we can start propagation from
+        // a correct world matrix even if registration order was odd.
+        let mut transform_chain: Vec<ComponentId> = Vec::new();
+        let mut cur = component;
+        loop {
+            if world
+                .get_component_by_id_as::<TransformComponent>(cur)
+                .is_some()
+            {
+                transform_chain.push(cur);
+            }
+            let Some(parent) = world.parent_of(cur) else {
+                break;
+            };
+            cur = parent;
+        }
+        transform_chain.reverse();
 
-        // Update all renderable instances in the subtree rooted at this transform.
-        let mut stack = vec![component];
-        while let Some(node) = stack.pop() {
-            for &child in world.children_of(node) {
-                stack.push(child);
+        // Compute world matrices down the chain and write them back.
+        let mut chain_world = Self::mat4_identity();
+        for tid in transform_chain.iter().copied() {
+            let local = match world
+                .get_component_by_id_as::<TransformComponent>(tid)
+                .map(|t| t.transform.model)
+            {
+                Some(m) => m,
+                None => continue,
+            };
+            chain_world = Self::mat4_mul(chain_world, local);
+            if let Some(t) = world.get_component_by_id_as_mut::<TransformComponent>(tid) {
+                t.transform.matrix_world = chain_world;
+            }
+        }
+
+        // Start propagation from this transform's world matrix.
+        let root_world = match world
+            .get_component_by_id_as::<TransformComponent>(component)
+            .map(|t| t.transform.matrix_world)
+        {
+            Some(m) => m,
+            None => return,
+        };
+
+        // DFS the component subtree. `current_world` is the world matrix of the nearest
+        // TransformComponent ancestor along the path.
+        let mut stack: Vec<(ComponentId, TransformMatrix)> = vec![(component, root_world)];
+        while let Some((node, current_world)) = stack.pop() {
+            let children: Vec<ComponentId> = world.children_of(node).to_vec();
+            for child in children {
+                // If we encounter a TransformComponent, update its cached world matrix and
+                // use it for its subtree.
+                let next_world = if let Some(t) =
+                    world.get_component_by_id_as_mut::<TransformComponent>(child)
+                {
+                    let w = Self::mat4_mul(current_world, t.transform.model);
+                    t.transform.matrix_world = w;
+                    w
+                } else {
+                    current_world
+                };
 
                 // If `node` is a TransformComponent and it directly parents a camera component,
                 // update that camera (the update methods themselves guard on active handle).
@@ -115,23 +173,21 @@ impl TransformSystem {
                     }
                 }
 
-                if world
+                // Update VisualWorld model matrices for any renderables in the subtree.
+                if let Some(handle) = world
                     .get_component_by_id_as::<RenderableComponent>(child)
-                    .is_some()
+                    .and_then(|r| r.get_handle())
                 {
-                    let Some(handle) = world
-                        .get_component_by_id_as::<RenderableComponent>(child)
-                        .and_then(|r| r.get_handle())
-                    else {
-                        continue;
-                    };
-
-                    if let Some(model) = Self::world_model(world, child) {
-                        visuals.update_model(handle, model);
-                    }
+                    visuals.update_model(handle, next_world);
                 }
+
+                stack.push((child, next_world));
             }
         }
+
+        // If any point lights live under this transform, update their world-space position.
+        // LightSystem uses TransformSystem::world_position(), which now reads cached matrices.
+        light_system.transform_changed(world, visuals, component);
     }
 }
 

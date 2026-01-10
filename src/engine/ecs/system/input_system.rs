@@ -1,6 +1,6 @@
 use crate::engine::ecs::ComponentId;
 use crate::engine::ecs::World;
-use crate::engine::ecs::component::{InputComponent, TransformComponent};
+use crate::engine::ecs::component::{ForwardAxis, InputComponent, InputTransformModeComponent, RollAxis, TransformComponent};
 use crate::engine::ecs::system::System;
 use crate::engine::graphics::VisualWorld;
 use crate::engine::user_input::InputState;
@@ -29,6 +29,8 @@ impl InputSystem {
 
     fn compute_transform(
         &self,
+        forward_axis: ForwardAxis,
+        roll_axis: RollAxis,
         speed_units_per_sec: f32,
         input: &InputState,
         dt_sec: f32,
@@ -50,13 +52,17 @@ impl InputSystem {
         let e = input.key_down(&Key::Character("e".into()))
             || input.key_down(&Key::Character("E".into()));
 
-        // Roll around Z first so translation happens "after" rotation.
+        // Apply rotation first so translation happens "after" rotation.
         if q || e {
             const ROT_SPEED_RAD_PER_SEC: f32 = 1.5;
             let dir = (e as i32) as f32 - (q as i32) as f32;
             let dtheta = dir * ROT_SPEED_RAD_PER_SEC * dt_sec;
-            let (sz, cz) = (0.5 * dtheta).sin_cos();
-            let qz = [0.0f32, 0.0f32, sz, cz];
+            let (s, c) = (0.5 * dtheta).sin_cos();
+            let q_inc = match roll_axis {
+                RollAxis::X => [s, 0.0f32, 0.0f32, c],
+                RollAxis::Y => [0.0f32, s, 0.0f32, c],
+                RollAxis::Z => [0.0f32, 0.0f32, s, c],
+            };
 
             fn quat_mul(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
                 let (ax, ay, az, aw) = (a[0], a[1], a[2], a[3]);
@@ -69,43 +75,97 @@ impl InputSystem {
                 ]
             }
 
-            // Apply local Z-roll increment.
-            transform.rotation = quat_mul(transform.rotation, qz);
+            // Apply local rotation increment.
+            transform.rotation = quat_mul(transform.rotation, q_inc);
         }
 
-        // Translation delta.
-        let mut dx = 0.0f32;
-        let mut dy = 0.0f32;
-        if w {
-            dy -= 1.0;
-        }
-        if s {
-            dy += 1.0;
-        }
-        if a {
-            dx -= 1.0;
-        }
-        if d {
-            dx += 1.0;
-        }
-
-        // Normalize diagonal movement.
-        let len = (dx * dx + dy * dy).sqrt();
-        if len > 0.0 {
-            dx /= len;
-            dy /= len;
-        }
-
-        // Translate after rotation, in the transform's local (rotated) axes.
         let speed = speed_units_per_sec * dt_sec;
-        let (qz, qw) = (transform.rotation[2], transform.rotation[3]);
-        let theta = 2.0 * qz.atan2(qw);
-        let (sin_theta, cos_theta) = theta.sin_cos();
-        let local_dx = cos_theta * dx - sin_theta * dy;
-        let local_dy = sin_theta * dx + cos_theta * dy;
 
-        transform.translation[0] += local_dx * speed;
-        transform.translation[1] += local_dy * speed;
+        fn quat_conjugate(q: [f32; 4]) -> [f32; 4] {
+            [-q[0], -q[1], -q[2], q[3]]
+        }
+
+        fn quat_rotate_vec3(q: [f32; 4], v: [f32; 3]) -> [f32; 3] {
+            // v' = q * (v,0) * conj(q)
+            fn quat_mul(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
+                let (ax, ay, az, aw) = (a[0], a[1], a[2], a[3]);
+                let (bx, by, bz, bw) = (b[0], b[1], b[2], b[3]);
+                [
+                    aw * bx + ax * bw + ay * bz - az * by,
+                    aw * by - ax * bz + ay * bw + az * bx,
+                    aw * bz + ax * by - ay * bx + az * bw,
+                    aw * bw - ax * bx - ay * by - az * bz,
+                ]
+            }
+
+            let vq = [v[0], v[1], v[2], 0.0f32];
+            let t = quat_mul(q, vq);
+            let r = quat_mul(t, quat_conjugate(q));
+            [r[0], r[1], r[2]]
+        }
+
+        match forward_axis {
+            ForwardAxis::Y => {
+                // Legacy 2D-style translation delta (x/y).
+                let mut dx = 0.0f32;
+                let mut dy = 0.0f32;
+                if w {
+                    dy -= 1.0;
+                }
+                if s {
+                    dy += 1.0;
+                }
+                if a {
+                    dx -= 1.0;
+                }
+                if d {
+                    dx += 1.0;
+                }
+
+                // Normalize diagonal movement.
+                let len = (dx * dx + dy * dy).sqrt();
+                if len > 0.0 {
+                    dx /= len;
+                    dy /= len;
+                }
+
+                // Translate in the transform's local (rotated) axes.
+                let v = quat_rotate_vec3(transform.rotation, [dx, dy, 0.0]);
+                transform.translation[0] += v[0] * speed;
+                transform.translation[1] += v[1] * speed;
+            }
+
+            ForwardAxis::Z => {
+                // 3D-friendly translation delta (x/z). We intentionally do not apply the
+                // current rotation to this movement; it's meant for a camera rig.
+                let mut dx = 0.0f32;
+                let mut dz = 0.0f32;
+                if w {
+                    dz -= 1.0;
+                }
+                if s {
+                    dz += 1.0;
+                }
+                if a {
+                    dx -= 1.0;
+                }
+                if d {
+                    dx += 1.0;
+                }
+
+                // Normalize diagonal movement.
+                let len = (dx * dx + dz * dz).sqrt();
+                if len > 0.0 {
+                    dx /= len;
+                    dz /= len;
+                }
+
+                // Move in the rig's local space (so yaw affects movement).
+                let v = quat_rotate_vec3(transform.rotation, [dx, 0.0, dz]);
+                transform.translation[0] += v[0] * speed;
+                transform.translation[2] += v[2] * speed;
+            }
+        }
 
         transform.recompute_model();
     }
@@ -153,6 +213,18 @@ impl InputSystem {
                     .is_some()
             });
 
+            // Optional mode child.
+            let (forward_axis, roll_axis) = world
+                .children_of(input_cid)
+                .iter()
+                .copied()
+                .find_map(|cid| {
+                    world
+                        .get_component_by_id_as::<InputTransformModeComponent>(cid)
+                        .map(|m| (m.forward_axis, m.roll_axis))
+                })
+                .unwrap_or((ForwardAxis::Y, RollAxis::Z));
+
             let Some(transform_cid) = transform_child else {
                 continue;
             };
@@ -161,6 +233,8 @@ impl InputSystem {
                 world.get_component_by_id_as_mut::<TransformComponent>(transform_cid)
             {
                 self.compute_transform(
+                    forward_axis,
+                    roll_axis,
                     speed_units_per_sec,
                     input,
                     dt_sec,

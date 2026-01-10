@@ -1,5 +1,8 @@
 /// Mesh helpers / basic primitives placeholder.
 
+/// Column-major 4x4 transform matrix.
+pub type TransformMatrix = [[f32; 4]; 4];
+
 /// Minimal transform (placeholder).
 #[derive(Debug, Clone, Copy)]
 pub struct Transform {
@@ -8,7 +11,13 @@ pub struct Transform {
     pub scale: [f32; 3],
 
     /// Cached model matrix (column-major). Keep this in sync with TRS.
-    pub model: [[f32; 4]; 4],
+    pub model: TransformMatrix,
+
+    /// Cached world matrix (column-major).
+    ///
+    /// This is computed/maintained by `TransformSystem` by propagating parent transforms.
+    /// It should be treated as derived runtime state.
+    pub matrix_world: TransformMatrix,
 }
 
 impl Default for Transform {
@@ -16,16 +25,18 @@ impl Default for Transform {
         let translation = [0.0; 3];
         let rotation = [0.0, 0.0, 0.0, 1.0];
         let scale = [1.0; 3];
+        let model = [
+            [scale[0], 0.0, 0.0, 0.0],
+            [0.0, scale[1], 0.0, 0.0],
+            [0.0, 0.0, scale[2], 0.0],
+            [translation[0], translation[1], translation[2], 1.0],
+        ];
         Self {
             translation,
             rotation,
             scale,
-            model: [
-                [scale[0], 0.0, 0.0, 0.0],
-                [0.0, scale[1], 0.0, 0.0],
-                [0.0, 0.0, scale[2], 0.0],
-                [translation[0], translation[1], translation[2], 1.0],
-            ],
+            model,
+            matrix_world: model,
         }
     }
 }

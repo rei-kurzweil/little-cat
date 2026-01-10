@@ -17,7 +17,8 @@ new_key_type! {
 
 // Re-export these so other modules can use `crate::engine::ecs::Transform`
 // and `crate::engine::ecs::Renderable` consistently.
-pub use crate::engine::graphics::primitives::{Renderable, Transform};
+#[allow(unused_imports)]
+pub use crate::engine::graphics::primitives::{Renderable, Transform, TransformMatrix};
 
 pub use command_queue::CommandQueue;
 pub use component_codec::ComponentCodec;

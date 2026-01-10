@@ -2,6 +2,7 @@ use crate::engine::ecs::ComponentId;
 use crate::engine::ecs::Transform;
 use crate::engine::graphics::GpuRenderable;
 use crate::engine::graphics::primitives::InstanceHandle;
+use crate::engine::graphics::primitives::TransformMatrix;
 
 #[derive(Debug, Clone, Copy)]
 pub struct DrawBatch {
@@ -340,9 +341,10 @@ impl VisualWorld {
         }
     }
 
-    pub fn update_model(&mut self, handle: InstanceHandle, model: [[f32; 4]; 4]) -> bool {
+    pub fn update_model(&mut self, handle: InstanceHandle, model: TransformMatrix) -> bool {
         if let Some(&idx) = self.handle_to_index.get(&handle) {
             self.instances[idx].transform.model = model;
+            self.instances[idx].transform.matrix_world = model;
             self.dirty_instance_data = true;
             // model-only doesn’t affect batching by (material, mesh)
             true

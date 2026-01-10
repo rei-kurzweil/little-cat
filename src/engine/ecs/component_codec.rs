@@ -217,6 +217,7 @@ impl ComponentCodec {
             "point_light" => Ok(Box::new(PointLightComponent::new())),
             "uv" => Ok(Box::new(UVComponent::new())),
             "input" => Ok(Box::new(InputComponent::new())),
+            "input_transform_mode" => Ok(Box::new(InputTransformModeComponent::default())),
             _ => Err(format!("Unknown component type: '{}'", type_name)),
         }
     }

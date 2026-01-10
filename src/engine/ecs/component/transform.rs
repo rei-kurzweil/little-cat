@@ -143,6 +143,8 @@ impl Component for TransformComponent {
         if let Some(model) = data.get("model") {
             self.transform.model = serde_json::from_value(model.clone())
                 .map_err(|e| format!("Failed to decode model matrix: {}", e))?;
+            // Keep derived state in a sane starting point; TransformSystem will recompute.
+            self.transform.matrix_world = self.transform.model;
         }
         Ok(())
     }

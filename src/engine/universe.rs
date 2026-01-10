@@ -1,6 +1,6 @@
 use crate::engine::ecs::component::{
-    ColorComponent, InputComponent, PointLightComponent, RenderableComponent, TextureComponent,
-    TransformComponent,
+    Camera3DComponent, ColorComponent, InputComponent, PointLightComponent, RenderableComponent,
+    TextureComponent, TransformComponent,
 };
 use crate::engine::graphics::mesh::MeshFactory;
 use crate::engine::graphics::primitives::MaterialHandle;
@@ -122,8 +122,32 @@ impl Universe {
         }
 
         // Spawn shapes.
-        // One triangle is input-driven (WASD/QE). The point light is attached under the same
-        // transform so it moves with the triangle.
+        // One triangle is input-driven (WASD/QE). Build a small "rig" so both the triangle
+        // and the camera can be driven by the same InputComponent.
+
+        // Topology: Input -> (InputTransformMode) -> RigTransform -> (CameraTransform -> Camera3D), (TriRootTransform -> ...)
+        let tri_input = self
+            .world
+            .add_component(InputComponent::new().with_speed(0.5));
+        let input_mode = self
+            .world
+            .add_component(
+                crate::engine::ecs::component::InputTransformModeComponent::forward_z()
+                    .with_roll_axis_y(),
+            );
+        let _ = self.world.add_child(tri_input, input_mode);
+        let rig_transform = self.world.add_component(TransformComponent::new());
+        let _ = self.world.add_child(tri_input, rig_transform);
+
+        // Put the camera slightly back along +Z, looking down -Z (identity rotation).
+        // This places the 2D demo meshes at z=0 inside a reasonable default 3D frustum.
+        let camera_transform = self
+            .world
+            .add_component(TransformComponent::new().with_position(0.0, 0.0, 2.5));
+        let camera3d = self.world.add_component(Camera3DComponent::new());
+        let _ = self.world.add_child(rig_transform, camera_transform);
+        let _ = self.world.add_child(camera_transform, camera3d);
+
         let tri_root_transform = self
             .world
             .add_component(TransformComponent::new().with_position(0.5, 0.50, 0.0));
@@ -151,6 +175,7 @@ impl Universe {
                 .with_color(1.0, 0.0, 0.0),
         );
 
+        let _ = self.world.add_child(rig_transform, tri_root_transform);
         let _ = self
             .world
             .add_child(tri_root_transform, tri_visual_transform);
@@ -158,10 +183,6 @@ impl Universe {
         let _ = self.world.add_child(tri_renderable, tri_color);
         let _ = self.world.add_child(tri_root_transform, tri_light);
 
-        let tri_input = self
-            .world
-            .add_component(InputComponent::new().with_speed(0.5));
-        let _ = self.world.add_child(tri_input, tri_root_transform);
         self.world
             .init_component_tree(tri_input, &mut self.command_queue);
 
@@ -257,8 +278,7 @@ impl Universe {
         self.world
             .init_component_tree(tex_transform, &mut self.command_queue);
 
-        // NOTE: This demo intentionally does not spawn a camera.
-        // VisualWorld defaults to an identity 2D camera transform.
+        // NOTE: This demo spawns a Camera3D under the input-driven rig.
     }
 
     /// Game/update step

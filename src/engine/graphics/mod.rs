@@ -7,8 +7,10 @@ pub mod visual_world;
 pub mod vulkano_renderer;
 
 pub use mesh::{CpuMesh, CpuVertex, MeshFactory};
+#[allow(unused_imports)]
 pub use primitives::{
     GpuRenderable, Material, MaterialHandle, MeshHandle, Renderable, TextureHandle, Transform,
+    TransformMatrix,
 };
 
 pub use render_assets::RenderAssets;

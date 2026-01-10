@@ -135,6 +135,7 @@ impl RenderableSystem {
             };
             let transform = Transform {
                 model,
+                matrix_world: model,
                 ..Default::default()
             };
 
@@ -337,6 +338,7 @@ impl RenderableSystem {
 
             let transform = Transform {
                 model,
+                matrix_world: model,
                 ..Default::default()
             };
 
