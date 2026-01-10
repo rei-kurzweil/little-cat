@@ -55,7 +55,7 @@ impl InputSystem {
         // Apply rotation first so translation happens "after" rotation.
         if q || e {
             const ROT_SPEED_RAD_PER_SEC: f32 = 1.5;
-            let dir = (e as i32) as f32 - (q as i32) as f32;
+            let dir = (q as i32) as f32 - (e as i32) as f32;
             let dtheta = dir * ROT_SPEED_RAD_PER_SEC * dt_sec;
             let (s, c) = (0.5 * dtheta).sin_cos();
             let q_inc = match roll_axis {

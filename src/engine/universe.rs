@@ -136,17 +136,17 @@ impl Universe {
                     .with_roll_axis_y(),
             );
         let _ = self.world.add_child(tri_input, input_mode);
-        let rig_transform = self.world.add_component(TransformComponent::new());
-        let _ = self.world.add_child(tri_input, rig_transform);
-
-        // Put the camera slightly back along +Z, looking down -Z (identity rotation).
-        // This places the 2D demo meshes at z=0 inside a reasonable default 3D frustum.
-        let camera_transform = self
+        // Start pulled back so the demo meshes at z=0 are in view.
+        // The camera will be attached directly under this transform, so there is no local
+        // camera offset that would cause orbiting when yawing.
+        let rig_transform = self
             .world
             .add_component(TransformComponent::new().with_position(0.0, 0.0, 2.5));
+        let _ = self.world.add_child(tri_input, rig_transform);
+
+        // Camera: attached directly to the rig transform.
         let camera3d = self.world.add_component(Camera3DComponent::new());
-        let _ = self.world.add_child(rig_transform, camera_transform);
-        let _ = self.world.add_child(camera_transform, camera3d);
+        let _ = self.world.add_child(rig_transform, camera3d);
 
         let tri_root_transform = self
             .world
