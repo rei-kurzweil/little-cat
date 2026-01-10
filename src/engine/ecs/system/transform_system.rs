@@ -1,6 +1,8 @@
 use crate::engine::ecs::ComponentId;
 use crate::engine::ecs::World;
-use crate::engine::ecs::component::{Camera2DComponent, RenderableComponent, TransformComponent};
+use crate::engine::ecs::component::{
+    Camera2DComponent, Camera3DComponent, RenderableComponent, TransformComponent,
+};
 use crate::engine::ecs::system::System;
 use crate::engine::graphics::VisualWorld;
 use crate::engine::user_input::InputState;
@@ -76,19 +78,8 @@ impl TransformSystem {
         camera_system: &mut crate::engine::ecs::system::CameraSystem,
         light_system: &mut crate::engine::ecs::system::LightSystem,
     ) {
-        // If this transform has a Camera2D child, update camera translation.
-        if let Some(camera2d_cid) = world.children_of(component).iter().copied().find(|&cid| {
-            world
-                .get_component_by_id_as::<Camera2DComponent>(cid)
-                .is_some()
-        }) {
-            camera_system.update_camera_2d_from_parent_transform(
-                world,
-                visuals,
-                camera2d_cid,
-                component,
-            );
-        }
+        // If this transform changed, any cameras under it may need their view recomputed.
+        // We'll discover them during the subtree walk below.
 
         // If any point lights live under this transform, update their world-space position.
         light_system.transform_changed(world, visuals, component);
@@ -98,6 +89,31 @@ impl TransformSystem {
         while let Some(node) = stack.pop() {
             for &child in world.children_of(node) {
                 stack.push(child);
+
+                // If `node` is a TransformComponent and it directly parents a camera component,
+                // update that camera (the update methods themselves guard on active handle).
+                if world
+                    .get_component_by_id_as::<TransformComponent>(node)
+                    .is_some()
+                {
+                    if world
+                        .get_component_by_id_as::<Camera2DComponent>(child)
+                        .is_some()
+                    {
+                        camera_system.update_camera_2d_from_parent_transform(
+                            world, visuals, child, node,
+                        );
+                    }
+
+                    if world
+                        .get_component_by_id_as::<Camera3DComponent>(child)
+                        .is_some()
+                    {
+                        camera_system.update_camera_3d_from_parent_transform(
+                            world, visuals, child, node,
+                        );
+                    }
+                }
 
                 if world
                     .get_component_by_id_as::<RenderableComponent>(child)

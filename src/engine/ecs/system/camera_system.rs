@@ -373,7 +373,7 @@ fn invert_affine_transform(m: &[[f32; 4]; 4]) -> [[f32; 4]; 4] {
 impl System for CameraSystem {
     fn tick(
         &mut self,
-        world: &mut World,
+        _world: &mut World,
         visuals: &mut VisualWorld,
         _input: &crate::engine::user_input::InputState,
         _dt_sec: f32,
@@ -382,57 +382,50 @@ impl System for CameraSystem {
         let prev_vp = self.last_viewport;
         self.last_viewport = Some(vp);
 
+        // If the viewport changed, projections that depend on aspect ratio may need updating.
+        // View matrices are updated event-driven via TransformSystem::transform_changed.
+        let viewport_changed = prev_vp != Some(vp);
+
+        if !viewport_changed {
+            return;
+        }
+
         let Some(active_handle) = self.active_camera else {
             // No camera in the scene: keep the legacy behavior where 2D content is aspect-correct.
             // Previously this was done in the vertex shader via `ubo.viewport`.
-            if prev_vp != Some(vp) {
+            let inv_aspect = if vp[0] > 0.0 { vp[1] / vp[0] } else { 1.0 };
+            let view = Camera3D::identity().view;
+            let proj = [
+                [inv_aspect, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ];
+            visuals.set_camera(view, proj);
+            return;
+        };
+
+        // View is already up-to-date via TransformSystem; on resize we only need to refresh proj.
+        let Some((_, cam)) = self.cameras.iter_mut().find(|(ch, _)| *ch == active_handle) else {
+            return;
+        };
+
+        match cam {
+            AnyCamera::Camera2D(cam2d) => {
                 let inv_aspect = if vp[0] > 0.0 { vp[1] / vp[0] } else { 1.0 };
-                let view = Camera3D::identity().view;
-                let proj = [
+                cam2d.proj = [
                     [inv_aspect, 0.0, 0.0, 0.0],
                     [0.0, 1.0, 0.0, 0.0],
                     [0.0, 0.0, 1.0, 0.0],
                     [0.0, 0.0, 0.0, 1.0],
                 ];
-                visuals.set_camera(view, proj);
+                visuals.set_camera(cam2d.view, cam2d.proj);
             }
-            return;
-        };
-
-        // Camera2D: driven by parent TransformComponent, producing a mat4 view/proj.
-        if let Some(camera2d_component_id) = self.camera2d_components.get(&active_handle) {
-            let Some(parent) = world.parent_of(*camera2d_component_id) else {
-                return;
-            };
-            if world
-                .get_component_by_id_as::<crate::engine::ecs::component::TransformComponent>(parent)
-                .is_some()
-            {
-                self.update_camera_2d_from_parent_transform(
-                    world,
-                    visuals,
-                    *camera2d_component_id,
-                    parent,
-                );
-                return;
-            }
-        }
-
-        // Camera3D: driven by parent TransformComponent as camera pose.
-        if let Some(camera3d_component_id) = self.camera3d_components.get(&active_handle) {
-            let Some(parent) = world.parent_of(*camera3d_component_id) else {
-                return;
-            };
-            if world
-                .get_component_by_id_as::<crate::engine::ecs::component::TransformComponent>(parent)
-                .is_some()
-            {
-                self.update_camera_3d_from_parent_transform(
-                    world,
-                    visuals,
-                    *camera3d_component_id,
-                    parent,
-                );
+            AnyCamera::Camera3D(cam3d) => {
+                let aspect = if vp[1] > 0.0 { vp[0] / vp[1] } else { 1.0 };
+                cam3d.proj =
+                    Camera3D::perspective_rh_zo(60.0_f32.to_radians(), aspect, 0.1, 100.0);
+                visuals.set_camera(cam3d.view, cam3d.proj);
             }
         }
     }
