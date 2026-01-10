@@ -604,6 +604,10 @@ mod vulkano_backend {
                 ..Default::default()
             };
 
+            // Keep VisualWorld informed of the current output size so camera systems can
+            // build aspect-correct projection matrices.
+            visual_world.set_viewport([extent[0] as f32, extent[1] as f32]);
+
             // Camera uniform buffer (set=0, binding=0).
             // `camera2d` currently feeds the 2D path directly; we also pass the current
             // swapchain extent so shaders can correct for aspect ratio.

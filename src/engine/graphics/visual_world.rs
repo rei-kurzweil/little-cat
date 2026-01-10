@@ -23,6 +23,8 @@ pub struct VisualWorld {
     // Active camera state (owned by CameraSystem, mirrored here for renderer snapshot).
     camera_view: [[f32; 4]; 4],
     camera_proj: [[f32; 4]; 4],
+    // Most recent render target size in pixels (width, height).
+    viewport: [f32; 2],
     // 2D camera view transform for translation/scale/rotation.
     // Stored as mat3 column vectors padded to vec4 columns (std140 friendly).
     camera_2d: [[f32; 4]; 3],
@@ -70,6 +72,7 @@ impl Default for VisualWorld {
                 [0.0, 0.0, 1.0, 0.0],
                 [0.0, 0.0, 0.0, 1.0],
             ],
+            viewport: [1.0, 1.0],
             camera_2d: [
                 [1.0, 0.0, 0.0, 0.0],
                 [0.0, 1.0, 0.0, 0.0],
@@ -160,6 +163,14 @@ impl VisualWorld {
 
     pub fn camera_proj(&self) -> [[f32; 4]; 4] {
         self.camera_proj
+    }
+
+    pub fn viewport(&self) -> [f32; 2] {
+        self.viewport
+    }
+
+    pub fn set_viewport(&mut self, viewport: [f32; 2]) {
+        self.viewport = viewport;
     }
 
     pub fn camera_2d(&self) -> [[f32; 4]; 3] {

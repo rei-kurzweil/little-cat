@@ -60,11 +60,17 @@ impl Universe {
         &mut self,
         window: &Arc<Window>,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        let size = window.inner_size();
+        self.visuals
+            .set_viewport([size.width as f32, size.height as f32]);
+
         self.renderer.init_for_window(window)
     }
 
     /// Resize the renderer when the window is resized.
     pub fn resize_renderer(&mut self, size: winit::dpi::PhysicalSize<u32>) {
+        self.visuals
+            .set_viewport([size.width as f32, size.height as f32]);
         self.renderer.resize(size);
     }
 

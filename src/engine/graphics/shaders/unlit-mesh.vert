@@ -13,8 +13,7 @@ layout(location = 3) in vec4 i_model_c2;
 layout(location = 4) in vec4 i_model_c3;
 
 // Uniform buffer: camera data comes from set=0,binding=0.
-// For this debug mode we do *not* use view/proj yet; we use camera2d (mat3) as a 2D camera view transform.
-// NOTE: This vertex shader is NOT Camera3D-ready yet. It ignores `view`/`proj` and emits clip-space-ish XY.
+// Unified camera path: clip = proj * view * world.
 layout(set = 0, binding = 0) uniform CameraUBO {
     mat4 view;
     mat4 proj;
@@ -28,12 +27,5 @@ void main() {
 
     vec4 world = model * vec4(in_pos, 1.0);
 
-    // Baseline clip-space projection just to see the scene.
-    // NOTE: we intentionally ignore Z so objects at z=-2 remain visible.
-    // Apply 2D camera view transform.
-    vec3 cam2d = ubo.camera2d * vec3(world.xy, 1.0);
-    // Aspect-correct clip-space so a unit in X matches a unit in Y.
-    // Scale X by (height/width) so circles don't become ellipses.
-    float inv_aspect = (ubo.viewport.x > 0.0) ? (ubo.viewport.y / ubo.viewport.x) : 1.0;
-    gl_Position = vec4(cam2d.x * inv_aspect, cam2d.y, 0.0, 1.0);
+    gl_Position = ubo.proj * ubo.view * world;
 }
