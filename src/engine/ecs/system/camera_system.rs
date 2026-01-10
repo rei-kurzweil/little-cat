@@ -100,7 +100,7 @@ pub struct CameraSystem {
     camera3d_components: std::collections::HashMap<CameraHandle, ComponentId>,
     pub active_camera: Option<CameraHandle>,
 
-    // Debug: print viewport when it changes.
+    // Track viewport changes for the no-camera fallback projection.
     last_viewport: Option<[f32; 2]>,
 }
 
@@ -255,6 +255,59 @@ impl CameraSystem {
             AnyCamera::Camera2D(cam2d) => Some((cam2d.view, cam2d.proj)),
         }
     }
+
+    /// Update Camera3D view/proj from the component tree.
+    ///
+    /// `camera3d_component_id` should be the Camera3DComponent, whose parent is typically a TransformComponent.
+    pub fn update_camera_3d_from_parent_transform(
+        &mut self,
+        world: &World,
+        visuals: &mut VisualWorld,
+        camera3d_component_id: ComponentId,
+        transform_component_id: ComponentId,
+    ) {
+        let Some(camera3d_comp) = world
+            .get_component_by_id_as::<crate::engine::ecs::component::Camera3DComponent>(
+                camera3d_component_id,
+            )
+        else {
+            return;
+        };
+
+        if let Some(handle) = camera3d_comp.handle {
+            if self.active_camera == Some(handle) {
+                // Maintain the old call sites' contract: ensure the provided parent really is a Transform.
+                if world
+                    .get_component_by_id_as::<crate::engine::ecs::component::TransformComponent>(
+                        transform_component_id,
+                    )
+                    .is_none()
+                {
+                    return;
+                }
+
+                // Use the full accumulated world model for the camera component so nested transforms work.
+                let model = TransformSystem::world_model(world, camera3d_component_id)
+                    .unwrap_or_else(|| Camera3D::identity().view);
+                let view = invert_affine_transform(&model);
+
+                let vp = visuals.viewport();
+                let aspect = if vp[1] > 0.0 { vp[0] / vp[1] } else { 1.0 };
+                let proj =
+                    Camera3D::perspective_rh_zo(60.0_f32.to_radians(), aspect, 0.1, 100.0);
+
+                // Persist into the camera registry so switching cameras updates visuals immediately.
+                if let Some((_, AnyCamera::Camera3D(cam3d))) =
+                    self.cameras.iter_mut().find(|(ch, _)| *ch == handle)
+                {
+                    cam3d.view = view;
+                    cam3d.proj = proj;
+                }
+
+                visuals.set_camera(view, proj);
+            }
+        }
+    }
 }
 
 /// Invert an affine 4x4 transform matrix (upper 3x3 + translation).
@@ -327,10 +380,7 @@ impl System for CameraSystem {
     ) {
         let vp = visuals.viewport();
         let prev_vp = self.last_viewport;
-        if self.last_viewport != Some(vp) {
-            println!("[CameraSystem] visuals.viewport = {:?}", vp);
-            self.last_viewport = Some(vp);
-        }
+        self.last_viewport = Some(vp);
 
         let Some(active_handle) = self.active_camera else {
             // No camera in the scene: keep the legacy behavior where 2D content is aspect-correct.
@@ -377,24 +427,12 @@ impl System for CameraSystem {
                 .get_component_by_id_as::<crate::engine::ecs::component::TransformComponent>(parent)
                 .is_some()
             {
-                let model = TransformSystem::world_model(world, *camera3d_component_id)
-                    .unwrap_or_else(|| Camera3D::identity().view);
-                let view = invert_affine_transform(&model);
-
-                let vp = visuals.viewport();
-                let aspect = if vp[1] > 0.0 { vp[0] / vp[1] } else { 1.0 };
-                let proj = Camera3D::perspective_rh_zo(60.0_f32.to_radians(), aspect, 0.1, 100.0);
-
-                if let Some((_, AnyCamera::Camera3D(cam3d))) = self
-                    .cameras
-                    .iter_mut()
-                    .find(|(ch, _)| *ch == active_handle)
-                {
-                    cam3d.view = view;
-                    cam3d.proj = proj;
-                }
-
-                visuals.set_camera(view, proj);
+                self.update_camera_3d_from_parent_transform(
+                    world,
+                    visuals,
+                    *camera3d_component_id,
+                    parent,
+                );
             }
         }
     }
