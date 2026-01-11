@@ -9,7 +9,8 @@ set -euo pipefail
 # - Vulkan environment is requested so we can use Vulkan GLSL features.
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-OUT_DIR="$SCRIPT_DIR/spv"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." >/dev/null 2>&1 && pwd)"
+OUT_DIR="$REPO_ROOT/assets/spv"
 
 mkdir -p "$OUT_DIR"
 

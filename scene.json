@@ -541,7 +541,7 @@
               "name": "texture",
               "type_name": "texture",
               "data": {
-                "uri": "assets/cat-face-neutral.png"
+                "uri": "assets/images/cat-face-neutral.png"
               },
               "components": []
             }

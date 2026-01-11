@@ -85,7 +85,7 @@ InputComponent {
   + Supplies UVs for a mesh so shaders can sample textures.
 
 + TextureComponent
-  + References a texture by `uri` (e.g. `"assets/cat-face-neutral.png"`).
+  + References a texture by `uri` (e.g. `"assets/images/cat-face-neutral.png"`).
   + Loaded/decoded via the `image` crate and uploaded to the GPU.
   + Textures are deduplicated by `uri` (multiple components can share the same GPU texture).
   + Texture affects batching: draw calls are grouped by (material, mesh, texture).

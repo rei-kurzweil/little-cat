@@ -1,12 +1,14 @@
-use crate::engine::ecs::component::{RenderableComponent, TextureComponent};
+use crate::engine::ecs::component::{CatEngineTextureFormat, RenderableComponent, TextureComponent};
 use crate::engine::ecs::{ComponentId, World};
 use crate::engine::graphics::{TextureHandle, TextureUploader, VisualWorld};
 use std::collections::HashMap;
+use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
 struct TextureRecord {
     uri: String,
+    format: CatEngineTextureFormat,
     gpu: Option<TextureHandle>,
 }
 
@@ -37,6 +39,7 @@ impl TextureSystem {
             .entry(component)
             .or_insert_with(|| TextureRecord {
                 uri: tex_comp.uri.clone(),
+                format: tex_comp.format,
                 gpu: None,
             });
 
@@ -152,24 +155,50 @@ impl TextureSystem {
                         }
                     };
 
-                    let dyn_img = match image::load_from_memory(&bytes) {
-                        Ok(i) => i,
-                        Err(e) => {
-                            println!("[TextureSystem] decode failed for '{uri}': {:?}", e);
-                            let _ = self.pending_attach.remove(&renderable_cid);
-                            continue;
+                    let handle = match record.format {
+                        CatEngineTextureFormat::DdsBc7 => {
+                        match decode_dds_bc7(&bytes) {
+                            Ok(decoded) => match uploader.upload_texture_bc7(
+                                &decoded.bc7_blocks,
+                                decoded.width,
+                                decoded.height,
+                                decoded.srgb,
+                            ) {
+                                Ok(h) => h,
+                                Err(e) => {
+                                    println!("[TextureSystem] BC7 upload failed for '{uri}': {:?}", e);
+                                    let _ = self.pending_attach.remove(&renderable_cid);
+                                    continue;
+                                }
+                            },
+                            Err(e) => {
+                                println!("[TextureSystem] DDS/BC7 decode failed for '{uri}': {e}");
+                                let _ = self.pending_attach.remove(&renderable_cid);
+                                continue;
+                            }
                         }
-                    };
+                        }
+                        CatEngineTextureFormat::Rgba8 => {
+                        let dyn_img = match image::load_from_memory(&bytes) {
+                            Ok(i) => i,
+                            Err(e) => {
+                                println!("[TextureSystem] decode failed for '{uri}': {:?}", e);
+                                let _ = self.pending_attach.remove(&renderable_cid);
+                                continue;
+                            }
+                        };
 
-                    let rgba = dyn_img.to_rgba8();
-                    let (w, h) = rgba.dimensions();
+                        let rgba = dyn_img.to_rgba8();
+                        let (w, h) = rgba.dimensions();
 
-                    let handle = match uploader.upload_texture_rgba8(rgba.as_raw(), w, h) {
-                        Ok(h) => h,
-                        Err(e) => {
-                            println!("[TextureSystem] upload failed for '{uri}': {:?}", e);
-                            let _ = self.pending_attach.remove(&renderable_cid);
-                            continue;
+                        match uploader.upload_texture_rgba8(rgba.as_raw(), w, h) {
+                            Ok(h) => h,
+                            Err(e) => {
+                                println!("[TextureSystem] upload failed for '{uri}': {:?}", e);
+                                let _ = self.pending_attach.remove(&renderable_cid);
+                                continue;
+                            }
+                        }
                         }
                     };
 
@@ -183,4 +212,58 @@ impl TextureSystem {
             let _ = self.pending_attach.remove(&renderable_cid);
         }
     }
+}
+
+struct Bc7Decoded {
+    width: u32,
+    height: u32,
+    srgb: bool,
+    bc7_blocks: Vec<u8>,
+}
+
+fn decode_dds_bc7(bytes: &[u8]) -> Result<Bc7Decoded, String> {
+    let mut cursor = Cursor::new(bytes);
+    let dds = ddsfile::Dds::read(&mut cursor).map_err(|e| format!("{e:?}"))?;
+
+    let width = dds.get_width();
+    let height = dds.get_height();
+    if width == 0 || height == 0 {
+        return Err("DDS has zero size".to_string());
+    }
+
+    let dxgi = dds
+        .get_dxgi_format()
+        .ok_or_else(|| "DDS missing DXGI format (need BC7 in DX10 header)".to_string())?;
+
+    let srgb = match dxgi {
+        ddsfile::DxgiFormat::BC7_UNorm => false,
+        ddsfile::DxgiFormat::BC7_UNorm_sRGB => true,
+        other => {
+            return Err(format!("DDS is not BC7 (got {other:?})"));
+        }
+    };
+
+    let data: &[u8] = dds.data.as_ref();
+    if data.is_empty() {
+        return Err("DDS contains no data".to_string());
+    }
+
+    // We only use the top mip for now.
+    let blocks_w = (width + 3) / 4;
+    let blocks_h = (height + 3) / 4;
+    let expected_len = blocks_w as usize * blocks_h as usize * 16;
+    if data.len() < expected_len {
+        return Err(format!(
+            "DDS data too small for BC7 level 0: got={}, need={}",
+            data.len(),
+            expected_len
+        ));
+    }
+
+    Ok(Bc7Decoded {
+        width,
+        height,
+        srgb,
+        bc7_blocks: data[..expected_len].to_vec(),
+    })
 }

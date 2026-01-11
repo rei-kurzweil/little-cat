@@ -16,7 +16,7 @@ pub use input::InputComponent;
 pub use input_transform_mode::{ForwardAxis, InputTransformModeComponent, RollAxis};
 pub use point_light::PointLightComponent;
 pub use renderable::RenderableComponent;
-pub use texture::TextureComponent;
+pub use texture::{CatEngineTextureFormat, TextureComponent};
 pub use transform::TransformComponent;
 pub use uv::UVComponent;
 

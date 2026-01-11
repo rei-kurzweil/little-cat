@@ -194,14 +194,14 @@ pub struct Material {
 impl Material {
     /// Unlit material intended for normal mesh rendering (vertex/index buffers + transforms).
     pub const UNLIT_MESH: Material = Material {
-        vertex_shader: "engine/graphics/shaders/unlit-mesh.vert",
-        fragment_shader: "engine/graphics/shaders/unlit-mesh.frag",
+        vertex_shader: "assets/shaders/unlit-mesh.vert",
+        fragment_shader: "assets/shaders/unlit-mesh.frag",
     };
 
     /// Toon material used by the Vulkano renderer bring-up pipeline.
     pub const TOON_MESH: Material = Material {
-        vertex_shader: "engine/graphics/shaders/toon-mesh.vert",
-        fragment_shader: "engine/graphics/shaders/toon-mesh.frag",
+        vertex_shader: "assets/shaders/toon-mesh.vert",
+        fragment_shader: "assets/shaders/toon-mesh.frag",
     };
 }
 

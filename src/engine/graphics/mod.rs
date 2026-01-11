@@ -35,6 +35,14 @@ pub trait TextureUploader {
         width: u32,
         height: u32,
     ) -> Result<TextureHandle, Box<dyn std::error::Error>>;
+
+    fn upload_texture_bc7(
+        &mut self,
+        bc7_blocks: &[u8],
+        width: u32,
+        height: u32,
+        srgb: bool,
+    ) -> Result<TextureHandle, Box<dyn std::error::Error>>;
 }
 
 /// Convenience super-trait for types that can upload both meshes and textures.

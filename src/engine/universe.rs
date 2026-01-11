@@ -270,7 +270,7 @@ impl Universe {
             .add_component(ColorComponent::rgba(1.0, 1.0, 1.0, 1.0));
         let tex = self
             .world
-            .add_component(TextureComponent::from_png("assets/cat-face-neutral.png"));
+            .add_component(TextureComponent::from_dds("assets/textures/cat-face-amused.dds"));
 
         let _ = self.world.add_child(tex_transform, tex_renderable);
         let _ = self.world.add_child(tex_renderable, tex_color);
