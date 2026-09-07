@@ -63,7 +63,7 @@ This is easy to misuse because both APIs appear to "attach a child", but only on
 
 - [src/engine/ecs/mod.rs](../../src/engine/ecs/mod.rs)
 - [src/engine/universe.rs](../../src/engine/universe.rs)
-- [src/engine/ecs/rx/intent_executor.rs](../../src/engine/ecs/rx/intent_executor.rs)
+- [src/engine/ecs/signals/intent_executor.rs](../../src/engine/ecs/signals/intent_executor.rs)
 - [src/engine/ecs/system/router_system.rs](../../src/engine/ecs/system/router_system.rs)
 - [src/engine/ecs/system/inspector_system_stopgap_mms_adapter.rs](../../src/engine/ecs/system/inspector_system_stopgap_mms_adapter.rs)
 

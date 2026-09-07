@@ -71,7 +71,7 @@ runtime_ui_root   ← shared scope for DataEvent signals
 
 #### 1. New EventSignal variant
 
-Add to `src/engine/ecs/rx/signal.rs`:
+Add to `src/engine/ecs/signals/signal.rs`:
 
 ```rust
 /// A named data event for cross-subtree communication.

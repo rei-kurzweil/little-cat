@@ -1220,9 +1220,10 @@ impl SystemWorld {
 
         let mut processed = 0usize;
 
-        let mut intent_executor = crate::engine::ecs::rx::RxIntentExecutor::default();
-        let mut mutation_executor = crate::engine::ecs::rx::RxMutationExecutor::default();
-        let mut pipeline_processor = crate::engine::ecs::rx::SignalPipelineProcessor::default();
+        let mut intent_executor = crate::engine::ecs::signals::RxIntentExecutor::default();
+        let mut mutation_executor = crate::engine::ecs::signals::RxMutationExecutor::default();
+        let mut pipeline_processor =
+            crate::engine::ecs::signals::SignalPipelineProcessor::default();
 
         // Drain locally-queued signals into `RxWorld` before we start.
         let _ = queue.drain_into_rx(&mut self.rx);
@@ -1276,7 +1277,7 @@ impl SystemWorld {
                         continue;
                     };
 
-                    if crate::engine::ecs::rx::RxIntentExecutor::handles_value(&intent.value) {
+                    if crate::engine::ecs::signals::RxIntentExecutor::handles_value(&intent.value) {
                         // Emit follow-up intent work directly into the per-frame queue to avoid
                         // borrowing `self.rx` while also mutably borrowing `self`.
                         intent_executor.execute(world, render_assets, queue, &env);

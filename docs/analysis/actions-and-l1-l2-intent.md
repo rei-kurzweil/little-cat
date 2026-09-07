@@ -71,8 +71,8 @@ This is a code-organization tactic, not a semantic promise.
 
 ## Immediate refactor plan
 
-1) Move intent interpreter logic currently living in `ecs/system/action_system.rs` into `ecs/rx` (near `RxIntentExecutor`).
-2) Move low-level mutation execution currently in `SystemWorld::execute_intent_signal` into `ecs/rx` as a `MutationExecutor`.
+1) Move intent interpreter logic currently living in `ecs/system/action_system.rs` into `ecs/signals` (near `RxIntentExecutor`).
+2) Move low-level mutation execution currently in `SystemWorld::execute_intent_signal` into `ecs/signals` as a `MutationExecutor`.
 3) Reduce `ecs/system/action_system.rs` to only ActionComponent lifecycle:
    - `RegisterAction` intent
    - auto-fire rules (skip if under `KeyFrameComponent`)

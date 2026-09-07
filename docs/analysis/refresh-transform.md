@@ -44,7 +44,7 @@ That expectation breaks once recipient routing can change *which* component rece
 
 ## Where `UpdateTransformWorld` is used / emitted
 ### Emitted
-- [src/engine/ecs/rx/intent_executor.rs](../../src/engine/ecs/rx/intent_executor.rs)
+- [src/engine/ecs/signals/intent_executor.rs](../../src/engine/ecs/signals/intent_executor.rs)
   - `emit_topology_transform_refresh(...)` emits `IntentValue::UpdateTransformWorld { component_ids: vec![...] }`
   - Called after topology-changing operations:
     - `Attach`
@@ -53,16 +53,16 @@ That expectation breaks once recipient routing can change *which* component rece
     - child removals (`RemoveChild`, `RemoveChildren`) where refresh is triggered (refreshes the parent)
 
 ### Executed
-- [src/engine/ecs/rx/mutation_executor.rs](../../src/engine/ecs/rx/mutation_executor.rs)
+- [src/engine/ecs/signals/mutation_executor.rs](../../src/engine/ecs/signals/mutation_executor.rs)
   - `IntentValue::UpdateTransformWorld { component_ids }` => `systems.transform_changed(...)`
 
 ### Defined / named
-- [src/engine/ecs/rx/signal.rs](../../src/engine/ecs/rx/signal.rs)
+- [src/engine/ecs/signals/signal.rs](../../src/engine/ecs/signals/signal.rs)
   - `IntentValue::UpdateTransformWorld { component_ids }`
   - `kind_name()` maps it to `"update_transform_world"`
 
 ### Explicitly non-routable
-- [src/engine/ecs/rx/signal_pipeline_processor.rs](../../src/engine/ecs/rx/signal_pipeline_processor.rs)
+- [src/engine/ecs/signals/signal_pipeline_processor.rs](../../src/engine/ecs/signals/signal_pipeline_processor.rs)
   - `recipient_component_ids(_mut)` returns `None` for `UpdateTransformWorld` so routing never rewrites it.
 
 ## What counts as “transform-derived caches”

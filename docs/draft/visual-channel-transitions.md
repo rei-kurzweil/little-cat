@@ -76,7 +76,7 @@ Relevant implementation points:
   transitions
 - `src/engine/ecs/system/system_world.rs` checks for a child
   `TransitionComponent` on transform updates and upgrades the mutation
-- `src/engine/ecs/rx/signal.rs` defines `SetColor` and `SetEmissiveIntensity`
+- `src/engine/ecs/signals/signal.rs` defines `SetColor` and `SetEmissiveIntensity`
 - `SetColor` mutates `ColorComponent` immediately via the intent executor
 - `SetEmissiveIntensity` mutates `EmissiveComponent` immediately via the
   mutation executor

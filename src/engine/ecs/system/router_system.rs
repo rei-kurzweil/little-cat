@@ -1,5 +1,5 @@
 use crate::engine::ecs::component::{RouterComponent, TransformComponent};
-use crate::engine::ecs::rx::RxWorld;
+use crate::engine::ecs::signals::RxWorld;
 use crate::engine::ecs::{ComponentId, EventSignal, IntentValue, SignalEmitter, SignalKind, World};
 use std::collections::HashSet;
 

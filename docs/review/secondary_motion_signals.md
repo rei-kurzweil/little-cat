@@ -199,8 +199,8 @@ then returns dirty imported-transform roots for synchronous propagation before s
 ## Useful code entry points
 
 - [secondary-motion component lifecycle](../../src/engine/ecs/component/secondary_motion.rs)
-- [signal definitions](../../src/engine/ecs/rx/signal.rs)
-- [mutation executor dispatch](../../src/engine/ecs/rx/mutation_executor.rs)
+- [signal definitions](../../src/engine/ecs/signals/signal.rs)
+- [mutation executor dispatch](../../src/engine/ecs/signals/mutation_executor.rs)
 - [retained runtime and global handlers](../../src/engine/ecs/system/secondary_motion_system.rs)
 - [subtree cleanup and frame ordering](../../src/engine/ecs/system/system_world.rs)
 - [secondary-motion architecture specification](../spec/secondary_motion_system.md)

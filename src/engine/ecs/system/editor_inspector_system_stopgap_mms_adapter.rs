@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use crate::engine::ecs::component::{
     EditorPanel, EditorUIComponent, EditorUIPanelSpec, SelectionEntry,
 };
-use crate::engine::ecs::rx::RxWorld;
+use crate::engine::ecs::signals::RxWorld;
 use crate::engine::ecs::system::GridSystem;
 use crate::engine::ecs::system::data_renderer_system::DataRendererSystem;
 use crate::engine::ecs::system::editor::context::EditorContextState;
@@ -1181,7 +1181,7 @@ mod tests {
         PoseCaptureLibraryComponent, RenderableComponent, SelectionComponent, SelectionEntry,
         SelectionMode, SignalObserverRouterComponent, TextComponent, TransformComponent,
     };
-    use crate::engine::ecs::rx::Signal;
+    use crate::engine::ecs::signals::Signal;
     use crate::engine::ecs::system::editor::world_panel::WORLD_PANEL_PAYLOAD_NAME;
     #[test]
     fn editor_selection_event_activates_armature_marker_pose_library_and_rerenders_panel() {

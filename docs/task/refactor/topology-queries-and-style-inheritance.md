@@ -39,7 +39,7 @@ Examples:
 
 - Signal routing:
   - `RxWorld::compute_scope_chain`: walk ancestors to dispatch scoped handlers.
-  - File: `src/engine/ecs/rx/rx_world.rs`
+  - File: `src/engine/ecs/signals/rx_world.rs`
 
 ### 2) “Immediate child style override” + ancestor fallback
 
@@ -68,11 +68,11 @@ Examples:
 - `RxIntentExecutor` uses `collect_*_targets` helpers:
   - `collect_color_targets`, `collect_transform_targets`, `collect_raycast_targets`, …
   - These are variations of “if target is X, use it, else DFS subtree to find X (or first-X-per-branch)”.
-  - File: `src/engine/ecs/rx/intent_executor.rs`
+  - File: `src/engine/ecs/signals/intent_executor.rs`
 
 - `RxMutationExecutor`:
   - `collect_text_targets` duplicates the pattern.
-  - File: `src/engine/ecs/rx/mutation_executor.rs`
+  - File: `src/engine/ecs/signals/mutation_executor.rs`
 
 ### 5) Text styling inheritance is special-cased
 

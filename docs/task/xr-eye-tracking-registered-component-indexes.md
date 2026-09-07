@@ -241,6 +241,6 @@ discovery does not require a world scan.
 - `src/engine/ecs/component/xr_eye_tracking.rs`
 - `src/engine/ecs/system/xr_eye_tracking_system.rs`
 - `src/engine/ecs/system/system_world.rs`
-- `src/engine/ecs/rx/signal.rs`
-- `src/engine/ecs/rx/mutation_executor.rs`
+- `src/engine/ecs/signals/signal.rs`
+- `src/engine/ecs/signals/mutation_executor.rs`
 - eye-tracking lifecycle and performance tests

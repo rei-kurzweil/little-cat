@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use crate::engine::ecs::rx::RxWorld;
+use crate::engine::ecs::signals::RxWorld;
 use crate::engine::ecs::system::editor::context::EditorContextState;
 use crate::engine::ecs::system::editor_inspector_system_stopgap_mms_adapter::EditorInspectorSystemStopgapMmsAdapter;
 use crate::engine::ecs::{ComponentId, SignalEmitter, World};

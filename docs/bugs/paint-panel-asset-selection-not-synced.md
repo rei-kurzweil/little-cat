@@ -15,7 +15,7 @@ won't fire until the next frame.
 
 - `src/engine/ecs/system/editor_paint_system.rs:121-158` — bridge `SelectionChanged` handler at
   `panel_query_root`
-- `src/engine/ecs/rx/rx_world.rs:203-206` — `begin_frame()` promotes `deferred_events` to
+- `src/engine/ecs/signals/rx_world.rs:203-206` — `begin_frame()` promotes `deferred_events` to
   `ready_events`
 - `src/engine/ecs/system/selection_system.rs:399-462` — `emit_selection_events()` emits
   `SelectionChanged` via whatever `emit` is provided

@@ -1554,7 +1554,7 @@ pub(crate) fn focus_panel_from_descendant_click(
 mod tests {
     use super::*;
     use crate::engine::ecs::component::{SelectionComponent, TransformComponent};
-    use crate::engine::ecs::rx::IntentSignal;
+    use crate::engine::ecs::signals::IntentSignal;
 
     #[derive(Default)]
     struct TestEmitter {

@@ -259,7 +259,7 @@ Between Step 1 completion and Step 7 completion:
 | `src/engine/ecs/component/*.rs` | Remove old impls; add `encode_mms`/`clone_box` per component |
 | `src/meow_meow/component_registry.rs` | Add `guid` handling in `apply_named_assignment` |
 | `src/engine/ecs/mod.rs` | Remove codec re-exports |
-| `src/engine/ecs/rx/intent_executor.rs` | Replace `AttachClone` codec path with tree-walk clone |
+| `src/engine/ecs/signals/intent_executor.rs` | Replace `AttachClone` codec path with tree-walk clone |
 | `src/engine/universe.rs` | `attach_clone` delegates to new tree-walk clone |
 | `src/main.rs` | Replace `decode_scene`/`encode_scene` with MMS runner + emitter |
 | `src/engine/repl/repl_backend.rs` | Replace `encode_subtree_node` with `encode_subtree_mms` |

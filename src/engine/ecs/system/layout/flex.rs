@@ -543,7 +543,7 @@ fn immediate_owned_scroll_wrapper(world: &World, tc_id: ComponentId) -> Option<C
 mod tests {
     use super::*;
     use crate::engine::ecs::component::LayoutComponent;
-    use crate::engine::ecs::rx::{EventSignal, IntentValue};
+    use crate::engine::ecs::signals::{EventSignal, IntentValue};
     use crate::engine::ecs::system::layout::LayoutSystem;
     use crate::engine::ecs::{IntentSignal, SignalEmitter};
 

@@ -1709,7 +1709,7 @@ mod tests {
         use super::apply_text_wrap_for_item;
         use crate::engine::ecs::ComponentId;
         use crate::engine::ecs::SignalEmitter;
-        use crate::engine::ecs::rx::{EventSignal, IntentSignal};
+        use crate::engine::ecs::signals::{EventSignal, IntentSignal};
 
         struct NullEmit;
         impl SignalEmitter for NullEmit {
@@ -1766,7 +1766,7 @@ mod tests {
         use super::apply_text_font_size_for_item;
         use crate::engine::ecs::ComponentId;
         use crate::engine::ecs::SignalEmitter;
-        use crate::engine::ecs::rx::{EventSignal, IntentSignal};
+        use crate::engine::ecs::signals::{EventSignal, IntentSignal};
 
         struct NullEmit;
         impl SignalEmitter for NullEmit {
@@ -1811,7 +1811,7 @@ mod tests {
         use super::apply_text_wrap_for_item;
         use crate::engine::ecs::ComponentId;
         use crate::engine::ecs::SignalEmitter;
-        use crate::engine::ecs::rx::{EventSignal, IntentSignal};
+        use crate::engine::ecs::signals::{EventSignal, IntentSignal};
 
         struct NullEmit;
         impl SignalEmitter for NullEmit {

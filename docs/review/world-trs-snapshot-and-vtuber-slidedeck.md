@@ -221,8 +221,8 @@ repository-wide gate for this review.
 
 - [shared transform values](../../src/engine/transform.rs)
 - [world reads and world-to-local conversion](../../src/engine/ecs/system/transform_system.rs)
-- [space-aware transform intent](../../src/engine/ecs/rx/signal.rs)
-- [transform mutation execution](../../src/engine/ecs/rx/mutation_executor.rs)
+- [space-aware transform intent](../../src/engine/ecs/signals/signal.rs)
+- [transform mutation execution](../../src/engine/ecs/signals/mutation_executor.rs)
 - [MMS component-method binding](../../src/scripting/component_method_registry.rs)
 - [MMS `.world` evaluation](../../src/scripting/world_evaluator.rs)
 - [VTuber slide-deck scene](../../examples/vtuber-slidedeck.mms)

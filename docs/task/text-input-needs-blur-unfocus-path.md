@@ -54,7 +54,7 @@ pipeline, not inside `TextInputSystem` itself.
 Primary candidates:
 
 - [src/engine/ecs/system/gesture_system.rs](../../src/engine/ecs/system/gesture_system.rs)
-- [src/engine/ecs/rx/signal.rs](../../src/engine/ecs/rx/signal.rs)
+- [src/engine/ecs/signals/signal.rs](../../src/engine/ecs/signals/signal.rs)
 - possibly the input bridge in [src/engine/user_input.rs](../../src/engine/user_input.rs)
 
 The important ownership rule is:
@@ -111,7 +111,7 @@ This is likely the most coherent extension of the current design.
 
 Event definition:
 
-- [src/engine/ecs/rx/signal.rs](../../src/engine/ecs/rx/signal.rs)
+- [src/engine/ecs/signals/signal.rs](../../src/engine/ecs/signals/signal.rs)
 
 Event production:
 

@@ -20,7 +20,7 @@ This doc explains what `frame_events` is doing for us, and how we could instead 
 - Every time `dispatch_event_handlers` runs for a ready event, it appends `env.clone()` into the log.
 
 Implementation details:
-- [src/engine/ecs/rx/rx_world.rs](../../src/engine/ecs/rx/rx_world.rs#L147-L189)
+- [src/engine/ecs/signals/rx_world.rs](../../src/engine/ecs/signals/rx_world.rs#L147-L189)
 
 Important subtlety:
 - `frame_events` records **dispatched** events.
@@ -31,8 +31,8 @@ That “event→event is next tick” rule is enforced by the emitter used durin
 - `RxWorld::begin_frame` moves `deferred_events` into `ready_events`.
 
 See:
-- [src/engine/ecs/rx/rx_world.rs](../../src/engine/ecs/rx/rx_world.rs#L14-L60)
-- [src/engine/ecs/rx/rx_world.rs](../../src/engine/ecs/rx/rx_world.rs#L129-L146)
+- [src/engine/ecs/signals/rx_world.rs](../../src/engine/ecs/signals/rx_world.rs#L14-L60)
+- [src/engine/ecs/signals/rx_world.rs](../../src/engine/ecs/signals/rx_world.rs#L129-L146)
 - [src/engine/ecs/system/system_world.rs](../../src/engine/ecs/system/system_world.rs#L133-L140)
 
 ## Why GizmoSystem can “see” Drag events today

@@ -104,7 +104,7 @@ The handler should be registered once when the editor workspace bootstraps, scop
 ## Relevant files
 
 - `src/engine/ecs/component/layout.rs` — add `computed_size_wu` field
-- `src/engine/ecs/rx/signal.rs` — add `EventSignal::LayoutRootSizeAvailable` + `SignalKind`
+- `src/engine/ecs/signals/signal.rs` — add `EventSignal::LayoutRootSizeAvailable` + `SignalKind`
 - `src/engine/ecs/system/layout/mod.rs` — store size + emit event in `tick()`
 - `src/engine/ecs/system/layout/block.rs` — return/derive total height from items
 - `src/engine/ecs/system/layout/inline.rs` — return/derive total height from items

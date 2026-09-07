@@ -36,10 +36,10 @@ See also [docs/draft/mms-css-query-parsers-and-eval.md](../draft/mms-css-query-p
 
 ### Query intents / reply path
 
-- [src/engine/ecs/rx/signal.rs](../../src/engine/ecs/rx/signal.rs)
+- [src/engine/ecs/signals/signal.rs](../../src/engine/ecs/signals/signal.rs)
   - `QueryFindComponent`
   - `QueryFindAllComponents`
-- [src/engine/ecs/rx/intent_executor.rs](../../src/engine/ecs/rx/intent_executor.rs)
+- [src/engine/ecs/signals/intent_executor.rs](../../src/engine/ecs/signals/intent_executor.rs)
   - execution path for those intents
 
 ---

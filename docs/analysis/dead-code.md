@@ -112,7 +112,7 @@ Suggested cleanup:
 - Remove the field if it isn’t used.
 - Or if it’s useful for debugging/recreation, either use it or annotate `#[allow(dead_code)]`.
 
-### src/engine/ecs/rx/signal.rs (private_interfaces)
+### src/engine/ecs/signals/signal.rs (private_interfaces)
 
 - `IntentValue::OscillatorScheduleSetNote::pitch` is `pub` but its type `NotePitch` is `pub(crate)`.
 

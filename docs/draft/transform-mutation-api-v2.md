@@ -68,13 +68,13 @@ When the `RxIntentExecutor` receives a partial intent:
 
 ## 3 — Implementation Tasks
 
-### 1. `src/engine/ecs/rx/signal.rs` (`IntentValue`)
+### 1. `src/engine/ecs/signals/signal.rs` (`IntentValue`)
 - [ ] Add `SetTranslation { component_ids, translation }` (alias for `SetPosition` or replace it).
 - [ ] Add `SetRotationEuler { component_ids, euler_xyz }`.
 - [ ] Add `SetRotationQuat { component_ids, quat_xyzw }`.
 - [ ] Add `SetScale { component_ids, scale }`.
 
-### 2. `src/engine/ecs/rx/intent_executor.rs`
+### 2. `src/engine/ecs/signals/intent_executor.rs`
 - [ ] Implement match arms for the new intents.
 - [ ] Use `collect_transform_targets` (same as `SetPosition`) to apply to subtrees if needed.
 

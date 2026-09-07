@@ -32,9 +32,9 @@ They only run when the event scope is in the handler's ancestor chain:
 
 Relevant code:
 
-- [src/engine/ecs/rx/rx_world.rs](/home/rei/_/cat-engine/src/engine/ecs/rx/rx_world.rs:70)
-- [src/engine/ecs/rx/rx_world.rs](/home/rei/_/cat-engine/src/engine/ecs/rx/rx_world.rs:465)
-- [src/engine/ecs/rx/rx_world.rs](/home/rei/_/cat-engine/src/engine/ecs/rx/rx_world.rs:507)
+- [src/engine/ecs/signals/rx_world.rs](/home/rei/_/cat-engine/src/engine/ecs/signals/rx_world.rs:70)
+- [src/engine/ecs/signals/rx_world.rs](/home/rei/_/cat-engine/src/engine/ecs/signals/rx_world.rs:465)
+- [src/engine/ecs/signals/rx_world.rs](/home/rei/_/cat-engine/src/engine/ecs/signals/rx_world.rs:507)
 
 This is important because editor systems were originally installed as scoped handlers on the
 `editor_root`, which only works if the clicked renderable is actually under that editor subtree.
@@ -282,7 +282,7 @@ These should remain attached to the active gizmo path:
 
 ### Seam 1: scoped delivery vs global delivery
 
-- [src/engine/ecs/rx/rx_world.rs](/home/rei/_/cat-engine/src/engine/ecs/rx/rx_world.rs:465)
+- [src/engine/ecs/signals/rx_world.rs](/home/rei/_/cat-engine/src/engine/ecs/signals/rx_world.rs:465)
 - [src/engine/ecs/system/editor_system.rs](/home/rei/_/cat-engine/src/engine/ecs/system/editor_system.rs:35)
 - [src/engine/ecs/system/cursor_3d.rs](/home/rei/_/cat-engine/src/engine/ecs/system/cursor_3d.rs:51)
 

@@ -47,7 +47,7 @@ The first option (gizmo-local guard) is narrower and safer.
 
 - `src/engine/ecs/system/gizmo_system.rs` — `on_drag_start`, `register_transform_gizmo`
 - `src/engine/ecs/system/editor_system.rs` — where selection triggers gizmo attachment
-- `src/engine/ecs/rx/signal.rs` — drain-point order for events vs intents
+- `src/engine/ecs/signals/signal.rs` — drain-point order for events vs intents
 
 ---
 

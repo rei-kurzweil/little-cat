@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use crate::engine::ecs::component::SelectionEntry;
-use crate::engine::ecs::rx::RxWorld;
+use crate::engine::ecs::signals::RxWorld;
 use crate::engine::ecs::system::editor::grid_panel::GRID_PANEL_ROOT_SELECTOR;
 use crate::engine::ecs::system::editor::pose_panel::POSE_PANEL_ROOT_SELECTOR;
 use crate::engine::ecs::system::panel_system::{

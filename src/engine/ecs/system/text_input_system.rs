@@ -3,7 +3,7 @@ use crate::engine::ecs::component::{
     SerializeComponent, SizeDimension, StyleComponent, TextComponent, TextInputComponent,
     TextInputGlyphHitComponent, TransformComponent,
 };
-use crate::engine::ecs::rx::TextInputCaretDirection;
+use crate::engine::ecs::signals::TextInputCaretDirection;
 use crate::engine::ecs::system::TextSystem;
 use crate::engine::ecs::system::layout::AUTO_TEXT_LIFT_Z;
 use crate::engine::ecs::{

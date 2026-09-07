@@ -15,7 +15,7 @@ The goal is to remove remaining “action/command” style mutation entrypoints 
 - `CommandQueue` is now a per-frame staging buffer that implements `SignalEmitter` and drains into `RxWorld` at explicit drain points.
   - Source: `src/engine/ecs/command_queue.rs`
 - `RxWorld` stores ready/deferred events and ready/timed intents, plus scoped/global handler tables.
-  - Source: `src/engine/ecs/rx/rx_world.rs`
+  - Source: `src/engine/ecs/signals/rx_world.rs`
 - `SystemWorld::process_signals` is the drain loop:
   1. drain + dispatch all **ready events** (handlers)
   2. drain + execute all **ready intents**
@@ -29,7 +29,7 @@ There are currently two intent executors:
 1) **RxIntentExecutor** (high-level intent interpreter)
 - Chooses a conservative set of “user intent” values (`IntentValue`) to interpret.
 - Delegates to `action_system::handle_intent_signal`.
-- Source: `src/engine/ecs/rx/intent_executor.rs` and `src/engine/ecs/system/action_system.rs`
+- Source: `src/engine/ecs/signals/intent_executor.rs` and `src/engine/ecs/system/action_system.rs`
 
 2) **Default executor** (low-level mutation executor)
 - Everything not handled by `RxIntentExecutor` is executed by `SystemWorld::execute_intent_signal`.
@@ -41,7 +41,7 @@ There are currently two intent executors:
 - `IntentValue` still contains both:
   - “user intent” (SetColor/Attach/RemoveSubtree/etc)
   - “internal mutation ops” (RegisterRenderable/UpdateTransform/RegisterTexture/…)
-  - Source: `src/engine/ecs/rx/signal.rs`
+  - Source: `src/engine/ecs/signals/signal.rs`
 
 This mixing is the root reason we still have migration debt: it’s unclear which values are intended to be public API vs internal engine plumbing.
 

@@ -1,6 +1,6 @@
 use crate::engine::ecs::component::{RenderableComponent, StencilClipComponent};
 use crate::engine::ecs::component::{RouterComponent, ScrollingComponent, TransformComponent};
-use crate::engine::ecs::rx::RxWorld;
+use crate::engine::ecs::signals::RxWorld;
 use crate::engine::ecs::{ComponentId, EventSignal, IntentValue, SignalEmitter, SignalKind, World};
 use crate::engine::graphics::primitives::TransformMatrix;
 use crate::utils::math;

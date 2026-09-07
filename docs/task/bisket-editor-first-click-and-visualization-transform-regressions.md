@@ -189,7 +189,7 @@ Relevant code:
 
 - `src/engine/ecs/system/transform_system.rs`
 - `src/engine/ecs/component/transform_parent.rs`
-- `src/engine/ecs/rx/intent_executor.rs`
+- `src/engine/ecs/signals/intent_executor.rs`
 - `src/engine/ecs/system/armature_visualization_system.rs`
 - `src/engine/ecs/system/gltf_bounds_visualization_system.rs`
 

@@ -184,7 +184,7 @@ fn component_catalog_covers_concrete_implementations_and_mms_names() {
 
 #[test]
 fn signal_catalog_covers_both_signal_enums() {
-    let source = read("src/engine/ecs/rx/signal.rs");
+    let source = read("src/engine/ecs/signals/signal.rs");
     let markers = marker_attributes(&read(SIGNAL_GUIDE), "catalog:signal");
     for (enum_name, kind) in [("EventSignal", "event"), ("IntentValue", "intent")] {
         assert_exactly_once(

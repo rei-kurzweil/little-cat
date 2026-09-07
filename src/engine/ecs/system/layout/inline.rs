@@ -244,7 +244,7 @@ mod tests {
     use super::*;
     use crate::engine::ecs::component::style::{Display, SizeDimension};
     use crate::engine::ecs::component::{LayoutComponent, StyleComponent};
-    use crate::engine::ecs::rx::{EventSignal, IntentSignal};
+    use crate::engine::ecs::signals::{EventSignal, IntentSignal};
 
     #[derive(Default)]
     struct TestEmitter {

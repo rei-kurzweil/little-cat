@@ -3,7 +3,7 @@ use crate::engine::ecs::component::{
     PoseCaptureLibraryComponent, PoseCapturePoseComponent, PoseCaptureReconciliationState,
     PoseTargetRef, TransformComponent,
 };
-use crate::engine::ecs::rx::SignalEmitter;
+use crate::engine::ecs::signals::SignalEmitter;
 use crate::engine::ecs::{ComponentId, IntentValue, PoseApplyMode, World};
 use crate::scripting::component_registry::spawn_tree_uninitialized;
 use crate::scripting::object::{CeChild, MaterializedCE};

@@ -179,9 +179,9 @@ Common env vars:
   - `src/engine/ecs/system/skinned_mesh_system.rs`
   - `src/engine/ecs/system/gizmo_system.rs`
   - `src/engine/ecs/system/editor_system.rs`
-  - `src/engine/ecs/rx/signal_pipeline_processor.rs`
-  - `src/engine/ecs/rx/intent_executor.rs`
-  - `src/engine/ecs/rx/mutation_executor.rs`
+  - `src/engine/ecs/signals/signal_pipeline_processor.rs`
+  - `src/engine/ecs/signals/intent_executor.rs`
+  - `src/engine/ecs/signals/mutation_executor.rs`
 - Graphics:
   - `src/engine/graphics/visual_world.rs`
   - `src/engine/graphics/skin.rs`
