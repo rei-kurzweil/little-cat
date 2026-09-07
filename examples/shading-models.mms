@@ -6,6 +6,16 @@
 // The left model uses the default GLTF shading model. The right model uses the
 // albedo-derived AnimeShading material. Both models use the same relaxed A-pose
 // and each is lit by an identical movable white spotlight fixture.
+//
+// Planned interactive controls (design only; native Slider is not implemented):
+//   ../docs/task/anime-shading-panel-and-live-shader-inputs.md
+// Native control and standalone examples/slider.mms prerequisite:
+//   ../docs/task/native-slider-component-and-example.md
+// Use assets/components/ui/info_panel.mms with block-stacked flex rows:
+// label | native slider with mountable track/thumb visuals | numeric value.
+// Retain settings outside the panel body and apply edits to this scene's
+// right-hand AnimeShading component. See the task for ranges, mounting,
+// live update semantics, and accordion restore behavior.
 
 import { pose as relaxed_pose_factory } from "../assets/components/poses/bisket/000-relaxed.pose.mms"
 import { bisket_anime_shading } from "../assets/components/materials/bisket_anime_shading.mms"
