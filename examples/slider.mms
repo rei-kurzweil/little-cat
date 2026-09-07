@@ -4,7 +4,7 @@
 //   cargo run --release -- load examples/slider.mms
 
 RendererSettings { window_size(1100, 720) }
-BGC.rgba(0.035, 0.04, 0.06, 1.0)
+BGC.rgba(0.05, 0.05, 0.05, 1.0)
 AL.rgb(0.45, 0.45, 0.48)
 
 I.speed(1.5) {
@@ -25,13 +25,13 @@ fn thumb_visual(color) {
 }
 
 fn label(text) {
-    return T.position(-4.1, 0.10, 0.0).scale(0.055, 0.055, 1.0) {
+    return T.position(-4.1, 0.10, 0.0).scale(0.15, 0.15, 1.0) {
         Text { text }
     }
 }
 
 fn readout(initial) {
-    return T.position(3.1, 0.10, 0.0).scale(0.055, 0.055, 1.0) {
+    return T.position(3.1, 0.10, 0.0).scale(0.15, 0.15, 1.0) {
         Text { initial }
     }
 }

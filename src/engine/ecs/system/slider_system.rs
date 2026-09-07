@@ -381,6 +381,10 @@ fn mount_visual(
                 world.add_child(root, serialize).ok();
             }
             ensure_subtree_raycastable(world, emit, root);
+            // Live component values are spawned detached and uninitialized. Once the authored
+            // visual has been moved beneath its engine-owned mount, initialize the entire tree
+            // so renderables and their material state enter the normal engine systems.
+            world.init_component_tree(root, emit);
             return;
         }
     }
@@ -500,6 +504,10 @@ mod tests {
     fn register_creates_stable_mounts_and_reparents_authored_visual() {
         let mut world = World::default();
         let authored_track = world.add_component(TransformComponent::new());
+        let authored_renderable = world.add_component(RenderableComponent::cube());
+        world
+            .add_child(authored_track, authored_renderable)
+            .unwrap();
         let track_guid = world.get_component_record(authored_track).unwrap().guid;
         let slider = world.add_component(
             SliderComponent::new()
@@ -519,6 +527,8 @@ mod tests {
         assert_eq!(world.component_label(track_mount), Some(TRACK_MOUNT));
         assert_eq!(world.component_label(thumb_mount), Some(THUMB_MOUNT));
         assert_eq!(world.parent_of(authored_track), Some(track_mount));
+        assert!(world.is_initialized(authored_track));
+        assert!(world.is_initialized(authored_renderable));
         assert!(world.children_of(thumb_mount).iter().any(|child| {
             world
                 .get_component_by_id_as::<TransformComponent>(*child)
