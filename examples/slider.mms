@@ -24,33 +24,77 @@ fn thumb_visual(color) {
     }
 }
 
+let PANEL_WIDTH = 11.4
+let ROW_HEIGHT = 1.15
+let LABEL_WIDTH = 3.8
+let SLIDER_CELL_WIDTH = 5.8
+let READOUT_WIDTH = 1.2
+
 fn label(text) {
-    return T.position(-4.1, 0.10, 0.0).scale(0.15, 0.15, 1.0) {
-        Text { text }
+    return T {
+        Style {
+            display("flex")
+            width(LABEL_WIDTH)
+            height(ROW_HEIGHT)
+            align_items("center")
+            padding_xy(0.15, 0.0)
+        }
+        // Keep the larger authored font size.
+        T.position(0.0, 0.0, 0.03).scale(0.15, 0.15, 1.0) { Text { text } }
     }
 }
 
 fn readout(initial) {
-    return T.position(3.1, 0.10, 0.0).scale(0.15, 0.15, 1.0) {
-        Text { initial }
+    return T {
+        Style {
+            display("flex")
+            width(READOUT_WIDTH)
+            height(ROW_HEIGHT)
+            align_items("center")
+            justify_content("center")
+        }
+        // Keep the larger authored font size.
+        T.position(0.0, 0.0, 0.03).scale(0.15, 0.15, 1.0) { Text { initial } }
+    }
+}
+
+fn slider_cell(slider) {
+    return T {
+        Style {
+            display("flex")
+            width(SLIDER_CELL_WIDTH)
+            height(ROW_HEIGHT)
+            align_items("center")
+            justify_content("center")
+        }
+        slider
+    }
+}
+
+fn slider_row(label_text, slider, value_readout) {
+    return T {
+        Style {
+            display("flex")
+            flex_direction("row")
+            width(100%)
+            height(ROW_HEIGHT)
+            align_items("center")
+            gap(0.2)
+            padding_xy(0.15, 0.0)
+            background_color([0.09, 0.10, 0.13, 0.92])
+            background_z(-0.03)
+        }
+        label(label_text)
+        slider_cell(slider)
+        value_readout
     }
 }
 
 let default_slider = Slider.range(0.0, 1.0).value(0.25).width(5.0)
 let default_value = readout("0.25")
-T.position(0.0, 1.8, 0.0) {
-    label("Default / continuous")
-    default_slider
-    default_value
-}
 
 let stepped_slider = Slider.range(-1.0, 1.0).step(0.25).value(0.0).width(5.0)
 let stepped_value = readout("0")
-T.position(0.0, 0.4, 0.0) {
-    label("Stepped by 0.25")
-    stepped_slider
-    stepped_value
-}
 
 // This let-bound component is a live subtree reference. Slider.track reparents
 // the same tree beneath its stable engine-owned track mount.
@@ -59,11 +103,6 @@ let themed_slider = Slider.range(0.0, 100.0).step(5.0).value(65.0).width(5.0)
     .track(live_track)
     .thumb(thumb_visual([1.0, 0.35, 0.62, 1.0]))
 let themed_value = readout("65")
-T.position(0.0, -1.0, 0.0) {
-    label("Authored track + thumb")
-    themed_slider
-    themed_value
-}
 
 // A second themed instance receives fresh visual trees; mounted live trees have
 // one owner and are moved rather than cloned.
@@ -71,10 +110,46 @@ let second_themed_slider = Slider.range(0.0, 10.0).step(1.0).value(3.0).width(5.
     .track(track_visual([0.42, 0.30, 0.72, 1.0]))
     .thumb(thumb_visual([0.45, 1.0, 0.55, 1.0]))
 let second_themed_value = readout("3")
-T.position(0.0, -2.4, 0.0) {
-    label("Independent theme instance")
-    second_themed_slider
-    second_themed_value
+
+let reset = T.scale(0.75, 0.28, 0.12) {
+    R.cube() {
+        C.rgba(0.82, 0.28, 0.34, 1.0)
+        Raycastable.click_only()
+    }
+    T.position(-0.42, 0.13, 0.7).scale(0.10, 0.10, 1.0) { Text { "Reset" } }
+}
+
+T.position(-5.7, 3.0, 0.0) {
+    LayoutRoot {
+        available_width(PANEL_WIDTH)
+        available_height(7.5)
+        unit_scale(1.0)
+
+        T {
+            Style {
+                display("flex")
+                flex_direction("column")
+                width(100%)
+                row_gap(0.25)
+            }
+
+            slider_row("Default / continuous", default_slider, default_value)
+            slider_row("Stepped by 0.25", stepped_slider, stepped_value)
+            slider_row("Authored track + thumb", themed_slider, themed_value)
+            slider_row("Independent theme instance", second_themed_slider, second_themed_value)
+
+            T {
+                Style {
+                    display("flex")
+                    width(100%)
+                    height(0.9)
+                    align_items("center")
+                    justify_content("center")
+                }
+                reset
+            }
+        }
+    }
 }
 
 on(default_slider, "SliderChanged", fn(event) {
@@ -89,14 +164,6 @@ on(themed_slider, "SliderChanged", fn(event) {
 on(second_themed_slider, "SliderChanged", fn(event) {
     second_themed_value.query("Text").set_text("" + event["value"])
 })
-
-let reset = T.position(0.0, -3.65, 0.0).scale(0.75, 0.28, 0.12) {
-    R.cube() {
-        C.rgba(0.82, 0.28, 0.34, 1.0)
-        Raycastable.click_only()
-    }
-    T.position(-0.42, 0.13, 0.7).scale(0.10, 0.10, 1.0) { Text { "Reset" } }
-}
 
 on(reset, "Click", fn(event) {
     // sync_value is the programmatic, non-emitting synchronization path.
