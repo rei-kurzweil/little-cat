@@ -3224,6 +3224,9 @@ fn num_cmp(l: Value, r: Value, f: impl Fn(f64, f64) -> bool) -> Result<Value, St
 fn parse_signal_kind(s: &str) -> Result<SignalKind, String> {
     match s {
         "FrameTick" => Ok(SignalKind::FrameTick),
+        "KeyDown" => Ok(SignalKind::KeyDown),
+        "KeyUp" => Ok(SignalKind::KeyUp),
+        "KeyPress" => Ok(SignalKind::KeyPress),
         "GLTFInitialized" => Ok(SignalKind::GltfInitialized),
         "Click" => Ok(SignalKind::Click),
         "ToggleChanged" => Ok(SignalKind::ToggleChanged),

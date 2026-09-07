@@ -1224,6 +1224,9 @@ pub fn build_mittens_runtime() -> Result<MittensRuntime, mms::RuntimeSpecError> 
     // scope, not an owning component type.
     for name in [
         "FrameTick",
+        "KeyDown",
+        "KeyUp",
+        "KeyPress",
         "GLTFInitialized",
         "Click",
         "ToggleChanged",

@@ -1,7 +1,12 @@
 # Task: global MMS keyboard events first slice
 
-Status: proposed, 2026-09-07. Documentation only. Child of
+Status: implemented; manual desktop verification pending, 2026-09-07. Child of
 [keyboard and gamepad events](mms-keyboard-and-gamepad-events.md).
+
+Implementation: `UserInput` retains ordered physical/logical keyboard records;
+`KeyboardInputSystem` dispatches them before movement and `FrameTick`; MMS exposes
+the three global signals with the two-field payload described below. See
+[`examples/keyboard-events.mms`](../../examples/keyboard-events.mms).
 
 ## Outcome and existing path
 

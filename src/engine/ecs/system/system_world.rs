@@ -21,6 +21,7 @@ use crate::engine::ecs::system::HttpServerSystem;
 use crate::engine::ecs::system::ImplicitSurfaceSystem;
 use crate::engine::ecs::system::InputSystem;
 use crate::engine::ecs::system::InputXRGamepadSystem;
+use crate::engine::ecs::system::KeyboardInputSystem;
 use crate::engine::ecs::system::LightSystem;
 use crate::engine::ecs::system::MeshBoundsSystem;
 use crate::engine::ecs::system::MirrorSystem;
@@ -154,6 +155,7 @@ pub struct SystemWorld {
 
     pub camera: CameraSystem,
     pub input: InputSystem,
+    pub keyboard_input: KeyboardInputSystem,
     pub light: LightSystem,
     pub mirror: MirrorSystem,
 
@@ -2879,6 +2881,13 @@ impl SystemWorld {
         self.toggle.install_handlers(&mut self.rx);
         self.grabbable.install_handlers(&mut self.rx);
         self.draggable.install_handlers(&mut self.rx);
+
+        // Gameplay keyboard callbacks are delivered in platform order before held-state
+        // movement and FrameTick. Text input owns the keyboard while it has focus.
+        self.keyboard_input
+            .process_input(input, self.text_input.has_focus(), &mut self.rx);
+        let _ = self.process_signals(world, visuals, render_assets, queue, 100_000);
+        queue.flush(world, self, visuals, render_assets);
 
         // Process input first - it may queue commands
         self.input.process_input(world, input, queue, dt_sec);

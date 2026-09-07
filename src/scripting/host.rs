@@ -731,6 +731,9 @@ fn transport_to_json(value: &mms::TransportValue) -> Result<serde_json::Value, m
 fn signal_kind(name: &str) -> Option<SignalKind> {
     Some(match name {
         "FrameTick" => SignalKind::FrameTick,
+        "KeyDown" => SignalKind::KeyDown,
+        "KeyUp" => SignalKind::KeyUp,
+        "KeyPress" => SignalKind::KeyPress,
         "GLTFInitialized" => SignalKind::GltfInitialized,
         "Click" => SignalKind::Click,
         "ToggleChanged" => SignalKind::ToggleChanged,

@@ -6,7 +6,23 @@
 use std::collections::HashSet;
 
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
-use winit::keyboard::{Key, NamedKey};
+use winit::keyboard::{Key, KeyCode, NamedKey, PhysicalKey};
+
+/// One ordered gameplay-keyboard transition captured at the platform boundary.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeyboardInputRecord {
+    pub physical_key: PhysicalKey,
+    pub code: Option<String>,
+    pub key: String,
+    pub transition: KeyboardTransition,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyboardTransition {
+    Down,
+    Press,
+    Up,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TextInputFrameEvent {
@@ -51,9 +67,24 @@ pub struct InputState {
     pub wheel_delta: (f32, f32),
 
     text_input_events: Vec<TextInputFrameEvent>,
+    keyboard_events: Vec<KeyboardInputRecord>,
+    physical_keys_down: Vec<(PhysicalKey, Option<String>, String, Key)>,
 }
 
 impl InputState {
+    fn release_all_keys(&mut self) {
+        for (physical_key, code, key, gameplay_key) in self.physical_keys_down.drain(..) {
+            self.keyboard_events.push(KeyboardInputRecord {
+                physical_key,
+                code,
+                key,
+                transition: KeyboardTransition::Up,
+            });
+            self.keys_released.insert(gameplay_key);
+        }
+        self.keys_down.clear();
+    }
+
     /// Called at the start of a render/update frame.
     ///
     /// Important: this does **not** clear edge-triggered sets (`pressed`/`released`).
@@ -86,6 +117,7 @@ impl InputState {
         self.mouse_released.clear();
         self.wheel_delta = (0.0, 0.0);
         self.text_input_events.clear();
+        self.keyboard_events.clear();
     }
 
     #[inline]
@@ -144,6 +176,16 @@ impl InputState {
     pub fn text_input_events(&self) -> &[TextInputFrameEvent] {
         &self.text_input_events
     }
+
+    #[inline]
+    pub fn keyboard_events(&self) -> &[KeyboardInputRecord] {
+        &self.keyboard_events
+    }
+
+    #[cfg(test)]
+    pub(crate) fn push_keyboard_event(&mut self, event: KeyboardInputRecord) {
+        self.keyboard_events.push(event);
+    }
 }
 
 /// Stateful input event processor.
@@ -178,7 +220,11 @@ impl UserInput {
     /// Returns `true` if the event was recognized/consumed as input.
     pub fn handle_window_event(&mut self, event: &WindowEvent) -> bool {
         match event {
-            WindowEvent::KeyboardInput { event, .. } => {
+            WindowEvent::KeyboardInput {
+                event,
+                is_synthetic,
+                ..
+            } => {
                 fn normalize_key(key: &Key) -> Key {
                     match key {
                         // Treat ASCII letters case-insensitively by storing the lowercase form.
@@ -199,8 +245,43 @@ impl UserInput {
                 }
 
                 let key = normalize_key(&event.logical_key);
+                let public_event = (
+                    physical_key_code(event.physical_key),
+                    logical_key(&event.logical_key),
+                );
                 match event.state {
                     ElementState::Pressed => {
+                        if *is_synthetic {
+                            return true;
+                        }
+                        let was_physically_down = self
+                            .state
+                            .physical_keys_down
+                            .iter()
+                            .any(|(physical_key, ..)| *physical_key == event.physical_key);
+                        if !was_physically_down && !event.repeat {
+                            self.state.physical_keys_down.push((
+                                event.physical_key,
+                                public_event.0.clone(),
+                                public_event.1.clone(),
+                                key.clone(),
+                            ));
+                            self.state.keyboard_events.push(KeyboardInputRecord {
+                                physical_key: event.physical_key,
+                                code: public_event.0.clone(),
+                                key: public_event.1.clone(),
+                                transition: KeyboardTransition::Down,
+                            });
+                        }
+                        if event.repeat && !was_physically_down {
+                            return true;
+                        }
+                        self.state.keyboard_events.push(KeyboardInputRecord {
+                            physical_key: event.physical_key,
+                            code: public_event.0,
+                            key: public_event.1,
+                            transition: KeyboardTransition::Press,
+                        });
                         let was_down = self.state.keys_down.contains(&key);
                         self.state.keys_down.insert(key.clone());
                         if !was_down {
@@ -240,10 +321,33 @@ impl UserInput {
                         }
                     }
                     ElementState::Released => {
-                        self.state.keys_down.remove(&key);
-                        self.state.keys_released.insert(key);
+                        if let Some(index) = self
+                            .state
+                            .physical_keys_down
+                            .iter()
+                            .position(|(physical_key, ..)| *physical_key == event.physical_key)
+                        {
+                            let (_, code, logical_key, gameplay_key) =
+                                self.state.physical_keys_down.remove(index);
+                            self.state.keyboard_events.push(KeyboardInputRecord {
+                                physical_key: event.physical_key,
+                                code,
+                                key: logical_key,
+                                transition: KeyboardTransition::Up,
+                            });
+                            self.state.keys_down.remove(&gameplay_key);
+                            self.state.keys_released.insert(gameplay_key);
+                        } else {
+                            self.state.keys_down.remove(&key);
+                            self.state.keys_released.insert(key);
+                        }
                     }
                 }
+                true
+            }
+
+            WindowEvent::Focused(false) => {
+                self.state.release_all_keys();
                 true
             }
 
@@ -281,5 +385,591 @@ impl UserInput {
 
             _ => false,
         }
+    }
+}
+
+fn physical_key_code(key: PhysicalKey) -> Option<String> {
+    let PhysicalKey::Code(code) = key else {
+        return None;
+    };
+    macro_rules! standard_code {
+        ($($variant:ident),+ $(,)?) => {
+            match code {
+                $(KeyCode::$variant => stringify!($variant),)+
+                KeyCode::SuperLeft => "MetaLeft",
+                KeyCode::SuperRight => "MetaRight",
+                _ => return None,
+            }
+        };
+    }
+    // Explicit allowlist: these strings are the public API, not enum Debug output.
+    let name = standard_code!(
+        Backquote,
+        Backslash,
+        BracketLeft,
+        BracketRight,
+        Comma,
+        Digit0,
+        Digit1,
+        Digit2,
+        Digit3,
+        Digit4,
+        Digit5,
+        Digit6,
+        Digit7,
+        Digit8,
+        Digit9,
+        Equal,
+        IntlBackslash,
+        IntlRo,
+        IntlYen,
+        KeyA,
+        KeyB,
+        KeyC,
+        KeyD,
+        KeyE,
+        KeyF,
+        KeyG,
+        KeyH,
+        KeyI,
+        KeyJ,
+        KeyK,
+        KeyL,
+        KeyM,
+        KeyN,
+        KeyO,
+        KeyP,
+        KeyQ,
+        KeyR,
+        KeyS,
+        KeyT,
+        KeyU,
+        KeyV,
+        KeyW,
+        KeyX,
+        KeyY,
+        KeyZ,
+        Minus,
+        Period,
+        Quote,
+        Semicolon,
+        Slash,
+        AltLeft,
+        AltRight,
+        Backspace,
+        CapsLock,
+        ContextMenu,
+        ControlLeft,
+        ControlRight,
+        Enter,
+        ShiftLeft,
+        ShiftRight,
+        Space,
+        Tab,
+        Convert,
+        KanaMode,
+        Lang1,
+        Lang2,
+        Lang3,
+        Lang4,
+        Lang5,
+        NonConvert,
+        Delete,
+        End,
+        Help,
+        Home,
+        Insert,
+        PageDown,
+        PageUp,
+        ArrowDown,
+        ArrowLeft,
+        ArrowRight,
+        ArrowUp,
+        NumLock,
+        Numpad0,
+        Numpad1,
+        Numpad2,
+        Numpad3,
+        Numpad4,
+        Numpad5,
+        Numpad6,
+        Numpad7,
+        Numpad8,
+        Numpad9,
+        NumpadAdd,
+        NumpadBackspace,
+        NumpadClear,
+        NumpadClearEntry,
+        NumpadComma,
+        NumpadDecimal,
+        NumpadDivide,
+        NumpadEnter,
+        NumpadEqual,
+        NumpadHash,
+        NumpadMemoryAdd,
+        NumpadMemoryClear,
+        NumpadMemoryRecall,
+        NumpadMemoryStore,
+        NumpadMemorySubtract,
+        NumpadMultiply,
+        NumpadParenLeft,
+        NumpadParenRight,
+        NumpadStar,
+        NumpadSubtract,
+        Escape,
+        Fn,
+        FnLock,
+        PrintScreen,
+        ScrollLock,
+        Pause,
+        BrowserBack,
+        BrowserFavorites,
+        BrowserForward,
+        BrowserHome,
+        BrowserRefresh,
+        BrowserSearch,
+        BrowserStop,
+        Eject,
+        LaunchApp1,
+        LaunchApp2,
+        LaunchMail,
+        MediaPlayPause,
+        MediaSelect,
+        MediaStop,
+        MediaTrackNext,
+        MediaTrackPrevious,
+        Power,
+        Sleep,
+        AudioVolumeDown,
+        AudioVolumeMute,
+        AudioVolumeUp,
+        WakeUp,
+        Meta,
+        Hyper,
+        Turbo,
+        Abort,
+        Resume,
+        Suspend,
+        Again,
+        Copy,
+        Cut,
+        Find,
+        Open,
+        Paste,
+        Props,
+        Select,
+        Undo,
+        Hiragana,
+        Katakana,
+        F1,
+        F2,
+        F3,
+        F4,
+        F5,
+        F6,
+        F7,
+        F8,
+        F9,
+        F10,
+        F11,
+        F12,
+        F13,
+        F14,
+        F15,
+        F16,
+        F17,
+        F18,
+        F19,
+        F20,
+        F21,
+        F22,
+        F23,
+        F24,
+        F25,
+        F26,
+        F27,
+        F28,
+        F29,
+        F30,
+        F31,
+        F32,
+        F33,
+        F34,
+        F35,
+    );
+    Some(name.to_string())
+}
+
+fn logical_key(key: &Key) -> String {
+    match key {
+        Key::Character(value) => value.to_string(),
+        Key::Named(named) => named_key_name(*named).to_string(),
+        Key::Dead(_) => "Dead".to_string(),
+        Key::Unidentified(_) => "Unidentified".to_string(),
+    }
+}
+
+fn named_key_name(key: NamedKey) -> &'static str {
+    macro_rules! standard_key {
+        ($($variant:ident),+ $(,)?) => {
+            match key {
+                $(NamedKey::$variant => stringify!($variant),)+
+                NamedKey::Meta | NamedKey::Super => "Meta",
+                NamedKey::Space => " ",
+                _ => "Unidentified",
+            }
+        };
+    }
+    standard_key!(
+        Alt,
+        AltGraph,
+        CapsLock,
+        Control,
+        Fn,
+        FnLock,
+        NumLock,
+        ScrollLock,
+        Shift,
+        Symbol,
+        SymbolLock,
+        Hyper,
+        Enter,
+        Tab,
+        ArrowDown,
+        ArrowLeft,
+        ArrowRight,
+        ArrowUp,
+        End,
+        Home,
+        PageDown,
+        PageUp,
+        Backspace,
+        Clear,
+        Copy,
+        CrSel,
+        Cut,
+        Delete,
+        EraseEof,
+        ExSel,
+        Insert,
+        Paste,
+        Redo,
+        Undo,
+        Accept,
+        Again,
+        Attn,
+        Cancel,
+        ContextMenu,
+        Escape,
+        Execute,
+        Find,
+        Help,
+        Pause,
+        Play,
+        Props,
+        Select,
+        ZoomIn,
+        ZoomOut,
+        BrightnessDown,
+        BrightnessUp,
+        Eject,
+        LogOff,
+        Power,
+        PowerOff,
+        PrintScreen,
+        Hibernate,
+        Standby,
+        WakeUp,
+        AllCandidates,
+        Alphanumeric,
+        CodeInput,
+        Compose,
+        Convert,
+        FinalMode,
+        GroupFirst,
+        GroupLast,
+        GroupNext,
+        GroupPrevious,
+        ModeChange,
+        NextCandidate,
+        NonConvert,
+        PreviousCandidate,
+        Process,
+        SingleCandidate,
+        HangulMode,
+        HanjaMode,
+        JunjaMode,
+        Eisu,
+        Hankaku,
+        Hiragana,
+        HiraganaKatakana,
+        KanaMode,
+        KanjiMode,
+        Katakana,
+        Romaji,
+        Zenkaku,
+        ZenkakuHankaku,
+        Soft1,
+        Soft2,
+        Soft3,
+        Soft4,
+        ChannelDown,
+        ChannelUp,
+        Close,
+        MailForward,
+        MailReply,
+        MailSend,
+        MediaClose,
+        MediaFastForward,
+        MediaPause,
+        MediaPlay,
+        MediaPlayPause,
+        MediaRecord,
+        MediaRewind,
+        MediaStop,
+        MediaTrackNext,
+        MediaTrackPrevious,
+        New,
+        Open,
+        Print,
+        Save,
+        SpellCheck,
+        Key11,
+        Key12,
+        AudioBalanceLeft,
+        AudioBalanceRight,
+        AudioBassBoostDown,
+        AudioBassBoostToggle,
+        AudioBassBoostUp,
+        AudioFaderFront,
+        AudioFaderRear,
+        AudioSurroundModeNext,
+        AudioTrebleDown,
+        AudioTrebleUp,
+        AudioVolumeDown,
+        AudioVolumeUp,
+        AudioVolumeMute,
+        MicrophoneToggle,
+        MicrophoneVolumeDown,
+        MicrophoneVolumeUp,
+        MicrophoneVolumeMute,
+        SpeechCorrectionList,
+        SpeechInputToggle,
+        LaunchApplication1,
+        LaunchApplication2,
+        LaunchCalendar,
+        LaunchContacts,
+        LaunchMail,
+        LaunchMediaPlayer,
+        LaunchMusicPlayer,
+        LaunchPhone,
+        LaunchScreenSaver,
+        LaunchSpreadsheet,
+        LaunchWebBrowser,
+        LaunchWebCam,
+        LaunchWordProcessor,
+        BrowserBack,
+        BrowserFavorites,
+        BrowserForward,
+        BrowserHome,
+        BrowserRefresh,
+        BrowserSearch,
+        BrowserStop,
+        AppSwitch,
+        Call,
+        Camera,
+        CameraFocus,
+        EndCall,
+        GoBack,
+        GoHome,
+        HeadsetHook,
+        LastNumberRedial,
+        Notification,
+        MannerMode,
+        VoiceDial,
+        TV,
+        TV3DMode,
+        TVAntennaCable,
+        TVAudioDescription,
+        TVAudioDescriptionMixDown,
+        TVAudioDescriptionMixUp,
+        TVContentsMenu,
+        TVDataService,
+        TVInput,
+        TVInputComponent1,
+        TVInputComponent2,
+        TVInputComposite1,
+        TVInputComposite2,
+        TVInputHDMI1,
+        TVInputHDMI2,
+        TVInputHDMI3,
+        TVInputHDMI4,
+        TVInputVGA1,
+        TVMediaContext,
+        TVNetwork,
+        TVNumberEntry,
+        TVPower,
+        TVRadioService,
+        TVSatellite,
+        TVSatelliteBS,
+        TVSatelliteCS,
+        TVSatelliteToggle,
+        TVTerrestrialAnalog,
+        TVTerrestrialDigital,
+        TVTimer,
+        AVRInput,
+        AVRPower,
+        ColorF0Red,
+        ColorF1Green,
+        ColorF2Yellow,
+        ColorF3Blue,
+        ColorF4Grey,
+        ColorF5Brown,
+        ClosedCaptionToggle,
+        Dimmer,
+        DisplaySwap,
+        DVR,
+        Exit,
+        FavoriteClear0,
+        FavoriteClear1,
+        FavoriteClear2,
+        FavoriteClear3,
+        FavoriteRecall0,
+        FavoriteRecall1,
+        FavoriteRecall2,
+        FavoriteRecall3,
+        FavoriteStore0,
+        FavoriteStore1,
+        FavoriteStore2,
+        FavoriteStore3,
+        Guide,
+        GuideNextDay,
+        GuidePreviousDay,
+        Info,
+        InstantReplay,
+        Link,
+        ListProgram,
+        LiveContent,
+        Lock,
+        MediaApps,
+        MediaAudioTrack,
+        MediaLast,
+        MediaSkipBackward,
+        MediaSkipForward,
+        MediaStepBackward,
+        MediaStepForward,
+        MediaTopMenu,
+        NavigateIn,
+        NavigateNext,
+        NavigateOut,
+        NavigatePrevious,
+        NextFavoriteChannel,
+        NextUserProfile,
+        OnDemand,
+        Pairing,
+        PinPDown,
+        PinPMove,
+        PinPToggle,
+        PinPUp,
+        PlaySpeedDown,
+        PlaySpeedReset,
+        PlaySpeedUp,
+        RandomToggle,
+        RcLowBattery,
+        RecordSpeedNext,
+        RfBypass,
+        ScanChannelsToggle,
+        ScreenModeNext,
+        Settings,
+        SplitScreenToggle,
+        STBInput,
+        STBPower,
+        Subtitle,
+        Teletext,
+        VideoModeNext,
+        Wink,
+        ZoomToggle,
+        F1,
+        F2,
+        F3,
+        F4,
+        F5,
+        F6,
+        F7,
+        F8,
+        F9,
+        F10,
+        F11,
+        F12,
+        F13,
+        F14,
+        F15,
+        F16,
+        F17,
+        F18,
+        F19,
+        F20,
+        F21,
+        F22,
+        F23,
+        F24,
+        F25,
+        F26,
+        F27,
+        F28,
+        F29,
+        F30,
+        F31,
+        F32,
+        F33,
+        F34,
+        F35,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn public_keyboard_names_preserve_physical_and_logical_meaning() {
+        assert_eq!(
+            physical_key_code(KeyCode::KeyW.into()).as_deref(),
+            Some("KeyW")
+        );
+        assert_eq!(
+            physical_key_code(KeyCode::ShiftLeft.into()).as_deref(),
+            Some("ShiftLeft")
+        );
+        assert_eq!(logical_key(&Key::Character("W".into())), "W");
+        assert_eq!(logical_key(&Key::Character("é".into())), "é");
+        assert_eq!(logical_key(&Key::Named(NamedKey::ArrowUp)), "ArrowUp");
+        assert_eq!(logical_key(&Key::Dead(None)), "Dead");
+    }
+
+    #[test]
+    fn focus_loss_releases_held_keys_in_press_order() {
+        let mut input = InputState::default();
+        let w = Key::Character("w".into());
+        input.keys_down.insert(w.clone());
+        input.physical_keys_down.push((
+            KeyCode::ShiftLeft.into(),
+            Some("ShiftLeft".into()),
+            "Shift".into(),
+            Key::Named(NamedKey::Shift),
+        ));
+        input.physical_keys_down.push((
+            KeyCode::KeyW.into(),
+            Some("KeyW".into()),
+            "W".into(),
+            w.clone(),
+        ));
+
+        input.release_all_keys();
+
+        assert!(input.keys_down.is_empty());
+        assert!(input.keys_released.contains(&w));
+        assert_eq!(input.keyboard_events[0].code.as_deref(), Some("ShiftLeft"));
+        assert_eq!(input.keyboard_events[1].code.as_deref(), Some("KeyW"));
     }
 }

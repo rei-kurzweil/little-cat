@@ -54,6 +54,7 @@ pub mod implicit_surface_system;
 pub mod input_system;
 pub mod input_xr_gamepad_system;
 pub mod joint_basis_retargeting_system;
+pub mod keyboard_input_system;
 pub mod layout;
 pub mod light_system;
 pub mod mesh_bounds_system;
@@ -142,6 +143,7 @@ pub use joint_basis_retargeting_system::{
     JointBasisRetargetingSystem, LandmarkDirection, ResolvedRetargetBasis, RetargetBasisDefinition,
     RetargetBasisDiagnosticSnapshot, RetargetBasisProvenance, RetargetBasisStatus,
 };
+pub use keyboard_input_system::KeyboardInputSystem;
 pub use layout::LayoutSystem;
 pub use light_system::LightSystem;
 pub use mesh_bounds_system::{MeshBoundsSystem, MeshOutputBounds, MeshOutputKind};

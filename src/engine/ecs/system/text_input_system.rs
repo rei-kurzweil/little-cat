@@ -31,6 +31,10 @@ impl TextInputSystem {
         Self::default()
     }
 
+    pub fn has_focus(&self) -> bool {
+        self.focused.is_some()
+    }
+
     pub fn install_handlers(&mut self, rx: &mut RxWorld) {
         if self.handlers_installed {
             return;

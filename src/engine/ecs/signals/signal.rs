@@ -30,6 +30,13 @@ pub struct Signal {
     pub intent: Option<IntentSignal>,
 }
 
+/// Lean keyboard payload shared by the three gameplay keyboard signals.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeyboardEvent {
+    pub code: Option<String>,
+    pub key: String,
+}
+
 impl Signal {
     pub fn event(scope: ComponentId, event: EventSignal) -> Self {
         Self {
@@ -56,11 +63,21 @@ impl Signal {
 #[derive(Debug, Clone)]
 pub enum EventSignal {
     /// Emitted once per rendered frame when at least one global subscriber exists.
-    FrameTick { dt_sec: f32 },
+    FrameTick {
+        dt_sec: f32,
+    },
+
+    KeyDown(KeyboardEvent),
+    KeyUp(KeyboardEvent),
+    /// Initial presses and OS repeats; this is not committed text input.
+    KeyPress(KeyboardEvent),
 
     /// A glTF asset finished spawning and its runtime node metadata is queryable.
     /// Scoped to `gltf`.
-    GltfInitialized { gltf: ComponentId, uri: String },
+    GltfInitialized {
+        gltf: ComponentId,
+        uri: String,
+    },
 
     /// Topology changed.
     ParentChanged {
@@ -177,7 +194,10 @@ pub enum EventSignal {
     },
 
     /// A generic boolean UI toggle changed value.
-    ToggleChanged { toggle: ComponentId, value: bool },
+    ToggleChanged {
+        toggle: ComponentId,
+        value: bool,
+    },
 
     /// A selection scope changed.
     SelectionChanged {
@@ -201,7 +221,9 @@ pub enum EventSignal {
     },
 
     /// A selection scope was cleared.
-    SelectionCleared { selection_root: ComponentId },
+    SelectionCleared {
+        selection_root: ComponentId,
+    },
 
     /// A scrolling component consumed drag motion and updated its offset.
     ///
@@ -319,6 +341,9 @@ impl EventSignal {
     pub fn kind(&self) -> SignalKind {
         match self {
             EventSignal::FrameTick { .. } => SignalKind::FrameTick,
+            EventSignal::KeyDown(_) => SignalKind::KeyDown,
+            EventSignal::KeyUp(_) => SignalKind::KeyUp,
+            EventSignal::KeyPress(_) => SignalKind::KeyPress,
             EventSignal::GltfInitialized { .. } => SignalKind::GltfInitialized,
             EventSignal::ParentChanged { .. } => SignalKind::ParentChanged,
             EventSignal::RayIntersected { .. } => SignalKind::RayIntersected,
@@ -1102,6 +1127,9 @@ impl IntentValue {
 pub enum SignalKind {
     Any,
     FrameTick,
+    KeyDown,
+    KeyUp,
+    KeyPress,
     GltfInitialized,
     ParentChanged,
     RayIntersected,

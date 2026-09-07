@@ -289,6 +289,9 @@ fn event_exposure_classifications_match_mms_conversion() {
         .collect();
     let payload = [
         "FrameTick",
+        "KeyDown",
+        "KeyUp",
+        "KeyPress",
         "GltfInitialized",
         "HttpRequest",
         "HttpResponse",

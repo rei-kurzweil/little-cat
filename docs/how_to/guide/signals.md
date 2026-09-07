@@ -222,6 +222,30 @@ on(scope, "FrameTick", fn(event) { print(event) })
 scope
 ```
 
+#### `KeyDown`, `KeyPress`, and `KeyUp`
+<!-- catalog:signal source="KeyDown" kind="event" mms="observable-payload" -->
+<!-- catalog:signal source="KeyPress" kind="event" mms="observable-payload" -->
+<!-- catalog:signal source="KeyUp" kind="event" mms="observable-payload" -->
+**Events.** Gameplay keyboard events are available scene-wide through `on_global` without an
+`Input` component. An initial press emits `KeyDown` followed by `KeyPress`; each OS repeat emits
+only `KeyPress`; release emits only `KeyUp`. `KeyPress` is not committed text input, and movement
+should use held state plus `FrameTick` rather than repeat frequency. These events are suppressed
+while a text input owns keyboard focus. Losing focus releases keys previously delivered to the
+scene. Escape remains a window-level exit shortcut, so its callback is not guaranteed to run.
+
+The callback receives exactly `{ code, key }`. `code` is the layout-independent physical-key name
+(for example `"KeyW"`, `"ArrowUp"`, or `"ShiftLeft"`) or `null` for an unidentified physical key.
+`key` preserves the logical, layout-dependent value and case, or is a named value such as
+`"Enter"`, `"Dead"`, or `"Unidentified"`; it is not guaranteed to be committed text.
+
+```mms parse-only
+on_global("KeyDown", fn(event) {
+    print("down code=" + event.code + " key=" + event.key)
+})
+on_global("KeyPress", fn(event) { print("press " + event.key) })
+on_global("KeyUp", fn(event) { print("up " + event.key) })
+```
+
 #### `DataEvent`
 <!-- catalog:signal source="DataEvent" kind="event" mms="observable-partial-payload" -->
 **Event.** User code emitted a named cross-subtree data event. The runtime and routing subsystem produces it; scoped RX handlers consume it at a signal drain point after execution stages. Events are immediate observations, bubble from the signal scope to ancestor handler scopes, and do not carry `SignalWhen`. Related components are the producers or scopes named by the variant and its subsystem. MMS `on(...)` accepts this event. Handler exposure: **Observable with partial payload**. Sources: [event definition](../../../src/engine/ecs/signals/signal.rs), [MMS handler names](../../../src/scripting/world_evaluator.rs), and [payload conversion](../../../src/scripting/runner.rs).

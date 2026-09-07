@@ -261,6 +261,18 @@ fn headers_to_value(headers: &[(String, String)]) -> Value {
 
 pub(crate) fn event_arg_value(signal: &crate::engine::ecs::Signal) -> Value {
     match signal.event.as_ref() {
+        Some(crate::engine::ecs::EventSignal::KeyDown(event))
+        | Some(crate::engine::ecs::EventSignal::KeyUp(event))
+        | Some(crate::engine::ecs::EventSignal::KeyPress(event)) => Value::Map(HashMap::from([
+            (
+                "code".to_string(),
+                event
+                    .code
+                    .as_ref()
+                    .map_or(Value::Null, |code| Value::String(code.clone())),
+            ),
+            ("key".to_string(), Value::String(event.key.clone())),
+        ])),
         Some(crate::engine::ecs::EventSignal::FrameTick { dt_sec }) => {
             Value::Map(HashMap::from([(
                 "dt_sec".to_string(),
@@ -1262,6 +1274,44 @@ mod runtime_spec_session_tests {
     use super::*;
     use crate::engine::ecs::component::EmissiveComponent;
     use crate::engine::ecs::{CommandQueue, EventSignal, Signal};
+
+    #[test]
+    fn keyboard_payload_has_exactly_code_and_key_fields() {
+        let signal = Signal::event(
+            ComponentId::default(),
+            EventSignal::KeyDown(crate::engine::ecs::KeyboardEvent {
+                code: Some("KeyW".to_string()),
+                key: "W".to_string(),
+            }),
+        );
+        let Value::Map(payload) = event_arg_value(&signal) else {
+            panic!("keyboard callback payload must be a table");
+        };
+        assert_eq!(payload.len(), 2);
+        assert_eq!(
+            payload.get("code"),
+            Some(&Value::String("KeyW".to_string()))
+        );
+        assert_eq!(payload.get("key"), Some(&Value::String("W".to_string())));
+    }
+
+    #[test]
+    fn keyboard_events_example_evaluates_and_registers_all_global_routes() {
+        let mut world = World::default();
+        let mut rx = RxWorld::default();
+        let mut commands = CommandQueue::new();
+        let (_session, _intents) = RuntimeSpecSession::start(
+            include_str!("../../examples/keyboard-events.mms"),
+            &mut world,
+            &mut rx,
+            None,
+            &mut commands,
+        )
+        .expect("keyboard example should evaluate");
+        assert!(rx.has_global_handlers(crate::engine::ecs::SignalKind::KeyDown));
+        assert!(rx.has_global_handlers(crate::engine::ecs::SignalKind::KeyPress));
+        assert!(rx.has_global_handlers(crate::engine::ecs::SignalKind::KeyUp));
+    }
 
     #[test]
     fn runtime_spec_session_supports_math_constants_as_properties() {
