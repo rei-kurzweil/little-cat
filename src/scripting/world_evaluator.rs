@@ -3230,6 +3230,8 @@ fn parse_signal_kind(s: &str) -> Result<SignalKind, String> {
         "GLTFInitialized" => Ok(SignalKind::GltfInitialized),
         "Click" => Ok(SignalKind::Click),
         "ToggleChanged" => Ok(SignalKind::ToggleChanged),
+        "SliderChanged" => Ok(SignalKind::SliderChanged),
+        "SliderCommitted" => Ok(SignalKind::SliderCommitted),
         "DragStart" => Ok(SignalKind::DragStart),
         "GrabStart" => Ok(SignalKind::GrabStart),
         "GrabEnd" => Ok(SignalKind::GrabEnd),

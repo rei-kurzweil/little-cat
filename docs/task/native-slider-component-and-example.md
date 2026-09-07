@@ -1,6 +1,6 @@
 # Native Slider / SliderComponent and standalone example
 
-Status: design only. No engine implementation in this change.
+Status: implemented first slice.
 
 Implement `SliderComponent` in the mittens engine, expose it as `Slider` in
 MMS, and create `examples/slider.mms` to demonstrate it independently of any
@@ -109,6 +109,7 @@ Keep this example independent of anime materials and GLTF assets.
 6. Add focused engine tests for normalization and mount lifecycle, and exercise
    the runnable example for layout and input behavior.
 
-Until that work is authorized, keep the runnable example free of hypothetical
-`Slider` calls. This document specifies future implementation; it does not
-claim the native control or standalone example already exists.
+The first slice now exists in `SliderComponent`, `SliderSystem`, the MMS
+registry, and `examples/slider.mms`. Layout-native sizing, richer exposed
+visual states, and replacement of mounted parts after initialization remain
+follow-up work.

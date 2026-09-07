@@ -123,6 +123,7 @@ pub struct SystemWorld {
     pub editor_inspector: EditorInspectorSystem,
     pub selection: SelectionSystem,
     pub toggle: ToggleSystem,
+    pub slider: crate::engine::ecs::system::SliderSystem,
     pub asset_system: AssetSystem,
     pub fit_bounds: FitBoundsSystem,
     pub grid: GridSystem,
@@ -2879,6 +2880,7 @@ impl SystemWorld {
         self.text_input.install_handlers(&mut self.rx);
         self.selection.install_handlers(&mut self.rx);
         self.toggle.install_handlers(&mut self.rx);
+        self.slider.install_handlers(&mut self.rx);
         self.grabbable.install_handlers(&mut self.rx);
         self.draggable.install_handlers(&mut self.rx);
 

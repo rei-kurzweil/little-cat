@@ -99,6 +99,7 @@ pub mod renderable;
 pub mod renderer_settings;
 pub mod renderer_stats;
 pub mod rest_attachment;
+pub mod slider;
 pub mod spot_light;
 pub mod text;
 pub mod text_input;
@@ -237,6 +238,7 @@ pub use selection::{SelectionComponent, SelectionEntry, SelectionMode};
 pub use serialize::SerializeComponent;
 pub use signal_observer_router::SignalObserverRouterComponent;
 pub use signal_route_upward::SignalRouteUpwardComponent;
+pub use slider::SliderComponent;
 pub use spot_light::SpotLightComponent;
 pub use stencil_clip::StencilClipComponent;
 pub use style::{

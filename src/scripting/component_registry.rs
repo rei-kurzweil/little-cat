@@ -39,11 +39,11 @@ use crate::engine::ecs::component::{
     RendererSettingsComponent, RendererStatsComponent, RestAttachmentComponent,
     RoughTransmissionComponent, RouterComponent, ScrollingComponent, SecondaryMotionComponent,
     SelectableComponent, SelectionComponent, SerializeComponent, SettingsPanelConfig,
-    SignalObserverRouterComponent, SignalRouteUpwardComponent, SizeDimension, SpotLightComponent,
-    SpringBoneComponent, SpringColliderComponent, SpringCollidersComponent, SpringJointComponent,
-    StencilClipComponent, StyleComponent, TextAlign, TextComponent, TextInputComponent,
-    TextShadowComponent, TextureComponent, TextureFilteringComponent, ToggleComponent,
-    TransformCameraSpecificComponent, TransformComponent, TransformDropComponent,
+    SignalObserverRouterComponent, SignalRouteUpwardComponent, SizeDimension, SliderComponent,
+    SpotLightComponent, SpringBoneComponent, SpringColliderComponent, SpringCollidersComponent,
+    SpringJointComponent, StencilClipComponent, StyleComponent, TextAlign, TextComponent,
+    TextInputComponent, TextShadowComponent, TextureComponent, TextureFilteringComponent,
+    ToggleComponent, TransformCameraSpecificComponent, TransformComponent, TransformDropComponent,
     TransformForkTRSComponent, TransformGizmoAxis, TransformGizmoComponent,
     TransformGizmoCoordSpace, TransformGizmoPlane, TransformGizmoRotateComponent,
     TransformGizmoScaleComponent, TransformGizmoTranslateComponent,
@@ -177,6 +177,7 @@ pub const SUPPORTED_COMPONENT_NAMES: &[&str] = &[
     "Selection",
     "Serialize",
     "SignalRouteUpward",
+    "Slider",
     "SkinnedMesh",
     "SpotLight",
     "SpringBone",
@@ -554,7 +555,7 @@ fn collect_referenced_guids_filtered(
     out: &mut std::collections::HashSet<uuid::Uuid>,
 ) {
     use crate::engine::ecs::component::{
-        ComponentRef, GridBindingComponent, IKChainComponent, TransformParentComponent,
+        ComponentRef, GridBindingComponent, IKChainComponent, SliderComponent, TransformParentComponent,
     };
 
     let visible = filtered_save_visibility(world, node);
@@ -585,6 +586,11 @@ fn collect_referenced_guids_filtered(
             && let ComponentRef::Guid(guid) = &binding.grid
         {
             out.insert(*guid);
+        }
+        if let Some(slider) = world.get_component_by_id_as::<SliderComponent>(node) {
+            for source in [slider.track.as_ref(), slider.thumb.as_ref()].into_iter().flatten() {
+                if let ComponentRef::Guid(guid) = source { out.insert(*guid); }
+            }
         }
     }
 
@@ -659,7 +665,7 @@ fn collect_referenced_guids_limited(
     out: &mut std::collections::HashSet<uuid::Uuid>,
 ) {
     use crate::engine::ecs::component::{
-        ComponentRef, GridBindingComponent, IKChainComponent, TransformParentComponent,
+        ComponentRef, GridBindingComponent, IKChainComponent, SliderComponent, TransformParentComponent,
     };
     if let Some(ik) = world.get_component_by_id_as::<IKChainComponent>(node) {
         for src in [&ik.target_source, &ik.end_effector_source]
@@ -687,6 +693,11 @@ fn collect_referenced_guids_limited(
         && let ComponentRef::Guid(guid) = &binding.grid
     {
         out.insert(*guid);
+    }
+    if let Some(slider) = world.get_component_by_id_as::<SliderComponent>(node) {
+        for source in [slider.track.as_ref(), slider.thumb.as_ref()].into_iter().flatten() {
+            if let ComponentRef::Guid(guid) = source { out.insert(*guid); }
+        }
     }
     let children: Vec<ComponentId> = world
         .get_component_record(node)
@@ -2136,6 +2147,13 @@ fn create_component(
             }
             _ => add!(DraggableComponent::new()),
         },
+        "Slider" => {
+            let id = world.add_component(SliderComponent::new());
+            if let Some(method) = ctor {
+                apply_call(world, id, method, args)?;
+            }
+            Ok(id)
+        }
         "Raycastable" => match ctor {
             Some("disabled") => add!(RaycastableComponent::disabled()),
             Some("drag_only") => add!(RaycastableComponent::drag_only()),
@@ -2594,6 +2612,29 @@ fn apply_call(
     method: &str,
     args: &[Value],
 ) -> Result<(), String> {
+    if world
+        .get_component_by_id_as::<SliderComponent>(id)
+        .is_some()
+    {
+        let current = world
+            .get_component_by_id_as::<SliderComponent>(id)
+            .unwrap()
+            .clone();
+        let updated = match method {
+            "range" => current.range(arg_f32(args, 0)?, arg_f32(args, 1)?)?,
+            "step" => current.with_step(arg_f32(args, 0)?)?,
+            "value" => current.with_value(arg_f32(args, 0)?)?,
+            "width" => current.with_width(arg_f32(args, 0)?)?,
+            "disabled" => current.with_disabled(arg_bool(args, 0)?),
+            "track" => current.with_track(arg_component_ref(world, args, 0)?),
+            "thumb" => current.with_thumb(arg_component_ref(world, args, 0)?),
+            _ => return Err(format!("Slider: unknown builder '{method}'")),
+        };
+        *world
+            .get_component_by_id_as_mut::<SliderComponent>(id)
+            .unwrap() = updated;
+        return Ok(());
+    }
     if let Some(component) = world.get_component_by_id_as_mut::<AnimeShadingComponent>(id) {
         *component = match method {
             "shade_color" => component.with_shade_color(arg_f32_arr::<3>(args, 0)?),

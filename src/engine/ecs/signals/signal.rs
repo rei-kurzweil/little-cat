@@ -199,6 +199,16 @@ pub enum EventSignal {
         value: bool,
     },
 
+    SliderChanged {
+        slider: ComponentId,
+        value: f32,
+    },
+
+    SliderCommitted {
+        slider: ComponentId,
+        value: f32,
+    },
+
     /// A selection scope changed.
     SelectionChanged {
         selection_root: ComponentId,
@@ -356,6 +366,8 @@ impl EventSignal {
             EventSignal::GrabEnd { .. } => SignalKind::GrabEnd,
             EventSignal::Click { .. } => SignalKind::Click,
             EventSignal::ToggleChanged { .. } => SignalKind::ToggleChanged,
+            EventSignal::SliderChanged { .. } => SignalKind::SliderChanged,
+            EventSignal::SliderCommitted { .. } => SignalKind::SliderCommitted,
             EventSignal::SelectionChanged { .. } => SignalKind::SelectionChanged,
             EventSignal::SelectionAdded { .. } => SignalKind::SelectionAdded,
             EventSignal::SelectionRemoved { .. } => SignalKind::SelectionRemoved,
@@ -471,6 +483,11 @@ pub enum IntentValue {
     ToggleSet {
         component_id: ComponentId,
         value: bool,
+    },
+    SliderSet {
+        component_id: ComponentId,
+        value: f32,
+        emit_changed: bool,
     },
     CollisionVisualizationSet {
         component_id: ComponentId,
@@ -845,6 +862,9 @@ pub enum IntentValue {
     RegisterDraggable {
         component_id: ComponentId,
     },
+    RegisterSlider {
+        component_id: ComponentId,
+    },
     RemoveRaycast {
         component_id: ComponentId,
     },
@@ -958,6 +978,7 @@ impl IntentValue {
             IntentValue::GLTFArmatureVisible { .. } => "gltf_armature_visible",
             IntentValue::SelectionSet { .. } => "selection_set",
             IntentValue::ToggleSet { .. } => "toggle_set",
+            IntentValue::SliderSet { .. } => "slider_set",
             IntentValue::CollisionVisualizationSet { .. } => "collision_visualization_set",
             IntentValue::SpringBoneVisualizationSet { .. } => "spring_bone_visualization_set",
             IntentValue::CameraVisualizationSet { .. } => "camera_visualization_set",
@@ -1082,6 +1103,7 @@ impl IntentValue {
             IntentValue::RegisterPointer { .. } => "register_pointer",
             IntentValue::RegisterGrabbable { .. } => "register_grabbable",
             IntentValue::RegisterDraggable { .. } => "register_draggable",
+            IntentValue::RegisterSlider { .. } => "register_slider",
             IntentValue::RemoveRaycast { .. } => "remove_raycast",
             IntentValue::RemoveRaycastable { .. } => "remove_raycastable",
 
@@ -1142,6 +1164,8 @@ pub enum SignalKind {
     GrabEnd,
     Click,
     ToggleChanged,
+    SliderChanged,
+    SliderCommitted,
     SelectionChanged,
     SelectionAdded,
     SelectionRemoved,

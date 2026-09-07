@@ -969,6 +969,30 @@ pub fn build_mittens_runtime() -> Result<MittensRuntime, mms::RuntimeSpecError> 
                         .builder_call("target", any(1))
                         .builder_call("plane", any(1));
                 }
+                "Slider" => {
+                    constructor_and_builder(component, "range", floats(2));
+                    constructor_and_builder(component, "step", floats(1));
+                    constructor_and_builder(component, "value", floats(1));
+                    constructor_and_builder(component, "width", floats(1));
+                    constructor_and_builder(component, "disabled", booleans(1));
+                    constructor_and_builder(component, "track", any(1));
+                    constructor_and_builder(component, "thumb", any(1));
+                    for (name, signature) in [
+                        ("value", method(vec![], mms::ValueType::F32)),
+                        (
+                            "set_value",
+                            method(vec![mms::ValueType::F32], mms::ValueType::Null),
+                        ),
+                        (
+                            "sync_value",
+                            method(vec![mms::ValueType::F32], mms::ValueType::Null),
+                        ),
+                        ("track_mount", method(vec![], mms::ValueType::Component)),
+                        ("thumb_mount", method(vec![], mms::ValueType::Component)),
+                    ] {
+                        host_method(component, canonical, name, signature);
+                    }
+                }
                 "Raycastable" => {
                     for constructor in ["disabled", "drag_only", "click_only", "enabled"] {
                         host_constructor(component, canonical, constructor, no_args());
@@ -1230,6 +1254,8 @@ pub fn build_mittens_runtime() -> Result<MittensRuntime, mms::RuntimeSpecError> 
         "GLTFInitialized",
         "Click",
         "ToggleChanged",
+        "SliderChanged",
+        "SliderCommitted",
         "DataEvent",
         "CollisionStarted",
         "CollisionEnded",

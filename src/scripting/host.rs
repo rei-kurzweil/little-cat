@@ -737,6 +737,8 @@ fn signal_kind(name: &str) -> Option<SignalKind> {
         "GLTFInitialized" => SignalKind::GltfInitialized,
         "Click" => SignalKind::Click,
         "ToggleChanged" => SignalKind::ToggleChanged,
+        "SliderChanged" => SignalKind::SliderChanged,
+        "SliderCommitted" => SignalKind::SliderCommitted,
         "DataEvent" => SignalKind::DataEvent,
         "CollisionStarted" => SignalKind::CollisionStarted,
         "CollisionEnded" => SignalKind::CollisionEnded,

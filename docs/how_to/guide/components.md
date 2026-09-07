@@ -526,6 +526,14 @@ Carries an independent boolean UI value. Clicking its styled owner flips the val
 Toggle.on()
 ```
 
+### `SliderComponent`
+<!-- catalog:component source="SliderComponent" mms="direct" names="Slider" -->
+Carries a finite horizontal numeric range, optional step, current value, and disabled state. `SliderSystem` owns pointer/keyboard interaction and the stable track and thumb mounts; authored component trees may supply the graphics.
+**Directly constructible** as `Slider`, including builder calls such as `range`, `step`, `value`, `width`, `track`, and `thumb`. Live methods expose `value()`, `set_value(...)`, silent `sync_value(...)`, `track_mount()`, and `thumb_mount()`. Sources: [Rust implementation](../../../src/engine/ecs/component/slider.rs), [slider system](../../../src/engine/ecs/system/slider_system.rs), and [MMS registry](../../../src/scripting/component_registry.rs).
+```mms parse-only
+Slider.range(0.0, 1.0).step(0.1).value(0.5)
+```
+
 ### `TextInputComponent`
 <!-- catalog:component source="TextInputComponent" mms="direct" names="TextInput" -->
 Carries text input state used when that engine feature is present in a component tree. Use it when a tree needs this state or behavior. Text-input system; focus/edit intents and `TextInputFocusChanged`/`TextInputChanged` are relevant.

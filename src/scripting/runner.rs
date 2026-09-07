@@ -306,6 +306,19 @@ pub(crate) fn event_arg_value(signal: &crate::engine::ecs::Signal) -> Value {
                 ("value".into(), Value::Bool(*value)),
             ]))
         }
+        Some(crate::engine::ecs::EventSignal::SliderChanged { slider, value })
+        | Some(crate::engine::ecs::EventSignal::SliderCommitted { slider, value }) => {
+            Value::Map(HashMap::from([
+                (
+                    "slider".into(),
+                    Value::ComponentObject {
+                        id: *slider,
+                        component_type: "Slider".into(),
+                    },
+                ),
+                ("value".into(), Value::Number(*value as f64)),
+            ]))
+        }
         Some(crate::engine::ecs::EventSignal::XrButtonDown {
             hand,
             control,

@@ -79,6 +79,7 @@ pub mod scroll_system;
 pub mod secondary_motion_system;
 pub mod selection_system;
 pub mod skinned_mesh_system;
+pub mod slider_system;
 pub mod spring_bone_visualization_system;
 pub mod system_world;
 pub mod text_input_system;
@@ -166,6 +167,7 @@ pub use secondary_motion_system::{
 };
 pub use selection_system::SelectionSystem;
 pub use skinned_mesh_system::SkinnedMeshSystem;
+pub use slider_system::SliderSystem;
 pub use spring_bone_visualization_system::{
     SpringBoneVisualizationRequest, SpringBoneVisualizationSystem,
 };

@@ -1,6 +1,6 @@
 use crate::engine::ecs::component::{
     AudioBandPassFilterComponent, AudioInputComponent, EmissiveComponent, RayCastComponent,
-    TextComponent, TransformComponent, TransitionComponent,
+    SliderComponent, TextComponent, TransformComponent, TransitionComponent,
 };
 use crate::engine::ecs::{ComponentId, IntentValue, PoseApplyMode, World};
 use crate::engine::transform::TransformSpace;
@@ -23,6 +23,11 @@ pub(crate) fn legacy_supports_component_method(component_type: &str, method: &st
             && matches!(method, "apply" | "overlay" | "apply_blended"))
         || (matches!(component_type, "EM" | "Emissive" | "emissive")
             && matches!(method, "set_intensity" | "on" | "off"))
+        || (matches!(component_type, "Slider" | "slider")
+            && matches!(
+                method,
+                "value" | "set_value" | "sync_value" | "track_mount" | "thumb_mount"
+            ))
         || (matches!(component_type, "Raycast" | "RayCast" | "raycast")
             && method == "request_raycast")
         || (matches!(
@@ -60,6 +65,51 @@ pub(crate) fn invoke_component_method(
                 text: text.clone(),
             });
             Ok(Value::Null)
+        }
+        ("Slider" | "slider", "value") => {
+            if !args.is_empty() {
+                return Err(format!("value(): expected no arguments, got {args:?}"));
+            }
+            let value = world
+                .get_component_by_id_as::<SliderComponent>(id)
+                .ok_or_else(|| "value(): not a SliderComponent".to_string())?
+                .value();
+            Ok(Value::Number(value as f64))
+        }
+        ("Slider" | "slider", method @ ("set_value" | "sync_value")) => {
+            let [Value::Number(value)] = args else {
+                return Err(format!("{method}(): expected one number, got {args:?}"));
+            };
+            if !value.is_finite() {
+                return Err(format!("{method}(): value must be finite"));
+            }
+            world
+                .get_component_by_id_as::<SliderComponent>(id)
+                .ok_or_else(|| format!("{method}(): not a SliderComponent"))?;
+            emit_intent(IntentValue::SliderSet {
+                component_id: id,
+                value: *value as f32,
+                emit_changed: method == "set_value",
+            });
+            Ok(Value::Null)
+        }
+        ("Slider" | "slider", method @ ("track_mount" | "thumb_mount")) => {
+            if !args.is_empty() {
+                return Err(format!("{method}(): expected no arguments, got {args:?}"));
+            }
+            let slider = world
+                .get_component_by_id_as::<SliderComponent>(id)
+                .ok_or_else(|| format!("{method}(): not a SliderComponent"))?;
+            let mount = if method == "track_mount" {
+                slider.track_mount
+            } else {
+                slider.thumb_mount
+            }
+            .ok_or_else(|| format!("{method}(): slider is not initialized"))?;
+            Ok(Value::ComponentObject {
+                id: mount,
+                component_type: "Transform".into(),
+            })
         }
         ("TransformWorld", "trs") => {
             world

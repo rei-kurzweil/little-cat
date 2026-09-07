@@ -34,6 +34,7 @@ impl RxIntentExecutor {
                 | IntentValue::GLTFArmatureVisible { .. }
                 | IntentValue::SelectionSet { .. }
                 | IntentValue::ToggleSet { .. }
+                | IntentValue::SliderSet { .. }
                 | IntentValue::Attach { .. }
                 | IntentValue::QueryFindComponent { .. }
                 | IntentValue::QueryFindAllComponents { .. }
@@ -240,6 +241,20 @@ fn handle_intent_signal(
             let toggle = *component_id;
             crate::engine::ecs::system::toggle_system::apply_toggle_set(
                 world, emit, toggle, *value,
+            );
+        }
+
+        IntentValue::SliderSet {
+            component_id,
+            value,
+            emit_changed,
+        } => {
+            crate::engine::ecs::system::slider_system::apply_slider_set(
+                world,
+                emit,
+                *component_id,
+                *value,
+                *emit_changed,
             );
         }
 

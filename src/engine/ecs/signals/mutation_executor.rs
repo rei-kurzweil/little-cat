@@ -618,6 +618,9 @@ impl RxMutationExecutor {
                 let component = *component_id;
                 systems.draggable.register(world, component, emit);
             }
+            IntentValue::RegisterSlider { component_id } => {
+                systems.slider.register(world, *component_id, emit);
+            }
             IntentValue::RemoveRaycast { component_id } => {
                 let component = *component_id;
                 systems.remove_raycast(world, visuals, component);

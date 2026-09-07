@@ -61,6 +61,7 @@ impl SignalPipelineProcessor {
             | IntentValue::SetLayoutInspect { component_id, .. }
             | IntentValue::SelectionSet { component_id, .. }
             | IntentValue::ToggleSet { component_id, .. }
+            | IntentValue::SliderSet { component_id, .. }
             | IntentValue::CollisionVisualizationSet { component_id, .. }
             | IntentValue::SpringBoneVisualizationSet { component_id, .. }
             | IntentValue::CameraVisualizationSet { component_id, .. }
@@ -142,6 +143,7 @@ impl SignalPipelineProcessor {
             | IntentValue::RegisterPointer { component_id }
             | IntentValue::RegisterGrabbable { component_id }
             | IntentValue::RegisterDraggable { component_id }
+            | IntentValue::RegisterSlider { component_id }
             | IntentValue::RemoveRaycast { component_id }
             | IntentValue::RemoveRaycastable { component_id }
             | IntentValue::RegisterAnimation { component_id }
@@ -208,6 +210,7 @@ impl SignalPipelineProcessor {
             | IntentValue::SetLayoutInspect { component_id, .. }
             | IntentValue::SelectionSet { component_id, .. }
             | IntentValue::ToggleSet { component_id, .. }
+            | IntentValue::SliderSet { component_id, .. }
             | IntentValue::CollisionVisualizationSet { component_id, .. }
             | IntentValue::SpringBoneVisualizationSet { component_id, .. }
             | IntentValue::CameraVisualizationSet { component_id, .. }
@@ -289,6 +292,7 @@ impl SignalPipelineProcessor {
             | IntentValue::RegisterPointer { component_id }
             | IntentValue::RegisterGrabbable { component_id }
             | IntentValue::RegisterDraggable { component_id }
+            | IntentValue::RegisterSlider { component_id }
             | IntentValue::RemoveRaycast { component_id }
             | IntentValue::RemoveRaycastable { component_id }
             | IntentValue::RegisterAnimation { component_id }

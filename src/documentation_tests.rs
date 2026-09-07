@@ -296,6 +296,9 @@ fn event_exposure_classifications_match_mms_conversion() {
         "HttpRequest",
         "HttpResponse",
         "HttpError",
+        "ToggleChanged",
+        "SliderChanged",
+        "SliderCommitted",
     ];
     let partial = [
         "DataEvent",

@@ -351,6 +351,24 @@ on(scope, "ToggleChanged", fn(event) { print(event.value) })
 scope
 ```
 
+#### `SliderChanged`
+<!-- catalog:signal source="SliderChanged" kind="event" mms="observable-payload" -->
+**Event.** A `Slider` received a user or emitting programmatic value change. The payload contains the live slider component and its normalized numeric `value`.
+```mms parse-only
+let slider = Slider.range(0.0, 1.0)
+on(slider, "SliderChanged", fn(event) { print(event.value) })
+slider
+```
+
+#### `SliderCommitted`
+<!-- catalog:signal source="SliderCommitted" kind="event" mms="observable-payload" -->
+**Event.** A slider drag completed. The payload contains the live slider component and its final normalized numeric `value`.
+```mms parse-only
+let slider = Slider.range(0.0, 1.0)
+on(slider, "SliderCommitted", fn(event) { print(event.value) })
+slider
+```
+
 #### `SelectionChanged`
 <!-- catalog:signal source="SelectionChanged" kind="event" mms="observable-null" -->
 **Event.** The complete state of a selection scope changed. The interaction and physics subsystem produces it; scoped RX handlers consume it at a signal drain point after execution stages. Events are immediate observations, bubble from the signal scope to ancestor handler scopes, and do not carry `SignalWhen`. Related components are the producers or scopes named by the variant and its subsystem. MMS `on(...)` accepts this event. Handler exposure: **Observable with `null`**. Sources: [event definition](../../../src/engine/ecs/signals/signal.rs), [MMS handler names](../../../src/scripting/world_evaluator.rs), and [payload conversion](../../../src/scripting/runner.rs).
@@ -889,6 +907,22 @@ Transform {}
 **Intent — Available through engine UI synchronization.** Sets one or more `Toggle` values, updates their active highlight, and emits `ToggleChanged` only when the value changes.
 ```mms parse-only
 Toggle.off()
+```
+
+#### `SliderSet`
+<!-- catalog:signal source="SliderSet" kind="intent" mms="live-api" -->
+**Intent — Available through live slider methods.** Normalizes a slider value, moves its thumb, and optionally emits `SliderChanged`. `set_value(...)` emits while `sync_value(...)` is silent.
+```mms parse-only
+let slider = Slider.range(0.0, 1.0)
+slider.sync_value(0.5)
+slider
+```
+
+#### `RegisterSlider`
+<!-- catalog:signal source="RegisterSlider" kind="intent" mms="component-lifecycle" -->
+**Intent — Indirectly emitted by component lifecycle.** Creates the stable native track/thumb mounts, attaches authored visuals or defaults, and makes their renderables interactive.
+```mms parse-only
+Slider.range(0.0, 1.0)
 ```
 
 #### `CollisionVisualizationSet`
