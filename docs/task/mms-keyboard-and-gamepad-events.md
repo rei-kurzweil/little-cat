@@ -10,15 +10,21 @@ path; reuse event infrastructure where possible.
 
 ## Public surface
 
+The [keyboard first slice](mms-keyboard-events-first-slice.md) now proposes
+`KeyDown`/`KeyUp`/`KeyPress` using the verified existing `on_global` API and a
+typed engine payload exposed as an MMS table. No keyboard component is needed
+for that slice; the gamepad source API remains open below.
+
 `Keyboard {}` and `Gamepad {}` are proposed event-source components, not pose
 drivers. An existing scene/global subscription mechanism may replace the need
 for `Keyboard` if it provides equivalent scoping, focus, and cleanup. Settle
 that after inspecting MMS's event facilities; do not invent a global singleton
 requirement or make `I {}` a prerequisite.
 
-- Keyboard: key down/up, stable key identity, modifier state, repeat information,
-  and documented physical-key versus text/layout semantics. Text entry remains
-  distinct from gameplay controls.
+- Keyboard: `KeyDown`/`KeyUp`/`KeyPress` with only `code` and `key` in the MMS
+  table, distinguishing physical identity from logical/layout meaning. Defer
+  richer metadata until MMS has a faster runtime. Repeat and focus bookkeeping
+  remain internal; text entry stays distinct from gameplay controls.
 - Regular gamepad: button down/up, analog sticks/triggers with documented ranges
   and deadzones, device identity/selection, connection and disconnection events.
 - Handlers can maintain held state and update other components by reference,
