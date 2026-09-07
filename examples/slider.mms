@@ -29,6 +29,7 @@ let ROW_HEIGHT = 1.15
 let LABEL_WIDTH = 3.8
 let SLIDER_CELL_WIDTH = 5.8
 let READOUT_WIDTH = 1.2
+let CONTROL_FONT_SIZE = 0.18
 
 fn label(text) {
     return T {
@@ -37,10 +38,10 @@ fn label(text) {
             width(LABEL_WIDTH)
             height(ROW_HEIGHT)
             align_items("center")
-            padding_xy(0.15, 0.0)
+            padding_xy(0.35, 0.15)
+            font_size(CONTROL_FONT_SIZE)
         }
-        // Keep the larger authored font size.
-        T.position(0.0, 0.0, 0.03).scale(0.15, 0.15, 1.0) { Text { text } }
+        T.position(0.0, 0.0, 0.03) { Text { text } }
     }
 }
 
@@ -52,9 +53,9 @@ fn readout(initial) {
             height(ROW_HEIGHT)
             align_items("center")
             justify_content("center")
+            font_size(CONTROL_FONT_SIZE)
         }
-        // Keep the larger authored font size.
-        T.position(0.0, 0.0, 0.03).scale(0.15, 0.15, 1.0) { Text { initial } }
+        T.position(0.0, 0.0, 0.03) { Text { initial } }
     }
 }
 
@@ -111,12 +112,20 @@ let second_themed_slider = Slider.range(0.0, 10.0).step(1.0).value(3.0).width(5.
     .thumb(thumb_visual([0.45, 1.0, 0.55, 1.0]))
 let second_themed_value = readout("3")
 
-let reset = T.scale(0.75, 0.28, 0.12) {
-    R.cube() {
-        C.rgba(0.82, 0.28, 0.34, 1.0)
-        Raycastable.click_only()
+let reset = T {
+    name = "reset_sliders"
+    Raycastable.enabled()
+    Style {
+        display("inline-block")
+        padding_xy(0.55, 0.25)
+        font_size(CONTROL_FONT_SIZE)
+        text_align("center")
+        vertical_align("middle")
+        color([1.0, 1.0, 1.0, 1.0])
+        background_color([0.82, 0.28, 0.34, 1.0])
+        background_z(-0.02)
     }
-    T.position(-0.42, 0.13, 0.7).scale(0.10, 0.10, 1.0) { Text { "Reset" } }
+    Text { "Reset values" }
 }
 
 T.position(-5.7, 3.0, 0.0) {
