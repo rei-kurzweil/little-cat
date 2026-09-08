@@ -3971,16 +3971,34 @@ fn shading_models_example_materializes_comparison_models_and_spotlights() {
             .count(),
         2
     );
-    assert_eq!(
-        ids.iter()
-            .filter(|&&id| world
-                .get_component_by_id_as::<AnimeShadingComponent>(id)
-                .is_some_and(
-                    |shading| shading.model == crate::engine::ecs::component::ShadingModel::Anime
-                ))
-            .count(),
-        1
-    );
+    for (label, expected) in [
+        (
+            "bisket_default_shading",
+            crate::engine::ecs::component::ShadingModel::Toon,
+        ),
+        (
+            "bisket_anime_shading",
+            crate::engine::ecs::component::ShadingModel::Anime,
+        ),
+    ] {
+        let root = ids
+            .iter()
+            .copied()
+            .find(|&id| world.component_label(id) == Some(label))
+            .unwrap();
+        let gltf = world
+            .children_of(root)
+            .iter()
+            .copied()
+            .find(|&id| world.get_component_by_id_as::<GLTFComponent>(id).is_some())
+            .unwrap();
+        let shading = world
+            .children_of(gltf)
+            .iter()
+            .find_map(|&id| world.get_component_by_id_as::<AnimeShadingComponent>(id))
+            .unwrap();
+        assert_eq!(shading.model, expected, "{label}");
+    }
     assert_eq!(
         ids.iter()
             .filter(|&&id| world
@@ -3998,6 +4016,7 @@ fn shading_models_example_materializes_comparison_models_and_spotlights() {
         2
     );
 }
+
 
 #[test]
 fn tripod_light_without_a_mounted_light_has_no_emissive_face() {

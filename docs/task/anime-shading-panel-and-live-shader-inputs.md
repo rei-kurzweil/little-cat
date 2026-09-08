@@ -1,9 +1,24 @@
 # Anime shading: first live slider slice and parameter panel
 
-Status: phase 1a implemented; winit visual acceptance, in-headset XR acceptance,
-and live GPU allocation/frame-cost measurements remain open. Phases 1b–3 are planned.
+Status: phase 1a implemented. User verified Anime rim lighting and two-step shading
+in winit and OpenXR on 2026-09-08. Detailed live-control interaction checks and
+GPU allocation/frame-cost measurements remain open. Phases 1b–3 are planned.
 
 ## Implemented slice and manual verification (2026-09-08)
+
+User verification: Anime's rim lighting and two-step shading are visible through
+both winit and OpenXR. This confirms the rendering path in both environments.
+It does not yet record controller dragging, per-eye inspection, Reset/restore,
+or resource measurements as completed acceptance checks.
+
+Automated verification: 10 focused shading tests, 2 material-cache tests, the
+Bisket example URI check, and 2 existing transform-info-panel tests pass. The
+release binary builds. The comparison test checks the models' own declarations,
+allowing additional Anime scopes such as the floor/backdrop wrapper.
+The broad library run is not green: 44 reported failures also reproduced in an
+unchanged source snapshot, and the full runs did not finish. The broader
+`info_panel` filter also enters microphone/audio-device tests that stall in this
+environment; it is not recorded as passing.
 
 - `Shading.anime()` / `.toon()` share one `ShadingComponent`; the old
   `AnimeShading` constructor and Rust alias remain temporarily compatible.
@@ -42,7 +57,8 @@ This scene enables XR, provides controller pointers, and places a model and
 ordinary sphere under one Anime source on the right, with Toon controls on the
 left. Check both eyes, head rotation/translation and view-dependent rim lighting,
 then drag with a controller and verify both Anime consumers update together.
-Verify Reset and restore in-headset too. XR rendering remains **visually unverified**.
+Verify Reset and restore in-headset too. Basic Anime rendering is user-verified
+in OpenXR; the detailed interaction and per-eye checks above remain open.
 
 Source audit: `submit_xr_eye_offscreen` passes each eye's view/projection to the
 same `build_draw_batches_command_buffer` used by window rendering. That path
@@ -297,7 +313,11 @@ changes. Preserve the latest value if updates are coalesced within a frame.
 Reset must use the same live update path and restore the phase's exposed
 parameters coherently.
 
-### Current implementation and gaps (2026-09-07 source audit)
+### Pre-implementation baseline and remaining expansion work (2026-09-07 audit)
+
+The implementation summary above supersedes this baseline for shade-strength
+read/write and bounded descriptor retention. The remaining scalar methods are
+still phase 1b work.
 
 - `src/scripting/runtime_config.rs` registers AnimeShading constructors and
   builders, but no live methods. Add five typed scalar setters and dispatch in
@@ -444,5 +464,6 @@ custom compatible shading program and one live scalar. Plan animation support
 with [animated shader inputs](animated-shader-material-inputs-mms-animation-system.md)
 as a separate integration step. Do not expand phase 1 into this architecture.
 
-This document plans the work only. Runnable examples should not reference
-unimplemented shader-update APIs until those implementations land.
+Phase 1a is implemented as recorded above; later phases remain planned.
+Runnable examples should not reference additional shader-update APIs until
+those implementations land.
