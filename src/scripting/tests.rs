@@ -8543,6 +8543,140 @@ fn draggable_plane_builder_accepts_object_camera_and_world_axes() {
 }
 
 #[test]
+fn mittens_corp_evaluates_with_non_humanoid_xr_rig_and_pose_editor() {
+    use crate::engine::ecs::component::{
+        AvatarControlComponent, CameraXRComponent, ControllerXRComponent, EditorComponent,
+        EditorPanel, EditorUIComponent, GLTFComponent, InputXRGamepadComponent, PointerComponent,
+        PoseCaptureComponent,
+    };
+
+    let mut world = World::default();
+    let mut rx = RxWorld::default();
+    let mut queue = CommandQueue::new();
+    let mut assets = RenderAssets::new();
+    let output = MeowMeowRunner::eval_with_world_and_assets_at_path(
+        include_str!("../../examples/mittens-corp.mms"),
+        Some("examples/mittens-corp.mms"),
+        &mut world,
+        &mut rx,
+        Some(&mut assets),
+        &mut queue,
+    );
+    assert!(output.errors.is_empty(), "{:?}", output.errors);
+
+    let avc = world
+        .all_components()
+        .find(|id| {
+            world
+                .get_component_by_id_as::<AvatarControlComponent>(*id)
+                .is_some()
+        })
+        .expect("mittens-corp should author an AVC car rig");
+    let car = world
+        .all_components()
+        .find(|id| {
+            world
+                .get_component_by_id_as::<GLTFComponent>(*id)
+                .is_some_and(|gltf| gltf.uri == "assets/models/car.glb")
+        })
+        .expect("mittens-corp should load the car model");
+    let mut car_ancestor = world.parent_of(car);
+    while car_ancestor.is_some() && car_ancestor != Some(avc) {
+        car_ancestor = car_ancestor.and_then(|id| world.parent_of(id));
+    }
+    assert_eq!(car_ancestor, Some(avc), "the car must be controlled by AVC");
+
+    assert_eq!(
+        world
+            .all_components()
+            .filter(|id| world
+                .get_component_by_id_as::<CameraXRComponent>(*id)
+                .is_some())
+            .count(),
+        1
+    );
+    assert!(world.all_components().any(|id| {
+        world
+            .get_component_by_id_as::<InputXRGamepadComponent>(id)
+            .is_some_and(|gamepad| gamepad.locomotion && gamepad.speed == 4.0)
+    }));
+
+    let hands: Vec<_> = world
+        .children_of(avc)
+        .iter()
+        .copied()
+        .filter(|id| {
+            world
+                .get_component_by_id_as::<ControllerXRComponent>(*id)
+                .is_some_and(|controller| controller.laser)
+        })
+        .collect();
+    assert_eq!(
+        hands.len(),
+        2,
+        "both laser hands must be direct AVC children"
+    );
+    for hand in hands {
+        let mut pending = vec![hand];
+        assert!(
+            loop {
+                let Some(component) = pending.pop() else {
+                    break false;
+                };
+                if world
+                    .get_component_by_id_as::<PointerComponent>(component)
+                    .is_some()
+                {
+                    break true;
+                }
+                pending.extend(world.children_of(component).iter().copied());
+            },
+            "each XR controller must retain a pointer without model hand bones"
+        );
+    }
+
+    let editor = world
+        .all_components()
+        .find(|id| {
+            world
+                .get_component_by_id_as::<EditorComponent>(*id)
+                .is_some_and(|editor| editor.active)
+        })
+        .expect("mittens-corp should author an active editor");
+    let bisket = world
+        .all_components()
+        .find(|id| {
+            world
+                .get_component_by_id_as::<GLTFComponent>(*id)
+                .is_some_and(|gltf| gltf.uri == "assets/models/bisket.glb")
+        })
+        .expect("mittens-corp should load Bisket");
+    let mut bisket_ancestor = world.parent_of(bisket);
+    while bisket_ancestor.is_some() && bisket_ancestor != Some(editor) {
+        bisket_ancestor = bisket_ancestor.and_then(|id| world.parent_of(id));
+    }
+    assert_eq!(bisket_ancestor, Some(editor));
+    assert!(world.children_of(bisket).iter().any(|id| {
+        world
+            .get_component_by_id_as::<PoseCaptureComponent>(*id)
+            .is_some_and(|capture| capture.asset_name.as_deref() == Some("bisket"))
+    }));
+
+    let editor_panels = world
+        .all_components()
+        .find_map(|id| {
+            world
+                .get_component_by_id_as::<EditorUIComponent>(id)
+                .map(EditorUIComponent::panels)
+        })
+        .expect("mittens-corp should author EditorUI");
+    assert_eq!(
+        editor_panels,
+        vec![EditorPanel::Settings, EditorPanel::Pose]
+    );
+}
+
+#[test]
 fn xr_grab_demo_evaluates_with_editor_settings_and_grabbable_playground() {
     use crate::engine::ecs::component::{
         ControllerXRComponent, EditorComponent, EditorPanel, EditorUIComponent, GLTFComponent,
