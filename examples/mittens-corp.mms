@@ -108,6 +108,7 @@ T.position(-5.0, 0.0, 0.0) {
 
                 // AVC's first Transform child is intentionally a car rather
                 // than a humanoid avatar.
+                // maybe these 2 transforms are interfering with the camera offset? but they look benign
                 T.position(0.0, 0.10, 0.0) {
                     name = "car_vehicle"
                     T.rotation(0.0, 0.0, 0.0) {
@@ -118,8 +119,8 @@ T.position(-5.0, 0.0, 0.0) {
                     }
                 }
 
-                // Authored cockpit offset retained from car.mms; CXR supplies
-                // the headset views and the camera pointer.
+                // // Authored cockpit offset retained from car.mms; CXR supplies
+                // // the headset views and the camera pointer.
                 T.position(0.0, 3.0, -1.55) {
                     name = "car_xr_cockpit_camera"
                     CXR { Pointer {} }
@@ -134,18 +135,19 @@ T.position(-5.0, 0.0, 0.0) {
                     T { Pointer {} }
                 }
             }
+
+            // trying this here instead:
+            // offset for camera
+            // T.position(0.0, 10.0, -1.55) {
+            //         name = "car_xr_cockpit_camera"
+            //         CXR { Pointer {} }
+            // }
+            // didn't work here either
         }
     }
 }
 
-// A second car sits beyond the left end of the stage. It is scenery only, so
-// it does not interfere with the XR-controlled vehicle above.
-T.position(-19.0, -0.75, -1.5).rotation(0.0, 0.30, 0.0) {
-    name = "left_display_car"
-    GLTF.new("assets/models/car.glb") {
-        bisket_anime_shading()
-    }
-}
+
 
 // Bisket is a separate editable pose target. Keeping it out of AVC prevents
 // live XR IK from fighting authored gizmo rotations while poses are created.
@@ -156,6 +158,15 @@ ED.active() {
             bisket_anime_shading()
             EM.on()
             PoseCapture { label("Bisket") asset_name("bisket") }
+        }
+    }
+
+    // A second car sits beyond the left end of the stage. It is scenery only, so
+    // it does not interfere with the XR-controlled vehicle above.
+    T.position(-19.0, -0.75, -1.5).rotation(0.0, 0.30, 0.0) {
+        name = "left_display_car"
+        GLTF.new("assets/models/car.glb") {
+            bisket_anime_shading()
         }
     }
 }
