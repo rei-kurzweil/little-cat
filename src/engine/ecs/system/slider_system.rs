@@ -429,7 +429,9 @@ fn ensure_subtree_raycastable(world: &mut World, emit: &mut dyn SignalEmitter, r
     }
     for renderable in renderables {
         let existing = world.children_of(renderable).iter().copied().find(|id| {
-            world.get_component_by_id_as::<RaycastableComponent>(*id).is_some()
+            world
+                .get_component_by_id_as::<RaycastableComponent>(*id)
+                .is_some()
         });
         if let Some(existing) = existing {
             if let Some(hit) = world.get_component_by_id_as_mut::<RaycastableComponent>(existing) {

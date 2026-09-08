@@ -248,9 +248,9 @@ fn vtuber_microphone_speaking_eye_tracking_scene_uses_standard_eye_tracking() {
     assert!(output.errors.is_empty(), "{:#?}", output.errors);
     assert!(world.all_components().any(|id| {
         world
-            .get_component_by_id_as::<
-                crate::engine::ecs::component::VRChatOSCEyeTrackingComponent,
-            >(id)
+            .get_component_by_id_as::<crate::engine::ecs::component::VRChatOSCEyeTrackingComponent>(
+                id,
+            )
             .is_some()
     }));
     assert!(!world.all_components().any(|id| {
@@ -318,17 +318,12 @@ fn vtuber_microphone_speaking_eye_tracking_panel_swaps_direct_avc_tracker() {
         .iter()
         .copied()
         .find_map(|id| {
-            world
-                .get_component_by_id_as::<crate::engine::ecs::component::StyleComponent>(id)
+            world.get_component_by_id_as::<crate::engine::ecs::component::StyleComponent>(id)
         })
         .expect("HTC option style");
     assert_eq!(htc_row_style.background_color, Some([1.0, 0.84, 0.0, 1.0]));
-    let output = session.service_callbacks(
-        &mut world,
-        &mut systems.rx,
-        Some(&mut assets),
-        &mut queue,
-    );
+    let output =
+        session.service_callbacks(&mut world, &mut systems.rx, Some(&mut assets), &mut queue);
     assert!(output.errors.is_empty(), "{:#?}", output.errors);
     assert!(output.intents.iter().any(|intent| matches!(
         intent,
@@ -367,11 +362,13 @@ fn vtuber_microphone_speaking_eye_tracking_panel_swaps_direct_avc_tracker() {
         })
         .collect::<Vec<_>>();
     assert_eq!(direct_trackers.len(), 1, "one active direct eye tracker");
-    assert!(world
-        .get_component_by_id_as::<crate::engine::ecs::component::HTCEyeTrackingComponent>(
-            direct_trackers[0]
-        )
-        .is_some());
+    assert!(
+        world
+            .get_component_by_id_as::<crate::engine::ecs::component::HTCEyeTrackingComponent>(
+                direct_trackers[0]
+            )
+            .is_some()
+    );
 
     let htc_tracker = direct_trackers[0];
     let vrchat_row = world
@@ -390,12 +387,8 @@ fn vtuber_microphone_speaking_eye_tracking_panel_swaps_direct_avc_tracker() {
             },
         ),
     );
-    let output = session.service_callbacks(
-        &mut world,
-        &mut systems.rx,
-        Some(&mut assets),
-        &mut queue,
-    );
+    let output =
+        session.service_callbacks(&mut world, &mut systems.rx, Some(&mut assets), &mut queue);
     assert!(output.errors.is_empty(), "{:#?}", output.errors);
     assert!(output.intents.iter().any(|intent| matches!(
         intent,
@@ -425,11 +418,13 @@ fn vtuber_microphone_speaking_eye_tracking_panel_swaps_direct_avc_tracker() {
         })
         .collect::<Vec<_>>();
     assert_eq!(direct_trackers.len(), 1, "one active direct eye tracker");
-    assert!(world
-        .get_component_by_id_as::<
-            crate::engine::ecs::component::VRChatOSCEyeTrackingComponent,
-        >(direct_trackers[0])
-        .is_some());
+    assert!(
+        world
+            .get_component_by_id_as::<crate::engine::ecs::component::VRChatOSCEyeTrackingComponent>(
+                direct_trackers[0]
+            )
+            .is_some()
+    );
 }
 
 #[test]
@@ -3670,8 +3665,10 @@ fn every_bisket_example_uses_the_canonical_model_uri() {
                 .join("\n");
             // Comparison scenes retain the shared source outside the GLTF body.
             // Their dedicated runtime tests verify Anime/Toon selection.
-            if matches!(path.file_name().and_then(|name| name.to_str()),
-                Some("shading-models.mms" | "shading-models-xr.mms")) {
+            if matches!(
+                path.file_name().and_then(|name| name.to_str()),
+                Some("shading-models.mms" | "shading-models-xr.mms")
+            ) {
                 *anime_shaded += 1;
                 *default_shaded += 1;
                 continue;
@@ -4016,7 +4013,6 @@ fn shading_models_example_materializes_comparison_models_and_spotlights() {
         2
     );
 }
-
 
 #[test]
 fn tripod_light_without_a_mounted_light_has_no_emissive_face() {

@@ -556,7 +556,8 @@ fn collect_referenced_guids_filtered(
     out: &mut std::collections::HashSet<uuid::Uuid>,
 ) {
     use crate::engine::ecs::component::{
-        ComponentRef, GridBindingComponent, IKChainComponent, SliderComponent, TransformParentComponent,
+        ComponentRef, GridBindingComponent, IKChainComponent, SliderComponent,
+        TransformParentComponent,
     };
 
     let visible = filtered_save_visibility(world, node);
@@ -589,8 +590,13 @@ fn collect_referenced_guids_filtered(
             out.insert(*guid);
         }
         if let Some(slider) = world.get_component_by_id_as::<SliderComponent>(node) {
-            for source in [slider.track.as_ref(), slider.thumb.as_ref()].into_iter().flatten() {
-                if let ComponentRef::Guid(guid) = source { out.insert(*guid); }
+            for source in [slider.track.as_ref(), slider.thumb.as_ref()]
+                .into_iter()
+                .flatten()
+            {
+                if let ComponentRef::Guid(guid) = source {
+                    out.insert(*guid);
+                }
             }
         }
     }
@@ -666,7 +672,8 @@ fn collect_referenced_guids_limited(
     out: &mut std::collections::HashSet<uuid::Uuid>,
 ) {
     use crate::engine::ecs::component::{
-        ComponentRef, GridBindingComponent, IKChainComponent, SliderComponent, TransformParentComponent,
+        ComponentRef, GridBindingComponent, IKChainComponent, SliderComponent,
+        TransformParentComponent,
     };
     if let Some(ik) = world.get_component_by_id_as::<IKChainComponent>(node) {
         for src in [&ik.target_source, &ik.end_effector_source]
@@ -696,8 +703,13 @@ fn collect_referenced_guids_limited(
         out.insert(*guid);
     }
     if let Some(slider) = world.get_component_by_id_as::<SliderComponent>(node) {
-        for source in [slider.track.as_ref(), slider.thumb.as_ref()].into_iter().flatten() {
-            if let ComponentRef::Guid(guid) = source { out.insert(*guid); }
+        for source in [slider.track.as_ref(), slider.thumb.as_ref()]
+            .into_iter()
+            .flatten()
+        {
+            if let ComponentRef::Guid(guid) = source {
+                out.insert(*guid);
+            }
         }
     }
     let children: Vec<ComponentId> = world

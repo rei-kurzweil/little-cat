@@ -3,9 +3,10 @@ use crate::engine::ecs::component::{
     GestureCoordType, GestureCoordTypeComponent, SignalRouteUpwardComponent,
     TransformCameraSpecificComponent, TransformCameraSpecificMode, TransformComponent,
     TransformDropComponent, TransformForkTRSComponent, TransformGizmoAxis, TransformGizmoComponent,
-    TransformGizmoPlane, TransformGizmoRotateComponent, TransformGizmoScaleComponent,
-    TransformGizmoTranslateComponent, TransformGizmoTranslatePlaneComponent,
-    TransformMapRotationComponent, TransformMapScaleComponent, TransformMapTranslationComponent,
+    TransformGizmoControllerRotationState, TransformGizmoPlane, TransformGizmoRotateComponent,
+    TransformGizmoScaleComponent, TransformGizmoTranslateComponent,
+    TransformGizmoTranslatePlaneComponent, TransformMapRotationComponent,
+    TransformMapScaleComponent, TransformMapTranslationComponent,
 };
 use crate::engine::ecs::system::GridSystem;
 use crate::engine::ecs::system::editor::context::EditorContextState;
@@ -585,6 +586,87 @@ impl TransformGizmoSystem {
         translation_space
     }
 
+    fn resolve_rotation_space(
+        world: &World,
+        gizmo_cid: ComponentId,
+    ) -> crate::engine::ecs::component::TransformGizmoCoordSpace {
+        let mut space = crate::engine::ecs::component::TransformGizmoCoordSpace::Local;
+        let mut cur = Some(gizmo_cid);
+        while let Some(node) = cur {
+            if let Some(ed) =
+                world.get_component_by_id_as::<crate::engine::ecs::component::EditorComponent>(node)
+            {
+                space = ed.transform_gizmo_rotation_space;
+                break;
+            }
+            cur = world.parent_of(node);
+        }
+        space
+    }
+
+    fn controller_pose_transform(world: &World, raycaster: ComponentId) -> Option<ComponentId> {
+        use crate::engine::ecs::component::ControllerXRComponent;
+        let mut cur = Some(raycaster);
+        let mut nearest_transform = None;
+        while let Some(node) = cur {
+            if nearest_transform.is_none()
+                && world
+                    .get_component_by_id_as::<TransformComponent>(node)
+                    .is_some()
+            {
+                nearest_transform = Some(node);
+            }
+            if let Some(controller) = world.get_component_by_id_as::<ControllerXRComponent>(node) {
+                return (controller.enabled && controller.pose_valid).then_some(nearest_transform?);
+            }
+            cur = world.parent_of(node);
+        }
+        None
+    }
+
+    fn signed_twist_angle(delta: [f32; 4], axis_world: [f32; 3]) -> Option<f32> {
+        let dot = delta[0] * axis_world[0] + delta[1] * axis_world[1] + delta[2] * axis_world[2];
+        let norm = (dot * dot + delta[3] * delta[3]).sqrt();
+        (norm > 1.0e-7 && norm.is_finite()).then(|| 2.0 * (dot / norm).atan2(delta[3] / norm))
+    }
+
+    fn apply_rotation_from_start(
+        world: &mut World,
+        emit: &mut dyn SignalEmitter,
+        target: ComponentId,
+        space: crate::engine::ecs::component::TransformGizmoCoordSpace,
+        axis: TransformGizmoAxis,
+        axis_world: [f32; 3],
+        angle: f32,
+        start_local: [f32; 4],
+        start_world: [f32; 4],
+    ) -> bool {
+        use crate::engine::ecs::system::transform_system::TransformSystem;
+        use crate::utils::math;
+        let next = match space {
+            crate::engine::ecs::component::TransformGizmoCoordSpace::Local => math::quat_mul(
+                start_local,
+                math::quat_from_axis_angle(axis.unit_vec3(), angle),
+            ),
+            crate::engine::ecs::component::TransformGizmoCoordSpace::World => {
+                let desired_world =
+                    math::quat_mul(math::quat_from_axis_angle(axis_world, angle), start_world);
+                let parent_world = world
+                    .parent_of(target)
+                    .and_then(|parent| {
+                        TransformSystem::world_rotation_quat_xyzw(world, parent).ok()
+                    })
+                    .unwrap_or([0.0, 0.0, 0.0, 1.0]);
+                math::quat_mul(math::quat_conjugate(parent_world), desired_world)
+            }
+        };
+        let Some(t) = world.get_component_by_id_as_mut::<TransformComponent>(target) else {
+            return false;
+        };
+        t.set_rotation_quat(emit, next);
+        true
+    }
+
     fn transform_direction(
         m: crate::engine::graphics::primitives::TransformMatrix,
         v: [f32; 3],
@@ -715,6 +797,14 @@ impl TransformGizmoSystem {
         if let Some(g) = world.get_component_by_id_as_mut::<TransformGizmoComponent>(*child) {
             g.target_transform = routed_target;
             g.active_raycaster = None;
+            g.active_controller_rotation = None;
+            g.active_drag_slider_last_angle = 0.0;
+            g.active_drag_start_hit_point_world = None;
+            g.active_drag_start_target_translation = None;
+            g.active_drag_plane_axes_world = None;
+            g.active_drag_rotation_space = None;
+            g.active_drag_start_target_local_rotation = None;
+            g.active_drag_start_target_world_rotation = None;
         }
 
         if Self::debug_enabled() {
@@ -764,6 +854,42 @@ impl TransformGizmoSystem {
             }
             _ => None,
         };
+        let rotation_capture = match (op, target_transform) {
+            (TransformGizmoOp::Rotate(axis), Some(target)) => {
+                use crate::engine::ecs::system::transform_system::TransformSystem;
+                let space = Self::resolve_rotation_space(world, gizmo_cid);
+                let axis_world = Self::translation_axis_world(world, target, space, axis);
+                let local = world
+                    .get_component_by_id_as::<TransformComponent>(target)
+                    .map(|t| t.transform.rotation);
+                let world_rotation = TransformSystem::world_rotation_quat_xyzw(world, target).ok();
+                local
+                    .zip(world_rotation)
+                    .map(|(local, world_rotation)| (axis, space, axis_world, local, world_rotation))
+            }
+            _ => None,
+        };
+        let controller_rotation = rotation_capture.and_then(
+            |(axis, space, axis_world, start_local, start_world)| {
+                let pose_transform = Self::controller_pose_transform(world, *raycaster)?;
+                let previous_controller_world_rotation =
+                    crate::engine::ecs::system::transform_system::TransformSystem::world_rotation_quat_xyzw(
+                        world,
+                        pose_transform,
+                    )
+                    .ok()?;
+                Some(TransformGizmoControllerRotationState {
+                    axis,
+                    space,
+                    axis_world,
+                    pose_transform,
+                    previous_controller_world_rotation,
+                    start_target_local_rotation: start_local,
+                    start_target_world_rotation: start_world,
+                    accumulated_angle: 0.0,
+                })
+            },
+        );
 
         if let Some(g) = world.get_component_by_id_as_mut::<TransformGizmoComponent>(gizmo_cid) {
             g.active_raycaster = Some(*raycaster);
@@ -771,6 +897,10 @@ impl TransformGizmoSystem {
             g.active_drag_start_hit_point_world = Some(*hit_point);
             g.active_drag_start_target_translation = drag_start_target_translation;
             g.active_drag_plane_axes_world = active_drag_plane_axes_world;
+            g.active_controller_rotation = controller_rotation;
+            g.active_drag_rotation_space = rotation_capture.map(|capture| capture.1);
+            g.active_drag_start_target_local_rotation = rotation_capture.map(|capture| capture.3);
+            g.active_drag_start_target_world_rotation = rotation_capture.map(|capture| capture.4);
         }
     }
 
@@ -832,6 +962,10 @@ impl TransformGizmoSystem {
             drag_start_hit_point_world,
             drag_start_target_translation,
             active_drag_plane_axes_world,
+            active_controller_rotation,
+            active_drag_rotation_space,
+            active_drag_start_target_local_rotation,
+            active_drag_start_target_world_rotation,
         )) = world
             .get_component_by_id_as::<TransformGizmoComponent>(gizmo_cid)
             .map(|g| {
@@ -842,6 +976,10 @@ impl TransformGizmoSystem {
                     g.active_drag_start_hit_point_world,
                     g.active_drag_start_target_translation,
                     g.active_drag_plane_axes_world,
+                    g.active_controller_rotation,
+                    g.active_drag_rotation_space,
+                    g.active_drag_start_target_local_rotation,
+                    g.active_drag_start_target_world_rotation,
                 )
             })
         else {
@@ -1030,23 +1168,17 @@ impl TransformGizmoSystem {
                 }
             }
             TransformGizmoOp::Rotate(axis) => {
+                // XR controller rotation is polled after pose updates in tick_with_queue.
+                if active_controller_rotation.is_some() {
+                    return;
+                }
                 let coord_type =
                     Self::resolve_gesture_coord_type_for_renderable(world, *renderable);
 
                 // Resolve rotation coord space (default Local). This controls how we interpret the
                 // axis when applying the drag angle.
-                let mut rotation_space =
-                    crate::engine::ecs::component::TransformGizmoCoordSpace::Local;
-                {
-                    let mut cur = Some(gizmo_cid);
-                    while let Some(node) = cur {
-                        if let Some(ed) = world.get_component_by_id_as::<crate::engine::ecs::component::EditorComponent>(node) {
-                            rotation_space = ed.transform_gizmo_rotation_space;
-                            break;
-                        }
-                        cur = world.parent_of(node);
-                    }
-                }
+                let rotation_space = active_drag_rotation_space
+                    .unwrap_or_else(|| Self::resolve_rotation_space(world, gizmo_cid));
 
                 let axis_v = axis.unit_vec3();
                 let (angle, new_slider_last_angle) = match coord_type {
@@ -1088,76 +1220,35 @@ impl TransformGizmoSystem {
                     }
                 };
 
-                if angle != 0.0 {
-                    let axis_local = match rotation_space {
-                        crate::engine::ecs::component::TransformGizmoCoordSpace::Local => axis_v,
-                        // World mode will be implemented next; for now keep the previous behavior
-                        // (convert the world axis into target-local space).
-                        crate::engine::ecs::component::TransformGizmoCoordSpace::World => {
-                            Self::world_dir_to_target_local(world, target_transform, axis_v)
-                        }
-                    };
-
-                    let Some(t_ro) =
-                        world.get_component_by_id_as::<TransformComponent>(target_transform)
-                    else {
-                        return;
-                    };
-                    let q_delta_local = math::quat_from_axis_angle(axis_local, angle);
-                    // Quaternion multiplication order determines the frame the delta is applied in:
-                    // - Local: post-multiply (rotate in the object's local frame)
-                    // - World: pre-multiply (rotate in the parent/world frame)
-                    let q_next = match rotation_space {
-                        crate::engine::ecs::component::TransformGizmoCoordSpace::Local => {
-                            math::quat_mul(t_ro.transform.rotation, q_delta_local)
-                        }
-                        crate::engine::ecs::component::TransformGizmoCoordSpace::World => {
-                            math::quat_mul(q_delta_local, t_ro.transform.rotation)
-                        }
-                    };
-
-                    if Self::debug_apply_enabled() {
-                        Self::log_apply(
-                            world,
-                            "rotate",
-                            target_transform,
-                            &format!(
-                                "delta_world={:?} axis_world={:?} axis_local={:?} angle={:.6} cur_q={:?} next_q={:?} pivot_world={:?}",
-                                *delta_world,
-                                axis_v,
-                                axis_local,
-                                angle,
-                                t_ro.transform.rotation,
-                                q_next,
-                                TransformSystem::world_position(world, target_transform)
-                                    .unwrap_or([0.0, 0.0, 0.0]),
-                            ),
-                        );
-                    }
-
-                    if Self::debug_sanity_enabled() {
-                        Self::sanity_check_transform_values(
-                            world,
-                            target_transform,
-                            t_ro.transform.translation,
-                            q_next,
-                            t_ro.transform.scale,
-                        );
-                    }
-
-                    let Some(t) =
-                        world.get_component_by_id_as_mut::<TransformComponent>(target_transform)
-                    else {
-                        return;
-                    };
-                    t.set_rotation_quat(emit, q_next);
+                let accumulated = if coord_type == Some(GestureCoordType::ScreenSpace1DSlider) {
+                    new_slider_last_angle
+                } else {
+                    slider_last_angle + angle
+                };
+                if let (Some(start_local), Some(start_world)) = (
+                    active_drag_start_target_local_rotation,
+                    active_drag_start_target_world_rotation,
+                ) {
+                    let axis_world =
+                        Self::translation_axis_world(world, target_transform, rotation_space, axis);
+                    Self::apply_rotation_from_start(
+                        world,
+                        emit,
+                        target_transform,
+                        rotation_space,
+                        axis,
+                        axis_world,
+                        accumulated,
+                        start_local,
+                        start_world,
+                    );
                 }
 
                 if coord_type == Some(GestureCoordType::ScreenSpace1DSlider) {
                     if let Some(g) =
                         world.get_component_by_id_as_mut::<TransformGizmoComponent>(gizmo_cid)
                     {
-                        g.active_drag_slider_last_angle = new_slider_last_angle;
+                        g.active_drag_slider_last_angle = accumulated;
                     }
                 }
             }
@@ -1263,6 +1354,10 @@ impl TransformGizmoSystem {
             g.active_drag_start_hit_point_world = None;
             g.active_drag_start_target_translation = None;
             g.active_drag_plane_axes_world = None;
+            g.active_controller_rotation = None;
+            g.active_drag_rotation_space = None;
+            g.active_drag_start_target_local_rotation = None;
+            g.active_drag_start_target_world_rotation = None;
         }
     }
 
@@ -1642,6 +1737,27 @@ impl TransformGizmoSystem {
             rc
         }
 
+        fn spawn_rotation_raycastable_root(
+            world: &mut World,
+            parent: ComponentId,
+            name: &str,
+        ) -> ComponentId {
+            use crate::engine::ecs::component::{
+                DragContinuationPolicy, DragMappingPolicy, RaycastableComponent,
+            };
+            let rc = world.add_component_boxed_named(
+                name,
+                Box::new(
+                    RaycastableComponent::drag_only()
+                        .with_interaction_priority(1)
+                        .with_drag_continuation(DragContinuationPolicy::Captured)
+                        .with_drag_mapping(DragMappingPolicy::Auto),
+                ),
+            );
+            let _ = world.add_child(parent, rc);
+            rc
+        }
+
         fn spawn_gesture_coord_type_root(
             world: &mut World,
             parent: ComponentId,
@@ -1719,7 +1835,7 @@ impl TransformGizmoSystem {
             "gizmo_rot_x_coord",
             GestureCoordType::ScreenSpace1DSlider,
         );
-        let rot_x_pick = spawn_raycastable_root(world, rot_x_coord, "gizmo_rot_x_pick");
+        let rot_x_pick = spawn_rotation_raycastable_root(world, rot_x_coord, "gizmo_rot_x_pick");
         spawn_part(
             world,
             rot_x_pick,
@@ -1739,7 +1855,7 @@ impl TransformGizmoSystem {
             "gizmo_rot_y_coord",
             GestureCoordType::ScreenSpace1DSlider,
         );
-        let rot_y_pick = spawn_raycastable_root(world, rot_y_coord, "gizmo_rot_y_pick");
+        let rot_y_pick = spawn_rotation_raycastable_root(world, rot_y_coord, "gizmo_rot_y_pick");
         spawn_part(
             world,
             rot_y_pick,
@@ -1759,7 +1875,7 @@ impl TransformGizmoSystem {
             "gizmo_rot_z_coord",
             GestureCoordType::ScreenSpace1DSlider,
         );
-        let rot_z_pick = spawn_raycastable_root(world, rot_z_coord, "gizmo_rot_z_pick");
+        let rot_z_pick = spawn_rotation_raycastable_root(world, rot_z_coord, "gizmo_rot_z_pick");
         spawn_part(
             world,
             rot_z_pick,
@@ -2079,9 +2195,85 @@ impl TransformGizmoSystem {
         emit: &mut dyn SignalEmitter,
         _rx: &mut RxWorld,
     ) {
-        // Handler-driven: drag + parent events are handled during drain points.
-        // Keep `tick_with_queue` as a no-op entrypoint for now.
-        let _ = (world, emit);
+        use crate::engine::ecs::system::transform_system::TransformSystem;
+        use crate::utils::math;
+
+        for gizmo_cid in self.live_gizmos.iter().copied().collect::<Vec<_>>() {
+            let Some((target, raycaster, mut state)) = world
+                .get_component_by_id_as::<TransformGizmoComponent>(gizmo_cid)
+                .and_then(|g| {
+                    Some((
+                        g.target_transform?,
+                        g.active_raycaster?,
+                        g.active_controller_rotation?,
+                    ))
+                })
+            else {
+                continue;
+            };
+
+            if world
+                .get_component_by_id_as::<TransformComponent>(target)
+                .is_none()
+                || Self::controller_pose_transform(world, raycaster) != Some(state.pose_transform)
+            {
+                if let Some(g) =
+                    world.get_component_by_id_as_mut::<TransformGizmoComponent>(gizmo_cid)
+                {
+                    g.active_raycaster = None;
+                    g.active_controller_rotation = None;
+                }
+                continue;
+            }
+            let Ok(mut current) =
+                TransformSystem::world_rotation_quat_xyzw(world, state.pose_transform)
+            else {
+                if let Some(g) =
+                    world.get_component_by_id_as_mut::<TransformGizmoComponent>(gizmo_cid)
+                {
+                    g.active_raycaster = None;
+                    g.active_controller_rotation = None;
+                }
+                continue;
+            };
+            let previous = state.previous_controller_world_rotation;
+            let qdot = current[0] * previous[0]
+                + current[1] * previous[1]
+                + current[2] * previous[2]
+                + current[3] * previous[3];
+            if qdot < 0.0 {
+                current = [-current[0], -current[1], -current[2], -current[3]];
+            }
+            let delta = math::quat_mul(current, math::quat_conjugate(previous));
+            let Some(angle) = Self::signed_twist_angle(delta, state.axis_world) else {
+                if let Some(g) =
+                    world.get_component_by_id_as_mut::<TransformGizmoComponent>(gizmo_cid)
+                {
+                    g.active_raycaster = None;
+                    g.active_controller_rotation = None;
+                }
+                continue;
+            };
+            state.previous_controller_world_rotation = current;
+            state.accumulated_angle += angle;
+            if Self::apply_rotation_from_start(
+                world,
+                emit,
+                target,
+                state.space,
+                state.axis,
+                state.axis_world,
+                state.accumulated_angle,
+                state.start_target_local_rotation,
+                state.start_target_world_rotation,
+            ) {
+                if let Some(g) =
+                    world.get_component_by_id_as_mut::<TransformGizmoComponent>(gizmo_cid)
+                {
+                    g.active_controller_rotation = Some(state);
+                }
+            }
+        }
     }
 }
 
@@ -2180,6 +2372,73 @@ mod tests {
                 .expect("planar handle color");
             assert_eq!(color.rgba, expected_color);
         }
+
+        for name in ["gizmo_rot_x", "gizmo_rot_y", "gizmo_rot_z"] {
+            let handle = world
+                .find_component(gizmo, &format!("[name='{name}']"))
+                .expect("rotation handle root");
+            let raycastable = world
+                .find_component(handle, "Raycastable")
+                .and_then(|id| world.get_component_by_id_as::<RaycastableComponent>(id))
+                .expect("rotation raycastable");
+            assert_eq!(raycastable.drag_mapping, DragMappingPolicy::Auto);
+            assert_eq!(
+                raycastable.drag_continuation,
+                DragContinuationPolicy::Captured
+            );
+        }
+    }
+
+    #[test]
+    fn signed_twist_extracts_each_axis_and_rejects_off_axis_motion() {
+        use crate::utils::math::quat_from_axis_angle;
+        for axis in [
+            TransformGizmoAxis::X,
+            TransformGizmoAxis::Y,
+            TransformGizmoAxis::Z,
+        ] {
+            for expected in [0.7_f32, -0.7] {
+                let q = quat_from_axis_angle(axis.unit_vec3(), expected);
+                let actual = TransformGizmoSystem::signed_twist_angle(q, axis.unit_vec3())
+                    .expect("valid twist");
+                assert!((actual - expected).abs() < 1.0e-5, "{axis:?}: {actual}");
+            }
+        }
+        let off_axis = quat_from_axis_angle([0.0, 1.0, 0.0], 0.8);
+        assert!(
+            TransformGizmoSystem::signed_twist_angle(off_axis, [1.0, 0.0, 0.0])
+                .expect("identity twist")
+                .abs()
+                < 1.0e-6
+        );
+    }
+
+    #[test]
+    fn sign_normalized_incremental_twists_accumulate_past_half_turn() {
+        use crate::utils::math::{quat_conjugate, quat_from_axis_angle, quat_mul};
+        let axis = [0.0, 0.0, 1.0];
+        let mut previous = [0.0, 0.0, 0.0, 1.0];
+        let mut accumulated = 0.0;
+        for step in 1..=8 {
+            let mut current = quat_from_axis_angle(axis, step as f32 * 0.5);
+            if step == 5 {
+                current = [-current[0], -current[1], -current[2], -current[3]];
+            }
+            let dot = current[0] * previous[0]
+                + current[1] * previous[1]
+                + current[2] * previous[2]
+                + current[3] * previous[3];
+            if dot < 0.0 {
+                current = [-current[0], -current[1], -current[2], -current[3]];
+            }
+            accumulated += TransformGizmoSystem::signed_twist_angle(
+                quat_mul(current, quat_conjugate(previous)),
+                axis,
+            )
+            .expect("valid incremental twist");
+            previous = current;
+        }
+        assert!((accumulated - 4.0).abs() < 1.0e-5);
     }
 
     #[test]

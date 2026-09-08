@@ -8,6 +8,18 @@ pub enum TransformGizmoAxis {
     Z,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct TransformGizmoControllerRotationState {
+    pub axis: TransformGizmoAxis,
+    pub space: super::TransformGizmoCoordSpace,
+    pub axis_world: [f32; 3],
+    pub pose_transform: ComponentId,
+    pub previous_controller_world_rotation: [f32; 4],
+    pub start_target_local_rotation: [f32; 4],
+    pub start_target_world_rotation: [f32; 4],
+    pub accumulated_angle: f32,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TransformGizmoPlane {
     XY,
@@ -235,6 +247,16 @@ pub struct TransformGizmoComponent {
     /// Runtime: stable world-space basis captured for a planar translation drag.
     pub active_drag_plane_axes_world: Option<[[f32; 3]; 2]>,
 
+    /// Runtime-only controller-orientation state for an XR rotation drag.
+    pub active_controller_rotation: Option<TransformGizmoControllerRotationState>,
+
+    /// Rotation coordinate space captured when any rotation drag starts.
+    pub active_drag_rotation_space: Option<super::TransformGizmoCoordSpace>,
+
+    /// Target rotations captured when any rotation drag starts.
+    pub active_drag_start_target_local_rotation: Option<[f32; 4]>,
+    pub active_drag_start_target_world_rotation: Option<[f32; 4]>,
+
     /// Root TransformComponent id of the gizmo visual subtree (spawned on init).
     pub visual_root: Option<ComponentId>,
 
@@ -254,6 +276,10 @@ impl TransformGizmoComponent {
             active_drag_start_hit_point_world: None,
             active_drag_start_target_translation: None,
             active_drag_plane_axes_world: None,
+            active_controller_rotation: None,
+            active_drag_rotation_space: None,
+            active_drag_start_target_local_rotation: None,
+            active_drag_start_target_world_rotation: None,
             visual_root: None,
             component: None,
         }

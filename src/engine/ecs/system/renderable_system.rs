@@ -2103,14 +2103,41 @@ mod tests {
             system.register_renderable_from_world(&mut world, &mut visuals, renderable);
             renderables.push(renderable);
         }
-        system.flush_pending(&mut world, &mut visuals, &mut assets, &mut uploader, &mut queue);
-        world.get_component_by_id_as_mut::<AnimeShadingComponent>(source).unwrap().shade_strength = 0.9;
+        system.flush_pending(
+            &mut world,
+            &mut visuals,
+            &mut assets,
+            &mut uploader,
+            &mut queue,
+        );
+        world
+            .get_component_by_id_as_mut::<AnimeShadingComponent>(source)
+            .unwrap()
+            .shade_strength = 0.9;
         system.register_anime_shading(&mut world, &mut visuals, source);
         for (index, renderable) in renderables.into_iter().enumerate() {
-            let handle = world.get_component_by_id_as::<RenderableComponent>(renderable).unwrap().get_handle().unwrap();
+            let handle = world
+                .get_component_by_id_as::<RenderableComponent>(renderable)
+                .unwrap()
+                .get_handle()
+                .unwrap();
             let instance = visuals.instance(handle).unwrap();
-            assert_eq!(instance.renderable.material, if index == 2 { MaterialHandle::TOON_MESH } else { MaterialHandle::ANIME_MESH });
-            assert_eq!(instance.anime_shading.shade_color_strength[3], if index < 2 { 0.9 } else { AnimeShadingComponent::DEFAULT_SHADE_STRENGTH });
+            assert_eq!(
+                instance.renderable.material,
+                if index == 2 {
+                    MaterialHandle::TOON_MESH
+                } else {
+                    MaterialHandle::ANIME_MESH
+                }
+            );
+            assert_eq!(
+                instance.anime_shading.shade_color_strength[3],
+                if index < 2 {
+                    0.9
+                } else {
+                    AnimeShadingComponent::DEFAULT_SHADE_STRENGTH
+                }
+            );
         }
     }
 

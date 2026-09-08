@@ -6252,9 +6252,13 @@ mod vulkano_backend {
         fn anime_shading_ubo_preserves_live_inputs_for_static_and_skinned_draws() {
             // Window and XR eye rendering share this material UBO path.
             let params = crate::engine::ecs::component::ShadingComponent::new()
-                .with_shade_strength(0.91).with_rim_strength(0.42).gpu_params();
-            for material in [crate::engine::graphics::MaterialHandle::ANIME_MESH,
-                crate::engine::graphics::MaterialHandle::SKINNED_ANIME_MESH] {
+                .with_shade_strength(0.91)
+                .with_rim_strength(0.42)
+                .gpu_params();
+            for material in [
+                crate::engine::graphics::MaterialHandle::ANIME_MESH,
+                crate::engine::graphics::MaterialHandle::SKINNED_ANIME_MESH,
+            ] {
                 let ubo = VulkanoState::create_material_ubo(material, 3.0, params);
                 assert_eq!(ubo.anime_shade_color_strength, params.shade_color_strength);
                 assert_eq!(ubo.anime_rim_color, params.rim_color);
@@ -6262,7 +6266,6 @@ mod vulkano_backend {
             }
         }
     }
-
 }
 
 /// Vulkano-only renderer.
