@@ -673,6 +673,10 @@ pub fn build_mittens_runtime() -> Result<MittensRuntime, mms::RuntimeSpecError> 
                         .builder_call("target", any(1))
                         .builder_call("root", any(1));
                 }
+                "TransformApplyInverseLocal" => {
+                    component.constructor("source", any(1));
+                    component.builder_call("source", any(1));
+                }
                 "TransformCameraSpecific" => {
                     component.constructor("active_stereoscopic", no_args());
                 }

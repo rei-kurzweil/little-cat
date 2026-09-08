@@ -43,10 +43,10 @@ use crate::engine::ecs::component::{
     SpotLightComponent, SpringBoneComponent, SpringColliderComponent, SpringCollidersComponent,
     SpringJointComponent, StencilClipComponent, StyleComponent, TextAlign, TextComponent,
     TextInputComponent, TextShadowComponent, TextureComponent, TextureFilteringComponent,
-    ToggleComponent, TransformCameraSpecificComponent, TransformComponent, TransformDropComponent,
-    TransformForkTRSComponent, TransformGizmoAxis, TransformGizmoComponent,
-    TransformGizmoCoordSpace, TransformGizmoPlane, TransformGizmoRotateComponent,
-    TransformGizmoScaleComponent, TransformGizmoTranslateComponent,
+    ToggleComponent, TransformApplyInverseLocalComponent, TransformCameraSpecificComponent,
+    TransformComponent, TransformDropComponent, TransformForkTRSComponent, TransformGizmoAxis,
+    TransformGizmoComponent, TransformGizmoCoordSpace, TransformGizmoPlane,
+    TransformGizmoRotateComponent, TransformGizmoScaleComponent, TransformGizmoTranslateComponent,
     TransformGizmoTranslatePlaneComponent, TransformMapRotationComponent,
     TransformMapScaleComponent, TransformMapTranslationComponent, TransformMergeTRSComponent,
     TransformParentComponent, TransformSampleAncestorComponent, TransitionComponent,
@@ -195,6 +195,7 @@ pub const SUPPORTED_COMPONENT_NAMES: &[&str] = &[
     "TextureFiltering",
     "Unlit",
     "Transform",
+    "TransformApplyInverseLocal",
     "TransformCameraSpecific",
     "TransformDrop",
     "TransformForkTRS",
@@ -557,7 +558,7 @@ fn collect_referenced_guids_filtered(
 ) {
     use crate::engine::ecs::component::{
         ComponentRef, GridBindingComponent, IKChainComponent, SliderComponent,
-        TransformParentComponent,
+        TransformApplyInverseLocalComponent, TransformParentComponent,
     };
 
     let visible = filtered_save_visibility(world, node);
@@ -583,6 +584,12 @@ fn collect_referenced_guids_filtered(
                     out.insert(*u);
                 }
             }
+        }
+        if let Some(operator) =
+            world.get_component_by_id_as::<TransformApplyInverseLocalComponent>(node)
+            && let ComponentRef::Guid(guid) = &operator.source
+        {
+            out.insert(*guid);
         }
         if let Some(binding) = world.get_component_by_id_as::<GridBindingComponent>(node)
             && let ComponentRef::Guid(guid) = &binding.grid
@@ -673,7 +680,7 @@ fn collect_referenced_guids_limited(
 ) {
     use crate::engine::ecs::component::{
         ComponentRef, GridBindingComponent, IKChainComponent, SliderComponent,
-        TransformParentComponent,
+        TransformApplyInverseLocalComponent, TransformParentComponent,
     };
     if let Some(ik) = world.get_component_by_id_as::<IKChainComponent>(node) {
         for src in [&ik.target_source, &ik.end_effector_source]
@@ -696,6 +703,12 @@ fn collect_referenced_guids_limited(
                 out.insert(*u);
             }
         }
+    }
+    if let Some(operator) =
+        world.get_component_by_id_as::<TransformApplyInverseLocalComponent>(node)
+        && let ComponentRef::Guid(guid) = &operator.source
+    {
+        out.insert(*guid);
     }
     if let Some(binding) = world.get_component_by_id_as::<GridBindingComponent>(node)
         && let ComponentRef::Guid(guid) = &binding.grid
@@ -1906,6 +1919,12 @@ fn create_component(
                     .with_target_source(arg_component_ref(world, args, 0)?)
             ),
             _ => add!(TransformParentComponent::new()),
+        },
+        "TransformApplyInverseLocal" => match ctor {
+            Some("source") => add!(TransformApplyInverseLocalComponent::new(arg_component_ref(
+                world, args, 0
+            )?)),
+            _ => Err("TransformApplyInverseLocal requires .source(transform)".into()),
         },
         "TransformForkTRS" => add!(TransformForkTRSComponent::new()),
         "TransformCameraSpecific" => add!(match ctor {
@@ -3345,6 +3364,20 @@ fn apply_call(
                 }
             }
             _ => {}
+        }
+        return Ok(());
+    }
+    if world
+        .get_component_by_id_as::<TransformApplyInverseLocalComponent>(id)
+        .is_some()
+    {
+        if method == "source" {
+            let source = arg_component_ref(world, args, 0)?;
+            if let Some(operator) =
+                world.get_component_by_id_as_mut::<TransformApplyInverseLocalComponent>(id)
+            {
+                operator.source = source;
+            }
         }
         return Ok(());
     }

@@ -1,9 +1,10 @@
 use crate::engine::ecs::component::{
     QuatExtractYawComponent, QuatTemporalFilterComponent, QuatYawFollowComponent,
-    TransformCameraSpecificComponent, TransformCameraSpecificMode, TransformComponent,
-    TransformDropComponent, TransformForkTRSComponent, TransformMapRotationComponent,
-    TransformMapScaleComponent, TransformMapTranslationComponent, TransformMergeTRSComponent,
-    TransformParentComponent, TransformSampleAncestorComponent, Vector3TemporalFilterComponent,
+    TransformApplyInverseLocalComponent, TransformCameraSpecificComponent,
+    TransformCameraSpecificMode, TransformComponent, TransformDropComponent,
+    TransformForkTRSComponent, TransformMapRotationComponent, TransformMapScaleComponent,
+    TransformMapTranslationComponent, TransformMergeTRSComponent, TransformParentComponent,
+    TransformSampleAncestorComponent, Vector3TemporalFilterComponent,
 };
 use crate::engine::ecs::system::System;
 use crate::engine::ecs::{ComponentId, World};
@@ -12,7 +13,7 @@ use crate::engine::graphics::primitives::TransformMatrix;
 use crate::engine::transform::TransformTrs;
 use crate::engine::user_input::InputState;
 use crate::utils::math;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::OnceLock;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -122,6 +123,16 @@ pub struct TransformStreamSystem {
     /// anchor starts from its cached `matrix_world`, which is the previous effective matrix;
     /// retaining the unmodified basis prevents the selected settings transform compounding.
     camera_specific_basis: HashMap<ComponentId, (TransformMatrix, TransformMatrix)>,
+    /// Last valid (input, inverse-local) pair for referenced inverse-local
+    /// operators. Retaining the inverse lets the inherited pose continue to
+    /// update without snapping to identity while a source is temporarily
+    /// unresolved or singular.
+    inverse_local_state: HashMap<ComponentId, (TransformMatrix, TransformMatrix)>,
+    /// Reverse dependency index populated when inverse-local operators resolve.
+    /// Transform invalidation can therefore visit only consumers of the changed
+    /// source instead of scanning the world.
+    inverse_local_source_by_operator: HashMap<ComponentId, ComponentId>,
+    inverse_local_dependents_by_source: HashMap<ComponentId, HashSet<ComponentId>>,
 }
 
 impl TransformStreamSystem {
@@ -135,6 +146,9 @@ impl TransformStreamSystem {
             .is_some()
             || world
                 .get_component_by_id_as::<TransformParentComponent>(cid)
+                .is_some()
+            || world
+                .get_component_by_id_as::<TransformApplyInverseLocalComponent>(cid)
                 .is_some()
             || Self::camera_specific_settings(world, cid).is_some()
     }
@@ -195,6 +209,45 @@ impl TransformStreamSystem {
     ) -> Option<(TransformMatrix, Vec<ComponentId>)> {
         let rebased_world = Self::apply_transform_parent_basis(world, root, input_world);
 
+        if let Some(operator) =
+            world.get_component_by_id_as::<TransformApplyInverseLocalComponent>(root)
+        {
+            let source = operator.resolve_source_component(world, root);
+            if let Some(source) = source {
+                self.register_inverse_local_dependency(root, source);
+            }
+            let source_is_valid = source.is_some_and(|source| {
+                world
+                    .get_component_by_id_as::<TransformComponent>(source)
+                    .is_some()
+                    && !Self::is_descendant_of(world, source, root)
+            });
+            if source_is_valid {
+                let source_local = world
+                    .get_component_by_id_as::<TransformComponent>(source.unwrap())
+                    .expect("validated transform source")
+                    .transform
+                    .model;
+                if let Some(inverse) = math::mat4_inverse(source_local) {
+                    self.inverse_local_state
+                        .insert(root, (rebased_world, inverse));
+                    let effective = math::mat4_mul(rebased_world, inverse);
+                    return Some((effective, world.children_of(root).to_vec()));
+                }
+            }
+
+            // A previously valid relationship keeps its last result. On the
+            // first invalid evaluation, suppress downstream propagation rather
+            // than silently treating the missing inverse as identity.
+            return Some(match self.inverse_local_state.get(&root).copied() {
+                Some((_input, inverse)) => (
+                    math::mat4_mul(rebased_world, inverse),
+                    world.children_of(root).to_vec(),
+                ),
+                None => (rebased_world, Vec::new()),
+            });
+        }
+
         if let Some((mono, stereo)) = Self::camera_specific_settings(world, root) {
             let basis = match self.camera_specific_basis.get(&root).copied() {
                 Some((basis, previous_effective)) if input_world == previous_effective => basis,
@@ -237,6 +290,53 @@ impl TransformStreamSystem {
         }
 
         None
+    }
+
+    pub fn inverse_local_cached_input(&self, component: ComponentId) -> Option<TransformMatrix> {
+        self.inverse_local_state
+            .get(&component)
+            .map(|(input, _inverse)| *input)
+    }
+
+    pub fn inverse_local_dependents(&self, source: ComponentId) -> Vec<ComponentId> {
+        self.inverse_local_dependents_by_source
+            .get(&source)
+            .map(|dependents| dependents.iter().copied().collect())
+            .unwrap_or_default()
+    }
+
+    fn register_inverse_local_dependency(&mut self, operator: ComponentId, source: ComponentId) {
+        if self.inverse_local_source_by_operator.get(&operator) == Some(&source) {
+            return;
+        }
+
+        if let Some(previous_source) = self
+            .inverse_local_source_by_operator
+            .insert(operator, source)
+            && let Some(previous_dependents) = self
+                .inverse_local_dependents_by_source
+                .get_mut(&previous_source)
+        {
+            previous_dependents.remove(&operator);
+            if previous_dependents.is_empty() {
+                self.inverse_local_dependents_by_source
+                    .remove(&previous_source);
+            }
+        }
+        self.inverse_local_dependents_by_source
+            .entry(source)
+            .or_default()
+            .insert(operator);
+    }
+
+    fn is_descendant_of(world: &World, mut node: ComponentId, ancestor: ComponentId) -> bool {
+        while let Some(parent) = world.parent_of(node) {
+            if parent == ancestor {
+                return true;
+            }
+            node = parent;
+        }
+        false
     }
 
     fn apply_transform_parent_basis(
@@ -944,10 +1044,124 @@ mod tests {
     use super::*;
     use crate::engine::ecs::World;
     use crate::engine::ecs::component::{
-        QuatTemporalFilterComponent, TransformCameraSpecificComponent, TransformComponent,
-        TransformForkTRSComponent, TransformMapRotationComponent, TransformMapScaleComponent,
+        ComponentRef, QuatTemporalFilterComponent, TransformApplyInverseLocalComponent,
+        TransformCameraSpecificComponent, TransformComponent, TransformForkTRSComponent,
+        TransformMapRotationComponent, TransformMapScaleComponent,
         TransformMapTranslationComponent, Vector3TemporalFilterComponent,
     };
+
+    fn guid_ref(world: &World, component: ComponentId) -> ComponentRef {
+        ComponentRef::Guid(world.get_component_record(component).unwrap().guid)
+    }
+
+    #[test]
+    fn inverse_local_applies_full_inverse_and_returns_only_structural_children() {
+        let mut world = World::default();
+        let source = world.add_component(
+            TransformComponent::new()
+                .with_position(1.0, 2.0, 3.0)
+                .with_rotation_euler(0.0, std::f32::consts::FRAC_PI_2, 0.0),
+        );
+        let operator = world.add_component(TransformApplyInverseLocalComponent::new(guid_ref(
+            &world, source,
+        )));
+        let downstream = world.add_component(TransformComponent::new());
+        let sibling = world.add_component(TransformComponent::new());
+        world.add_child(operator, downstream).unwrap();
+
+        let input = TransformComponent::new()
+            .with_position(10.0, 20.0, 30.0)
+            .transform
+            .model;
+        let source_local = world
+            .get_component_by_id_as::<TransformComponent>(source)
+            .unwrap()
+            .transform
+            .model;
+        let expected = math::mat4_mul(input, math::mat4_inverse(source_local).unwrap());
+
+        let (actual, outputs) = TransformStreamSystem::new()
+            .evaluate_stream_node(&world, operator, input)
+            .unwrap();
+        assert_eq!(actual, expected);
+        assert_eq!(outputs, vec![downstream]);
+        assert!(!outputs.contains(&sibling));
+    }
+
+    #[test]
+    fn inverse_local_preserves_last_valid_result_when_source_becomes_unresolved() {
+        let mut world = World::default();
+        let source = world.add_component(TransformComponent::new().with_position(0.0, 3.0, -1.55));
+        let source_ref = guid_ref(&world, source);
+        let operator = world.add_component(TransformApplyInverseLocalComponent::new(source_ref));
+        let downstream = world.add_component(TransformComponent::new());
+        world.add_child(operator, downstream).unwrap();
+        let input = TransformComponent::new().transform.model;
+        let mut system = TransformStreamSystem::new();
+
+        let first = system
+            .evaluate_stream_node(&world, operator, input)
+            .unwrap();
+        world.remove_component_leaf(source).unwrap();
+        let unresolved = system
+            .evaluate_stream_node(&world, operator, input)
+            .unwrap();
+
+        assert_eq!(unresolved, first);
+    }
+
+    #[test]
+    fn inverse_local_rejects_a_source_below_its_output() {
+        let mut world = World::default();
+        let source = world.add_component(TransformComponent::new().with_position(0.0, 3.0, 0.0));
+        let operator = world.add_component(TransformApplyInverseLocalComponent::new(guid_ref(
+            &world, source,
+        )));
+        world.add_child(operator, source).unwrap();
+        let input = TransformComponent::new().transform.model;
+
+        let (actual, outputs) = TransformStreamSystem::new()
+            .evaluate_stream_node(&world, operator, input)
+            .unwrap();
+        assert_eq!(actual, input);
+        assert!(outputs.is_empty());
+    }
+
+    #[test]
+    fn inverse_local_dependency_index_rebinds_without_a_world_scan() {
+        let mut world = World::default();
+        let first_source = world.add_component(TransformComponent::new());
+        let second_source = world.add_component(TransformComponent::new());
+        let operator = world.add_component(TransformApplyInverseLocalComponent::new(guid_ref(
+            &world,
+            first_source,
+        )));
+        let input = TransformComponent::new().transform.model;
+        let mut system = TransformStreamSystem::new();
+
+        system
+            .evaluate_stream_node(&world, operator, input)
+            .unwrap();
+        assert_eq!(
+            system.inverse_local_dependents(first_source),
+            vec![operator]
+        );
+
+        let second_ref = guid_ref(&world, second_source);
+        world
+            .get_component_by_id_as_mut::<TransformApplyInverseLocalComponent>(operator)
+            .unwrap()
+            .source = second_ref;
+        system
+            .evaluate_stream_node(&world, operator, input)
+            .unwrap();
+
+        assert!(system.inverse_local_dependents(first_source).is_empty());
+        assert_eq!(
+            system.inverse_local_dependents(second_source),
+            vec![operator]
+        );
+    }
 
     #[test]
     fn camera_specific_selects_modes_and_excludes_configuration_children() {

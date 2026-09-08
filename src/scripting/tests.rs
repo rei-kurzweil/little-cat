@@ -8144,6 +8144,22 @@ fn roundtrip_transform_parent() {
 }
 
 #[test]
+fn roundtrip_transform_apply_inverse_local() {
+    use crate::engine::ecs::component::{ComponentRef, TransformApplyInverseLocalComponent};
+    let original = TransformApplyInverseLocalComponent::new(ComponentRef::Query(
+        "#cockpit_camera_offset".to_string(),
+    ));
+    let (world, id) = roundtrip_component(original);
+    let got = world
+        .get_component_by_id_as::<TransformApplyInverseLocalComponent>(id)
+        .unwrap();
+    assert_eq!(
+        got.source,
+        ComponentRef::Query("#cockpit_camera_offset".to_string())
+    );
+}
+
+#[test]
 fn roundtrip_quat_temporal_filter() {
     use crate::engine::ecs::component::QuatTemporalFilterComponent;
     let (world, id) =
@@ -8543,11 +8559,12 @@ fn draggable_plane_builder_accepts_object_camera_and_world_axes() {
 }
 
 #[test]
-fn mittens_corp_evaluates_with_non_humanoid_xr_rig_and_pose_editor() {
+fn mittens_corp_evaluates_with_inverse_local_xr_rig_and_pose_editor() {
     use crate::engine::ecs::component::{
-        AvatarControlComponent, CameraXRComponent, ControllerXRComponent, EditorComponent,
-        EditorPanel, EditorUIComponent, GLTFComponent, InputXRGamepadComponent, PointerComponent,
-        PoseCaptureComponent,
+        CameraXRComponent, ComponentRef, ControllerXRComponent, EditorComponent, EditorPanel,
+        EditorUIComponent, GLTFComponent, InputXRComponent, InputXRGamepadComponent,
+        PointerComponent, PoseCaptureComponent, TransformApplyInverseLocalComponent,
+        TransformComponent,
     };
 
     let mut world = World::default();
@@ -8564,14 +8581,54 @@ fn mittens_corp_evaluates_with_non_humanoid_xr_rig_and_pose_editor() {
     );
     assert!(output.errors.is_empty(), "{:?}", output.errors);
 
-    let avc = world
+    let operator = world
         .all_components()
         .find(|id| {
             world
-                .get_component_by_id_as::<AvatarControlComponent>(*id)
+                .get_component_by_id_as::<TransformApplyInverseLocalComponent>(*id)
                 .is_some()
         })
-        .expect("mittens-corp should author an AVC car rig");
+        .expect("mittens-corp should author an inverse-local car rig");
+    let driver = world
+        .all_components()
+        .find(|&id| world.component_label(id) == Some("car_xr_driver"))
+        .expect("mittens-corp should name its XR driver");
+    assert_eq!(world.parent_of(operator), Some(driver));
+    let input_xr = world
+        .all_components()
+        .find(|&id| {
+            world
+                .get_component_by_id_as::<InputXRComponent>(id)
+                .is_some()
+        })
+        .expect("mittens-corp should author InputXR");
+    let locomotion_root =
+        crate::engine::ecs::system::input_xr_gamepad_system::xr_locomotion_target_transform(
+            &world, input_xr,
+        )
+        .expect("InputXRGamepad should resolve the outer locomotion transform");
+    assert_eq!(
+        world.component_label(locomotion_root),
+        Some("car_locomotion_root")
+    );
+
+    let source = world
+        .get_component_by_id_as::<TransformApplyInverseLocalComponent>(operator)
+        .and_then(|operator| match &operator.source {
+            ComponentRef::Guid(guid) => world.component_id_by_guid(*guid),
+            ComponentRef::Query(_) => None,
+        })
+        .expect("the live camera handle should resolve to a durable GUID reference");
+    assert_eq!(world.component_label(source), Some("car_xr_cockpit_camera"));
+    assert_eq!(
+        world.parent_of(source),
+        Some(driver),
+        "the camera anchor must remain inside InputXR so OpenXR uses the locomotion root"
+    );
+    let source_transform = world
+        .get_component_by_id_as::<TransformComponent>(source)
+        .expect("the inverse-local source must be an explicit transform");
+    assert_eq!(source_transform.translation(), [0.0, 3.0, 0.0]);
     let car = world
         .all_components()
         .find(|id| {
@@ -8581,10 +8638,37 @@ fn mittens_corp_evaluates_with_non_humanoid_xr_rig_and_pose_editor() {
         })
         .expect("mittens-corp should load the car model");
     let mut car_ancestor = world.parent_of(car);
-    while car_ancestor.is_some() && car_ancestor != Some(avc) {
+    while car_ancestor.is_some() && car_ancestor != Some(operator) {
         car_ancestor = car_ancestor.and_then(|id| world.parent_of(id));
     }
-    assert_eq!(car_ancestor, Some(avc), "the car must be controlled by AVC");
+    assert_eq!(
+        car_ancestor,
+        Some(operator),
+        "only the car branch must receive inverse-local compensation"
+    );
+    let car_vehicle_id = world
+        .all_components()
+        .find(|&id| world.component_label(id) == Some("car_vehicle"))
+        .expect("the car's identity model-root transform should remain present");
+    let car_vehicle = world
+        .get_component_by_id_as::<TransformComponent>(car_vehicle_id)
+        .expect("the named car root should be a transform");
+    assert_eq!(car_vehicle.translation(), [0.0, 0.0, 0.0]);
+
+    let identity = TransformComponent::new().transform.model;
+    let (compensated_world, outputs) = crate::engine::ecs::system::TransformStreamSystem::new()
+        .evaluate_stream_node(&world, operator, identity)
+        .expect("the inverse-local operator should evaluate");
+    assert_eq!(
+        [
+            compensated_world[3][0],
+            compensated_world[3][1],
+            compensated_world[3][2],
+        ],
+        [0.0, -3.0, 0.0],
+        "a +3m camera anchor should move only the car branch 3m down"
+    );
+    assert_eq!(outputs, vec![car_vehicle_id]);
 
     assert_eq!(
         world
@@ -8602,7 +8686,7 @@ fn mittens_corp_evaluates_with_non_humanoid_xr_rig_and_pose_editor() {
     }));
 
     let hands: Vec<_> = world
-        .children_of(avc)
+        .children_of(driver)
         .iter()
         .copied()
         .filter(|id| {
@@ -8614,7 +8698,7 @@ fn mittens_corp_evaluates_with_non_humanoid_xr_rig_and_pose_editor() {
     assert_eq!(
         hands.len(),
         2,
-        "both laser hands must be direct AVC children"
+        "both laser hands must remain direct, uncompensated XR-driver children"
     );
     for hand in hands {
         let mut pending = vec![hand];

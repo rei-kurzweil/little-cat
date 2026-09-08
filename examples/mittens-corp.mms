@@ -3,9 +3,8 @@
 // Run with:
 //   cargo run --release -- load examples/mittens-corp.mms
 //
-// The vehicle rig deliberately gives AVC a non-humanoid model. Its XRHand
-// children still own laser pointers, so controller pointing can be exercised
-// even though the controlled model has no mapped hand bones.
+// The vehicle uses the generic inverse-local anchor operator rather than AVC:
+// the rigid car has no humanoid specialization for AVC to perform.
 
 import { tripod_light } from "../assets/components/tripod_light.mms"
 import { truss } from "../assets/components/truss.mms"
@@ -103,46 +102,31 @@ T.position(-5.0, 0.0, 0.0) {
 
         T {
             name = "car_xr_driver"
-            AVC {
-                name = "car_avatar_control"
+            let cockpit_camera_offset = T.position(0.0, 3.0, 0.0) {
+                name = "car_xr_cockpit_camera"
+                CXR { Pointer {} }
+            }
+            cockpit_camera_offset
 
-                // AVC's first Transform child is intentionally a car rather
-                // than a humanoid avatar.
-                // maybe these 2 transforms are interfering with the camera offset? but they look benign
-                T.position(0.0, 0.10, 0.0) {
+            // Simplest inverse-anchor case: InputXR supplies P and the car
+            // receives P * inverse(C). C is +3m on Y, so the car is placed 3m
+            // below the physical XR camera without AVC or another adjustment.
+            TransformApplyInverseLocal.source(cockpit_camera_offset) {
+                T {
                     name = "car_vehicle"
-                    T.rotation(0.0, 0.0, 0.0) {
-                        name = "car_visual"
-                        GLTF.new("assets/models/car.glb") {
-                            bisket_anime_shading()
-                        }
+                    GLTF.new("assets/models/car.glb") {
+                        bisket_anime_shading()
                     }
-                }
-
-                // // Authored cockpit offset retained from car.mms; CXR supplies
-                // // the headset views and the camera pointer.
-                T.position(0.0, 3.0, -1.55) {
-                    name = "car_xr_cockpit_camera"
-                    CXR { Pointer {} }
-                }
-
-                // These controllers intentionally do not attach to model hand
-                // bones. Their tracked transforms must still drive pointers.
-                XRHand.new(true, "Left", "GripAim").laser() {
-                    T { Pointer {} }
-                }
-                XRHand.new(true, "Right", "GripAim").laser() {
-                    T { Pointer {} }
                 }
             }
 
-            // trying this here instead:
-            // offset for camera
-            // T.position(0.0, 10.0, -1.55) {
-            //         name = "car_xr_cockpit_camera"
-            //         CXR { Pointer {} }
-            // }
-            // didn't work here either
+            // Independently tracked controllers remain outside compensation.
+            XRHand.new(true, "Left", "GripAim").laser() {
+                T { Pointer {} }
+            }
+            XRHand.new(true, "Right", "GripAim").laser() {
+                T { Pointer {} }
+            }
         }
     }
 }

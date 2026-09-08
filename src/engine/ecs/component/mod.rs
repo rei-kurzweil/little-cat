@@ -108,6 +108,7 @@ pub mod texture;
 pub mod texture_filtering;
 pub mod toggle;
 pub mod transform;
+pub mod transform_apply_inverse_local;
 pub mod transform_camera_specific;
 pub mod transform_parent;
 pub mod transform_pipeline;
@@ -252,6 +253,7 @@ pub use texture::{CatEngineTextureFormat, TextureComponent};
 pub use texture_filtering::TextureFilteringComponent;
 pub use toggle::ToggleComponent;
 pub use transform::TransformComponent;
+pub use transform_apply_inverse_local::TransformApplyInverseLocalComponent;
 pub use transform_camera_specific::{
     TransformCameraSpecificComponent, TransformCameraSpecificMode,
 };

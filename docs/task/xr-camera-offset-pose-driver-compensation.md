@@ -2,7 +2,7 @@
 
 Date: 2026-09-08
 
-Status: active design and bug task.
+Status: phases 1 and 2 implemented; pending XR visual validation and AVC humanoid integration.
 
 This task records the transform relationship discovered while using a
 non-humanoid car model under `InputXR` in
@@ -186,6 +186,7 @@ InputXR.on() {
             name = "cockpit_camera_offset"
             CXR { Pointer {} }
         }
+        cockpit_camera_offset
 
         TransformApplyInverseLocal.source(cockpit_camera_offset) {
             T.position(0.0, 0.10, 0.0) {
@@ -287,6 +288,7 @@ InputXR.on() {
             name = "avatar_eye_offset"
             CXR { Pointer {} }
         }
+        eye_offset
 
         AVC {
             TransformApplyInverseLocal.source(eye_offset) {
@@ -400,6 +402,13 @@ explicitly authored generic inverse-local operator.
 ---
 
 ## 9. Proposed implementation phases
+
+Implementation note (2026-09-08): the first implementation uses the public
+name `TransformApplyInverseLocal`, applies a complete invertible local matrix,
+retains the last valid inverse while a source is unresolved or singular, and
+rejects a structurally downstream source. `mittens-corp.mms` now uses the
+operator for its rigid car without `AvatarControl`; XR visual validation is
+still required before beginning the AVC-specific phase.
 
 ### Phase 1: Add the generic inverse-local operator
 

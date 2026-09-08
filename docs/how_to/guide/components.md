@@ -30,6 +30,17 @@ Carries fit bounds state used when that engine feature is present in a component
 FitBounds {}
 ```
 
+### `TransformApplyInverseLocalComponent`
+<!-- catalog:component source="TransformApplyInverseLocalComponent" mms="direct" names="TransformApplyInverseLocal" -->
+Reads the authored local matrix of an explicitly referenced transform and applies its complete
+inverse to the inherited transform stream. Only children nested beneath the operator receive the
+result; the referenced source is not mutated. **Directly constructible** as
+`TransformApplyInverseLocal`. Sources: [Rust implementation](../../../src/engine/ecs/component/transform_apply_inverse_local.rs)
+and [MMS registry](../../../src/scripting/component_registry.rs).
+```mms parse-only
+TransformApplyInverseLocal.source("#camera_anchor") {}
+```
+
 ### `TransformCameraSpecificComponent`
 <!-- catalog:component source="TransformCameraSpecificComponent" mms="direct" names="TransformCameraSpecific" -->
 Carries transform camera specific state used when that engine feature is present in a component tree. Use it when a tree needs this state or behavior. Camera/XR systems; registration intents and XR button/axis events are relevant.

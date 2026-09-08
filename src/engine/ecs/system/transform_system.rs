@@ -2,8 +2,8 @@ use crate::engine::ecs::ComponentId;
 use crate::engine::ecs::World;
 use crate::engine::ecs::component::{
     Camera2DComponent, Camera3DComponent, CollisionComponent, LayoutBoundsComponent,
-    LayoutVisualPlacementComponent, RenderableComponent, TransformComponent,
-    TransformParentComponent,
+    LayoutVisualPlacementComponent, RenderableComponent, TransformApplyInverseLocalComponent,
+    TransformComponent, TransformParentComponent,
 };
 use crate::engine::ecs::system::CollisionSystem;
 use crate::engine::ecs::system::System;
@@ -194,8 +194,8 @@ impl TransformSystem {
             }
 
             let children: Vec<ComponentId> = match stream_output_roots {
-                Some(outputs) if !outputs.is_empty() => outputs,
-                _ => world.children_of(node).to_vec(),
+                Some(outputs) => outputs,
+                None => world.children_of(node).to_vec(),
             };
             for child in children {
                 let inherited = if let Some(tp) =
@@ -470,6 +470,40 @@ impl TransformSystem {
         }
     }
 
+    fn update_inverse_local_dependents(
+        &mut self,
+        world: &mut World,
+        visuals: &mut VisualWorld,
+        changed_component: ComponentId,
+        transform_stream_system: &mut TransformStreamSystem,
+        camera_system: &mut crate::engine::ecs::system::CameraSystem,
+        light_system: &mut crate::engine::ecs::system::LightSystem,
+        collision_system: &mut CollisionSystem,
+    ) {
+        let dependents = transform_stream_system.inverse_local_dependents(changed_component);
+
+        for dependent in dependents {
+            let Some(inherited_world) =
+                transform_stream_system.inverse_local_cached_input(dependent)
+            else {
+                continue;
+            };
+            self.propagate_subtree(
+                world,
+                visuals,
+                dependent,
+                inherited_world,
+                transform_stream_system,
+                camera_system,
+                collision_system,
+            );
+            let children = world.children_of(dependent).to_vec();
+            for child in children {
+                light_system.transform_changed(world, visuals, child);
+            }
+        }
+    }
+
     /// Compute the world-space model matrix for a component by walking up the component tree
     /// and multiplying all ancestor `TransformComponent` model matrices.
     ///
@@ -615,6 +649,40 @@ impl TransformSystem {
         light_system: &mut crate::engine::ecs::system::LightSystem,
         collision_system: &mut CollisionSystem,
     ) {
+        if world
+            .get_component_by_id_as::<TransformApplyInverseLocalComponent>(component)
+            .is_some()
+        {
+            let inherited_world = transform_stream_system
+                .inverse_local_cached_input(component)
+                .or_else(|| {
+                    let mut current = component;
+                    while let Some(parent) = world.parent_of(current) {
+                        if let Some(transform) =
+                            world.get_component_by_id_as::<TransformComponent>(parent)
+                        {
+                            return Some(transform.transform.matrix_world);
+                        }
+                        current = parent;
+                    }
+                    Some(Self::mat4_identity())
+                })
+                .expect("inverse-local boundary always has a structural basis");
+            self.propagate_subtree(
+                world,
+                visuals,
+                component,
+                inherited_world,
+                transform_stream_system,
+                camera_system,
+                collision_system,
+            );
+            let children = world.children_of(component).to_vec();
+            for child in children {
+                light_system.transform_changed(world, visuals, child);
+            }
+            return;
+        }
         if let Some(inherited_world) = world
             .get_component_by_id_as::<TransformParentComponent>(component)
             .and_then(|tp| tp.resolve_target_component(world))
@@ -757,6 +825,15 @@ impl TransformSystem {
             light_system,
             collision_system,
         );
+        self.update_inverse_local_dependents(
+            world,
+            visuals,
+            component,
+            transform_stream_system,
+            camera_system,
+            light_system,
+            collision_system,
+        );
     }
 }
 
@@ -765,7 +842,8 @@ mod tests {
     use super::{TransformAccessError, TransformSystem};
     use crate::engine::ecs::World;
     use crate::engine::ecs::component::{
-        LayoutVisualPlacementComponent, TransformComponent, TransformParentComponent,
+        ComponentRef, LayoutVisualPlacementComponent, TransformApplyInverseLocalComponent,
+        TransformComponent, TransformParentComponent,
     };
     use crate::engine::ecs::system::{
         CameraSystem, CollisionSystem, LightSystem, TransformStreamSystem,
@@ -773,6 +851,62 @@ mod tests {
     use crate::engine::graphics::VisualWorld;
     use crate::engine::graphics::bounds::Aabb;
     use crate::engine::transform::{TransformTrs, TransformTrsError};
+
+    #[test]
+    fn inverse_local_source_edit_refreshes_the_compensated_branch() {
+        let mut world = World::default();
+        let mut visuals = VisualWorld::default();
+        let mut transform_system = TransformSystem::new();
+        let mut transform_stream_system = TransformStreamSystem::new();
+        let mut camera_system = CameraSystem::new();
+        let mut light_system = LightSystem::new();
+        let mut collision_system = CollisionSystem::new();
+
+        let driver = world.add_component(TransformComponent::new().with_position(10.0, 0.0, 0.0));
+        let source = world.add_component(TransformComponent::new().with_position(0.0, 3.0, 0.0));
+        let source_guid = world.get_component_record(source).unwrap().guid;
+        let operator = world.add_component(TransformApplyInverseLocalComponent::new(
+            ComponentRef::Guid(source_guid),
+        ));
+        let car = world.add_component(TransformComponent::new().with_position(0.0, 0.1, 0.0));
+        world.add_child(driver, source).unwrap();
+        world.add_child(driver, operator).unwrap();
+        world.add_child(operator, car).unwrap();
+
+        transform_system.transform_changed(
+            &mut world,
+            &mut visuals,
+            driver,
+            &mut transform_stream_system,
+            &mut camera_system,
+            &mut light_system,
+            &mut collision_system,
+        );
+        assert_eq!(
+            TransformSystem::world_position(&world, car),
+            Some([10.0, -2.9, 0.0])
+        );
+
+        world
+            .get_component_by_id_as_mut::<TransformComponent>(source)
+            .unwrap()
+            .transform = TransformComponent::new()
+            .with_position(0.0, 17.0, 0.0)
+            .transform;
+        transform_system.transform_changed(
+            &mut world,
+            &mut visuals,
+            source,
+            &mut transform_stream_system,
+            &mut camera_system,
+            &mut light_system,
+            &mut collision_system,
+        );
+        assert_eq!(
+            TransformSystem::world_position(&world, car),
+            Some([10.0, -16.9, 0.0])
+        );
+    }
 
     #[test]
     fn transform_parent_updates_cross_tree_child_when_target_changes() {
