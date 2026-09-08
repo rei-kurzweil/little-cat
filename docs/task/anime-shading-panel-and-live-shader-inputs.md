@@ -2,6 +2,14 @@
 
 Status: design only. No engine implementation in this change.
 
+Authoring direction updated 2026-09-08: [Unified Shading and cascade](shading-model-components-and-cascade.md)
+is authoritative for Anime as the default, `Shading.anime()` and the other
+built-in constructors, descendant inheritance, and immediate-child overrides.
+The panel's target API is now an authored `Shading.anime()` source; references
+below to `AnimeShading` describe the existing implementation to migrate.
+Keep the left comparison model explicitly `Shading.toon()`. Custom shading uses
+`Shader`; defining the built-in `Shading` API is no longer deferred to phase 3.
+
 The native Slider is implemented; use [slider.mms](../../examples/slider.mms)
 as the working reference for `SliderChanged`, readouts, and silent `sync_value()`.
 Use that control to configure the right-hand Bisket in
@@ -15,11 +23,57 @@ configuration alone is insufficient: edits must reach the rendered material.
 
 ## Phases
 
+### Default material migration (2026-09-08 source audit)
+
+Anime can become the default for ordinary lit meshes, but replacing every
+`TOON_MESH` occurrence would also change material dispatch and explicit pipeline
+tests. Change default selection separately from retaining the existing handles.
+Primitive factories in `src/engine/ecs/component/renderable.rs` and GLTF primitive
+creation in `src/engine/ecs/system/gltf_system.rs` currently select Toon; audit
+direct Rust scene constructors as well. Both static and skinned defaults need
+to select their corresponding Anime variants.
+
+The generic `AnimeShadingComponent::new()` defaults are:
+
+| Parameter | Generic default | Bisket preset |
+| --- | --- | --- |
+| Shade color | [0.72, 0.50, 0.54] | [0.40, 0.40, 0.65] |
+| Shade strength | 0.30 | 0.50 |
+| Shade threshold | 0.35 | 0.40 |
+| Lit threshold | 0.55 | 0.55 |
+| Rim color | [1.0, 0.85, 0.92] | [1.0, 1.0, 1.0] |
+| Rim strength | 0.18 | 0.38 |
+| Rim power | 4.0 | 4.0 |
+
+`AnimeShadingParams::default()` duplicates the generic values; keep these in
+sync, preferably by deriving GPU defaults from the component's canonical values.
+
+Before changing the default, resolve these behavioral differences:
+
+- `anime-mesh.frag` uses light intensity, direction, attenuation, and spot cones,
+  but ignores ambient light and light RGB. It shades between tinted albedo and
+  original albedo, with a rim capped at original albedo.
+- The shader does not consume emissive intensity or light quantization.
+  `material_with_emissive` currently switches only Toon variants into emissive
+  variants. Preserve working Emissive/Unlit behavior and bloom classification
+  when ordinary meshes start with Anime handles.
+- Keep explicit specialized materials such as grid, mirror, and transmission.
+- The example's left model currently relies on the GLTF default. A migration
+  requires an explicit Toon override exposed to MMS to preserve its pipeline
+  comparison; no `ToonShading` component is currently registered.
+
+The live-control audit below remains current: native Slider and source projection
+propagation exist, while Anime live methods and bounded material descriptor cache
+retention remain implementation work. No general custom-shader API is needed to
+wire this panel.
+
+### Panel phases
+
 1. Live AnimeShading scalar setters and five Slider rows in `info_panel`.
 2. Live shade/rim color setters and color controls.
-3. Design `Shading` (MMS) / `ShadingComponent` (Rust) for selecting custom
-   shading models and owning typed input state, then agree on an implementation
-   slice. This phase is a design session, not a prerequisite for phases 1–2.
+3. Design custom `Shader` definitions and typed input schemas under Materials v2,
+   using the unified shading cascade. This phase is a design session, not a
+   prerequisite for phases 1–2 or the built-in `Shading` migration.
 
 Phase numbering here is local to this task, independent of the
 [Materials v2 epic](epic/materials-v2.md).
@@ -168,13 +222,14 @@ phase-1 dependency.
 Extend retained settings, effective-value synchronization, Reset, restore,
 instance-isolation tests, and cache checks to these fields.
 
-## Phase 3: design Shading / ShadingComponent
+## Phase 3: design custom Shader / ShaderComponent
 
-The requested public shape is `Shading` in MMS and `ShadingComponent` in Rust.
-It selects a shading model, including custom models, and owns or references
-the typed input state applied to its renderables. Reconcile this name with the
-illustrative `Material` API in [Materials v2](epic/materials-v2.md) before
-implementation; do not introduce two competing public authoring APIs.
+The built-in API is `Shading` in MMS and `ShadingComponent` in Rust, as specified
+in the unified cascade task. Custom models use `Shader` / `ShaderComponent` and
+share its source ownership and precedence rules. Reconcile custom registration
+and input syntax with the illustrative `Material` API in
+[Materials v2](epic/materials-v2.md); do not introduce a competing public
+`Material` authoring component.
 
 ### Input terminology
 
@@ -197,7 +252,7 @@ declaring a field cannot add a corresponding input to an already compiled shader
   compatible vertex interface, render state, and a typed parameter schema.
   Validate and resolve names, bindings, offsets, alignment, and defaults once
   when registering/loading it.
-- A ShadingComponent references that definition and holds mutable parameter
+- A custom ShaderComponent references that definition and holds mutable parameter
   values with stable instance identity and dirty tracking. Decide explicitly
   how multiple renderables share that instance and how independent copies are
   requested; preserve authored-source ownership across GLTF projections.

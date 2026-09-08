@@ -1,5 +1,11 @@
 # Shader component draft
 
+Authoring update (2026-09-08): [Unified Shading and cascade](../task/shading-model-components-and-cascade.md)
+sets `Shading` as the built-in selector and `Shader` as the custom-shading
+component, both using the same cascade. The alternative component names below
+are historical exploration, not the current naming decision. Custom program
+registration and interface validation still require design and implementation.
+
 This note explores a future URI-backed shader component model for cat-engine, where a renderable
 can point at shader source files similarly to how `TextureComponent` points at texture URIs.
 

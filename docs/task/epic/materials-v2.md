@@ -4,6 +4,14 @@ Date: 2026-08-31
 
 Status: proposed planning epic
 
+Authoring update (2026-09-08): [Unified Shading and cascade](../shading-model-components-and-cascade.md)
+defines the target public API: `Shading.anime()` (the default), `.toon()`,
+`.unlit()`, `.refraction()`, and `.rough_transmission()` for built-ins, with
+`Shader` reserved for custom shading. Both participate in the same cascade.
+The `Material` MMS examples below are historical illustrative syntax, not a
+proposal for an additional public component. Internal material definitions and
+instances remain applicable.
+
 ## Purpose
 
 Replace the current concrete `MaterialHandle` cross-product with a material

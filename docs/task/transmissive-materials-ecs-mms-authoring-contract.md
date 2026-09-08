@@ -4,6 +4,13 @@ Date: 2026-08-30
 
 Status: implemented (renderer integration intentionally deferred)
 
+Planned migration (2026-09-08): [Unified Shading and cascade](shading-model-components-and-cascade.md)
+supersedes the separate-component and non-inheritance authoring decisions below.
+The target APIs are `Shading.refraction()` and `Shading.rough_transmission()`,
+with descendant inheritance and immediate-child overrides. Optical parameter
+contracts remain applicable. This document records the earlier implementation;
+the unified API is not implemented by this documentation update.
+
 Parent epic: [Transmissive materials: refraction and rough transmission](epic/transmissive-materials.md)
 
 ## Purpose

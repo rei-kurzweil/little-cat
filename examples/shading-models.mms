@@ -7,9 +7,9 @@
 // albedo-derived AnimeShading material. Both models use the same relaxed A-pose
 // and each is lit by an identical movable white spotlight fixture.
 //
-// Planned interactive controls (design only; native Slider is not implemented):
+// Planned interactive controls (design only; native Slider is implemented):
 //   ../docs/task/anime-shading-panel-and-live-shader-inputs.md
-// Native control and standalone examples/slider.mms prerequisite:
+// Native control design and working standalone examples/slider.mms reference:
 //   ../docs/task/native-slider-component-and-example.md
 // Use assets/components/ui/info_panel.mms with block-stacked flex rows:
 // label | native slider with mountable track/thumb visuals | numeric value.
