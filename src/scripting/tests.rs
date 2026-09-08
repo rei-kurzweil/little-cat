@@ -3668,6 +3668,14 @@ fn every_bisket_example_uses_the_canonical_model_uri() {
                 .map(|line| line.split_once("//").map_or(line, |(code, _)| code))
                 .collect::<Vec<_>>()
                 .join("\n");
+            // Comparison scenes retain the shared source outside the GLTF body.
+            // Their dedicated runtime tests verify Anime/Toon selection.
+            if matches!(path.file_name().and_then(|name| name.to_str()),
+                Some("shading-models.mms" | "shading-models-xr.mms")) {
+                *anime_shaded += 1;
+                *default_shaded += 1;
+                continue;
+            }
             let model = "GLTF.new(\"assets/models/bisket.glb\")";
             let mut remaining = active_source.as_str();
             while let Some(model_offset) = remaining.find(model) {
@@ -3719,7 +3727,7 @@ fn every_bisket_example_uses_the_canonical_model_uri() {
     );
     assert!(checked > 0, "expected Bisket example references");
     assert!(anime_shaded > 0, "expected anime-shaded Bisket examples");
-    assert_eq!(default_shaded, 1);
+    assert_eq!(default_shaded, 2);
 }
 
 #[test]
@@ -3967,7 +3975,9 @@ fn shading_models_example_materializes_comparison_models_and_spotlights() {
         ids.iter()
             .filter(|&&id| world
                 .get_component_by_id_as::<AnimeShadingComponent>(id)
-                .is_some())
+                .is_some_and(
+                    |shading| shading.model == crate::engine::ecs::component::ShadingModel::Anime
+                ))
             .count(),
         1
     );
@@ -8686,4 +8696,376 @@ fn xr_grab_demo_evaluates_with_editor_settings_and_grabbable_playground() {
         "active editor should materialize the authored settings panel"
     );
     assert_eq!(systems.secondary_motion.runtime_counts(), (1, 23, 23, 0, 0));
+}
+
+#[test]
+fn anime_shading_controls_live_runtime_reaches_gltf_visuals_and_restores() {
+    use crate::engine::ecs::component::{
+        ShadingComponent, ShadingModel, SliderComponent, TextComponent,
+    };
+    use crate::engine::ecs::system::SystemWorld;
+    use crate::engine::graphics::{CpuMesh, MaterialHandle, MeshHandle, MeshUploader};
+
+    #[derive(Default)]
+    struct Uploader(u32);
+    impl MeshUploader for Uploader {
+        fn upload_mesh(&mut self, _: &CpuMesh) -> Result<MeshHandle, Box<dyn std::error::Error>> {
+            self.0 += 1;
+            Ok(MeshHandle(self.0))
+        }
+    }
+    fn label(world: &World, name: &str) -> ComponentId {
+        world
+            .all_components()
+            .find(|&id| world.component_label(id) == Some(name))
+            .unwrap()
+    }
+    fn service(
+        session: &mut RuntimeSpecSession,
+        world: &mut World,
+        systems: &mut SystemWorld,
+        visuals: &mut VisualWorld,
+        assets: &mut RenderAssets,
+        queue: &mut CommandQueue,
+    ) -> usize {
+        let output = session.service_callbacks(world, &mut systems.rx, Some(assets), queue);
+        assert!(output.errors.is_empty(), "{:?}", output.errors);
+        let edits = output
+            .intents
+            .iter()
+            .filter(|i| matches!(i, IntentValue::RegisterAnimeShading { .. }))
+            .count();
+        for intent in output.intents {
+            queue.push_intent_now(ComponentId::default(), intent);
+        }
+        systems.process_commands(world, visuals, assets, queue);
+        edits
+    }
+
+    let source = format!(
+        "{}\nT {{ R.cube() {{ name = \"isolated_anime\" Shading.anime().shade_strength(0.23) }} }}",
+        include_str!("../../examples/shading-models.mms")
+    );
+    let mut world = World::default();
+    let mut systems = SystemWorld::default();
+    let mut visuals = VisualWorld::default();
+    let mut assets = RenderAssets::new();
+    let mut queue = CommandQueue::new();
+    let (mut session, output) = RuntimeSpecSession::start_at_path(
+        &source,
+        "examples/shading-models.mms",
+        &mut world,
+        &mut systems.rx,
+        Some(&mut assets),
+        &mut queue,
+    )
+    .unwrap();
+    assert!(output.errors.is_empty(), "{:?}", output.errors);
+    for intent in output.intents {
+        queue.push_intent_now(ComponentId::default(), intent);
+    }
+    systems.process_commands(&mut world, &mut visuals, &mut assets, &mut queue);
+    let source_id = world
+        .all_components()
+        .find(|&id| {
+            world
+                .get_component_by_id_as::<ShadingComponent>(id)
+                .is_some_and(|s| s.model == ShadingModel::Anime && s.shade_strength == 0.5)
+        })
+        .unwrap();
+    let slider = label(&world, "anime_shade_strength_slider");
+
+    // Update via the actual prefab callback before GLTF creates its projections.
+    systems.rx.dispatch_event_handlers(
+        &mut world,
+        &Signal::event(slider, EventSignal::SliderChanged { slider, value: 0.8 }),
+    );
+    assert_eq!(
+        service(
+            &mut session,
+            &mut world,
+            &mut systems,
+            &mut visuals,
+            &mut assets,
+            &mut queue
+        ),
+        1
+    );
+    assert_eq!(
+        world
+            .get_component_by_id_as::<ShadingComponent>(source_id)
+            .unwrap()
+            .shade_strength,
+        0.8
+    );
+    systems.gltf.tick_with_queue(
+        &mut world,
+        &mut visuals,
+        &mut systems.skinned_mesh,
+        &mut systems.renderable,
+        &mut queue,
+        0.0,
+    );
+    systems.process_commands(&mut world, &mut visuals, &mut assets, &mut queue);
+    systems.gltf.flush_mesh_imports_only(&mut assets);
+    systems.renderable.flush_pending(
+        &mut world,
+        &mut visuals,
+        &mut assets,
+        &mut Uploader::default(),
+        &mut queue,
+    );
+    let projections: Vec<_> = world
+        .all_components()
+        .filter(|&id| {
+            world
+                .get_component_by_id_as::<ShadingComponent>(id)
+                .is_some_and(|s| s.source_component() == Some(source_id))
+        })
+        .collect();
+    assert!(projections.len() > 1);
+    let handles: Vec<_> = projections
+        .iter()
+        .map(|&id| {
+            world
+                .get_component_by_id_as::<RenderableComponent>(world.parent_of(id).unwrap())
+                .unwrap()
+                .get_handle()
+                .unwrap()
+        })
+        .collect();
+    assert!(
+        handles
+            .iter()
+            .any(|&h| visuals.instance(h).unwrap().renderable.material
+                == MaterialHandle::SKINNED_ANIME_MESH)
+    );
+    for &h in &handles {
+        assert_eq!(
+            visuals
+                .instance(h)
+                .unwrap()
+                .anime_shading
+                .shade_color_strength[3],
+            0.8
+        );
+    }
+    let isolated = label(&world, "isolated_anime");
+    let isolated_handle = world
+        .get_component_by_id_as::<RenderableComponent>(isolated)
+        .unwrap()
+        .get_handle()
+        .unwrap();
+
+    for value in [0.0, 1.0, 2.0, -1.0, 0.73] {
+        systems.rx.dispatch_event_handlers(
+            &mut world,
+            &Signal::event(slider, EventSignal::SliderChanged { slider, value }),
+        );
+        assert_eq!(
+            service(
+                &mut session,
+                &mut world,
+                &mut systems,
+                &mut visuals,
+                &mut assets,
+                &mut queue
+            ),
+            1
+        );
+        let effective = value.clamp(0.0, 1.0);
+        for &id in &projections {
+            assert_eq!(
+                world
+                    .get_component_by_id_as::<ShadingComponent>(id)
+                    .unwrap()
+                    .shade_strength,
+                effective
+            );
+        }
+        for &h in &handles {
+            assert_eq!(
+                visuals
+                    .instance(h)
+                    .unwrap()
+                    .anime_shading
+                    .shade_color_strength[3],
+                effective
+            );
+        }
+        assert_eq!(
+            visuals
+                .instance(isolated_handle)
+                .unwrap()
+                .anime_shading
+                .shade_color_strength[3],
+            0.23
+        );
+    }
+    let readout = label(&world, "anime_shade_strength_readout");
+    assert_eq!(
+        world
+            .get_component_by_id_as::<TextComponent>(readout)
+            .unwrap()
+            .text,
+        "0.73"
+    );
+
+    // Delete the removable body through the engine lifecycle, then prove old
+    // callbacks cannot mutate the material and restore from current source state.
+    let body = label(&world, "accordion_body");
+    queue.push_intent_now(body, IntentValue::RemoveSubtree { component_id: body });
+    systems.process_commands(&mut world, &mut visuals, &mut assets, &mut queue);
+    systems.rx.dispatch_event_handlers(
+        &mut world,
+        &Signal::event(slider, EventSignal::SliderChanged { slider, value: 0.1 }),
+    );
+    assert_eq!(
+        service(
+            &mut session,
+            &mut world,
+            &mut systems,
+            &mut visuals,
+            &mut assets,
+            &mut queue
+        ),
+        0
+    );
+    let panel = label(&world, "anime_shading_panel");
+    let slot = world.parent_of(panel).unwrap();
+    let mount = label(&world, "accordion_body_mount");
+    systems.rx.dispatch_event_handlers(
+        &mut world,
+        &Signal::event(
+            slot,
+            EventSignal::DataEvent {
+                name: "AccordionRestoreRequested".into(),
+                payload: Some(mount),
+            },
+        ),
+    );
+    service(
+        &mut session,
+        &mut world,
+        &mut systems,
+        &mut visuals,
+        &mut assets,
+        &mut queue,
+    );
+    let restored_slider = label(&world, "anime_shade_strength_slider");
+    assert_ne!(restored_slider, slider);
+    assert!(
+        (world
+            .get_component_by_id_as::<SliderComponent>(restored_slider)
+            .unwrap()
+            .value()
+            - 0.73)
+            .abs()
+            < 1e-6
+    );
+    let reset = label(&world, "anime_shading_reset");
+    systems.rx.dispatch_event_handlers(
+        &mut world,
+        &Signal::event(
+            reset,
+            EventSignal::Click {
+                raycaster: ComponentId::default(),
+                renderable: reset,
+                hit_point: [0.0; 3],
+                screen_pos_px: None,
+            },
+        ),
+    );
+    assert_eq!(
+        service(
+            &mut session,
+            &mut world,
+            &mut systems,
+            &mut visuals,
+            &mut assets,
+            &mut queue
+        ),
+        1
+    );
+    assert_eq!(
+        world
+            .get_component_by_id_as::<ShadingComponent>(source_id)
+            .unwrap()
+            .shade_strength,
+        0.5
+    );
+    for &h in &handles {
+        assert_eq!(
+            visuals
+                .instance(h)
+                .unwrap()
+                .anime_shading
+                .shade_color_strength[3],
+            0.5
+        );
+    }
+}
+
+#[test]
+fn anime_shading_xr_fixture_materializes_shared_source_and_controls() {
+    use crate::engine::ecs::component::{
+        CameraXRComponent, ShadingComponent, ShadingModel, SliderComponent,
+    };
+    let mut world = World::default();
+    let mut rx = RxWorld::default();
+    let mut assets = RenderAssets::new();
+    let mut queue = CommandQueue::new();
+    let (_session, output) = RuntimeSpecSession::start_at_path(
+        include_str!("../../examples/shading-models-xr.mms"),
+        "examples/shading-models-xr.mms",
+        &mut world,
+        &mut rx,
+        Some(&mut assets),
+        &mut queue,
+    )
+    .unwrap();
+    assert!(output.errors.is_empty(), "{:?}", output.errors);
+    assert_eq!(
+        world
+            .all_components()
+            .filter(|&id| world
+                .get_component_by_id_as::<CameraXRComponent>(id)
+                .is_some())
+            .count(),
+        1
+    );
+    assert_eq!(
+        world
+            .all_components()
+            .filter(|&id| world
+                .get_component_by_id_as::<SliderComponent>(id)
+                .is_some())
+            .count(),
+        1
+    );
+    let anime = world
+        .all_components()
+        .find(|&id| {
+            world
+                .get_component_by_id_as::<ShadingComponent>(id)
+                .is_some_and(|s| s.model == ShadingModel::Anime)
+        })
+        .unwrap();
+    let consumers = world
+        .all_components()
+        .filter(|&id| {
+            (world
+                .get_component_by_id_as::<RenderableComponent>(id)
+                .is_some()
+                || world
+                    .get_component_by_id_as::<crate::engine::ecs::component::GLTFComponent>(id)
+                    .is_some())
+                && crate::engine::ecs::system::RenderableSystem::resolve_anime_shading(&world, id)
+                    .is_some_and(|(source, _)| source == anime)
+        })
+        .count();
+    assert_eq!(
+        consumers, 2,
+        "one ordinary mesh and one GLTF share the Anime source"
+    );
 }

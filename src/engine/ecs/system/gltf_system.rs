@@ -322,12 +322,8 @@ impl GLTFSystem {
                 })
                 .unwrap_or(false);
 
-            let anime_shading = world.children_of(cid).iter().find_map(|&child| {
-                world
-                    .get_component_by_id_as::<AnimeShadingComponent>(child)
-                    .copied()
-                    .map(|modifier| (child, modifier))
-            });
+            let anime_shading =
+                crate::engine::ecs::system::RenderableSystem::resolve_anime_shading(world, cid);
 
             let Some(uri) = world
                 .get_component_by_id_as::<GLTFComponent>(cid)

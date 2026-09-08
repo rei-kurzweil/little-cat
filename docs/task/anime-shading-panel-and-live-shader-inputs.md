@@ -1,6 +1,66 @@
 # Anime shading: first live slider slice and parameter panel
 
-Status: design only. No engine implementation in this change.
+Status: phase 1a implemented; winit visual acceptance, in-headset XR acceptance,
+and live GPU allocation/frame-cost measurements remain open. Phases 1b–3 are planned.
+
+## Implemented slice and manual verification (2026-09-08)
+
+- `Shading.anime()` / `.toon()` share one `ShadingComponent`; the old
+  `AnimeShading` constructor and Rust alias remain temporarily compatible.
+- `get_shade_strength()` and `set_shade_strength(value)` expose normalized Anime
+  state to MMS. The setter emits the existing registration intent; generated
+  projections and render parameter records update without a model reload.
+- [anime_shading_controls.mms](../../assets/components/ui/anime_shading_controls.mms)
+  supplies one Slider, an effective-value readout, and Reset as content for the
+  existing `info_panel`. Its callbacks capture queried live control references.
+  Track/thumb hit targets use priority 120 above the panel shell's priority 100.
+- `info_panel_body(options)` rebuilds the existing panel's padded body consistently
+  on restore. The caller retains its source and original Reset values.
+- Material descriptors use a 512-entry least-recently-used cache. Eviction drops
+  cache ownership only; recorded Vulkan commands keep their resource references.
+  The cache stress test exercises 10,000 distinct values and retained Arc ownership.
+
+Run the desktop/winit comparison:
+
+```sh
+cargo run --release -- load examples/shading-models.mms
+```
+
+Drag the shade-strength slider in the panel above the right model from 0 to 1.
+Its shaded regions should visibly change while the explicit Toon model on the
+left stays unchanged. Confirm the readout, Reset to 0.50, minimize/restore, and
+drag release when the controls are removed. Other Anime inputs remain at the
+Bisket preset; they are not yet exposed as live methods.
+
+Run the separate XR acceptance fixture:
+
+```sh
+cargo run --release -- load examples/shading-models-xr.mms
+```
+
+This scene enables XR, provides controller pointers, and places a model and
+ordinary sphere under one Anime source on the right, with Toon controls on the
+left. Check both eyes, head rotation/translation and view-dependent rim lighting,
+then drag with a controller and verify both Anime consumers update together.
+Verify Reset and restore in-headset too. XR rendering remains **visually unverified**.
+
+Source audit: `submit_xr_eye_offscreen` passes each eye's view/projection to the
+same `build_draw_batches_command_buffer` used by window rendering. That path
+selects Anime's static/skinned pipelines and uses the same parameter UBO/cache.
+The UBO test and XR fixture materialization test cover these inputs and authoring,
+but do not substitute for submitting and inspecting frames in a headset.
+
+For live resource measurements, prefix either command with
+`CAT_DEBUG_MATERIAL_CACHE=1`. Every 256 material cache misses the renderer reports
+retained entries, allocations, hits, and evictions. Record these alongside frame
+cost and primitive count during sustained edits; this manual measurement remains
+open. Headless runtime coverage verifies pre-import edits, GLTF projections,
+render parameter records, isolation, normalization, Reset, and restored controls.
+
+The wider default migration, remaining three `Shading` constructors, legacy
+component removal, comprehensive conflict diagnostics, and tree-change
+invalidation stay in the unified cascade task. Unconfigured mesh defaults have
+not changed in this first controls slice.
 
 Authoring direction updated 2026-09-08: [Unified Shading and cascade](shading-model-components-and-cascade.md)
 is authoritative for Anime as the default, `Shading.anime()` and the other
@@ -23,8 +83,8 @@ configuration alone is insufficient: edits must reach the rendered material.
 
 ## First verifiable slice: one live shade-strength slider
 
-Status: ready to implement after the required built-in Shading authoring path
-lands. This is phase 1a; the five-scalar panel below is phase 1b. Do not require
+Status: implemented, awaiting the manual acceptance checks above.
+This is phase 1a; the five-scalar panel below is phase 1b. Do not require
 colors, custom `Shader` schemas, or every control before proving this path.
 
 Reuse the existing panel prefab at `assets/components/ui/info_panel.mms`.
@@ -63,7 +123,7 @@ its controls and their bindings. The left-hand model is explicitly
   label, and silently `sync_value()` the control. Apply changes during dragging.
   Reset uses the same mutation/readback path.
 - On restore, the example calls the content prefab again and mounts the fresh
-  subtree using the existing accordion body mechanism. Initialize from the
+  subtree using `info_panel_body(options)`. Initialize from the
   current source value, keep the original Reset values, and avoid duplicate
   subscriptions. A source
   getter is required here, but a general external-change subscription API is
@@ -270,7 +330,7 @@ parameters coherently.
 
 Minimizing currently removes the accordion body. On
 `AccordionRestoreRequested`, build fresh rows from retained settings, wrap
-them with the existing `accordion_body` helper, and attach them to the event's
+them with `info_panel_body(options)`, and attach them to the event's
 body mount. Reinstall handlers only for the new controls; removed rows must
 not retain active subscriptions. Material settings survive minimize/restore.
 

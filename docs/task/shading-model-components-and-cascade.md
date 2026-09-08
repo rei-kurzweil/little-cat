@@ -3,6 +3,13 @@
 Status: agreed authoring direction; implementation pending.
 Updated: 2026-09-08.
 
+Partial implementation for the [first live-controls slice](anime-shading-panel-and-live-shader-inputs.md):
+`Shading.anime()` and `.toon()`, one shared `ShadingComponent`, Anime parameter
+builders, shade-strength live read/write, wrapper inheritance, and GLTF source
+projection are available. `AnimeShading` remains a temporary compatibility name.
+The default switch, other constructors, legacy removal, conflict diagnostics,
+and complete reparent/removal invalidation below remain pending.
+
 ## Decisions
 
 Use one `Shading` MMS component / `ShadingComponent` Rust component for built-in

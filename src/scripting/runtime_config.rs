@@ -1033,7 +1033,22 @@ pub fn build_mittens_runtime() -> Result<MittensRuntime, mms::RuntimeSpecError> 
                 "LightQuantization" => {
                     component.constructor("steps", floats(1));
                 }
-                "AnimeShading" => {
+                "AnimeShading" | "Shading" => {
+                    if canonical == "Shading" {
+                        no_arg_constructors(component, &["anime", "toon"]);
+                        host_method(
+                            component,
+                            canonical,
+                            "get_shade_strength",
+                            method(vec![], mms::ValueType::F32),
+                        );
+                        host_method(
+                            component,
+                            canonical,
+                            "set_shade_strength",
+                            method(vec![mms::ValueType::F32], mms::ValueType::Null),
+                        );
+                    }
                     for method in [
                         "shade_color",
                         "shade_strength",
@@ -1043,7 +1058,11 @@ pub fn build_mittens_runtime() -> Result<MittensRuntime, mms::RuntimeSpecError> 
                         "rim_strength",
                         "rim_power",
                     ] {
-                        constructor_and_builder(component, method, any(1));
+                        if canonical == "Shading" {
+                            component.builder_call(method, any(1));
+                        } else {
+                            constructor_and_builder(component, method, any(1));
+                        }
                     }
                 }
                 "Bounds" => {

@@ -1,13 +1,25 @@
 use crate::engine::ecs::component::Component;
 use crate::engine::ecs::{ComponentId, IntentValue, SignalEmitter};
 
+/// Built-in selections implemented by the first live-controls slice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShadingModel {
+    Anime,
+    Toon,
+}
+
+/// Temporary Rust compatibility name; both authoring paths use one component.
+/// Remove with the remaining legacy scene/component migration.
+pub type AnimeShadingComponent = ShadingComponent;
+
 /// Albedo-derived anime shading parameters for a descendant renderable.
 ///
 /// Direct light selects between a tinted shade and the authored albedo. Rim
 /// lighting is view-dependent and is clamped so it cannot brighten a channel
 /// beyond the authored albedo.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct AnimeShadingComponent {
+pub struct ShadingComponent {
+    pub model: ShadingModel,
     pub shade_color: [f32; 3],
     pub shade_strength: f32,
     pub shade_threshold: f32,
@@ -22,7 +34,7 @@ pub struct AnimeShadingComponent {
     source_component: Option<ComponentId>,
 }
 
-impl AnimeShadingComponent {
+impl ShadingComponent {
     pub const DEFAULT_SHADE_COLOR: [f32; 3] = [0.72, 0.50, 0.54];
     pub const DEFAULT_SHADE_STRENGTH: f32 = 0.30;
     pub const DEFAULT_SHADE_THRESHOLD: f32 = 0.35;
@@ -33,6 +45,7 @@ impl AnimeShadingComponent {
 
     pub fn new() -> Self {
         Self {
+            model: ShadingModel::Anime,
             shade_color: Self::DEFAULT_SHADE_COLOR,
             shade_strength: Self::DEFAULT_SHADE_STRENGTH,
             shade_threshold: Self::DEFAULT_SHADE_THRESHOLD,
@@ -41,6 +54,13 @@ impl AnimeShadingComponent {
             rim_strength: Self::DEFAULT_RIM_STRENGTH,
             rim_power: Self::DEFAULT_RIM_POWER,
             source_component: None,
+        }
+    }
+
+    pub fn toon() -> Self {
+        Self {
+            model: ShadingModel::Toon,
+            ..Self::new()
         }
     }
 
@@ -113,15 +133,15 @@ impl AnimeShadingComponent {
     }
 }
 
-impl Default for AnimeShadingComponent {
+impl Default for ShadingComponent {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Component for AnimeShadingComponent {
+impl Component for ShadingComponent {
     fn name(&self) -> &'static str {
-        "anime_shading"
+        "shading"
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -147,7 +167,11 @@ impl Component for AnimeShadingComponent {
     ) -> crate::scripting::ast::ComponentExpression {
         use crate::engine::ecs::component::ce_helpers::*;
 
-        ce("AnimeShading")
+        if self.model == ShadingModel::Toon {
+            return ce("Shading").with_call("toon", vec![]);
+        }
+        ce("Shading")
+            .with_call("anime", vec![])
             .with_call(
                 "shade_color",
                 vec![array(self.shade_color.map(|v| num(v as f64)).to_vec())],

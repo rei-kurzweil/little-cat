@@ -1,6 +1,7 @@
 use crate::engine::ecs::component::{
     AudioBandPassFilterComponent, AudioInputComponent, EmissiveComponent, RayCastComponent,
-    SliderComponent, TextComponent, TransformComponent, TransitionComponent,
+    ShadingComponent, ShadingModel, SliderComponent, TextComponent, TransformComponent,
+    TransitionComponent,
 };
 use crate::engine::ecs::{ComponentId, IntentValue, PoseApplyMode, World};
 use crate::engine::transform::TransformSpace;
@@ -23,6 +24,8 @@ pub(crate) fn legacy_supports_component_method(component_type: &str, method: &st
             && matches!(method, "apply" | "overlay" | "apply_blended"))
         || (matches!(component_type, "EM" | "Emissive" | "emissive")
             && matches!(method, "set_intensity" | "on" | "off"))
+        || (matches!(component_type, "Shading" | "shading")
+            && matches!(method, "get_shade_strength" | "set_shade_strength"))
         || (matches!(component_type, "Slider" | "slider")
             && matches!(
                 method,
@@ -51,6 +54,26 @@ pub(crate) fn invoke_component_method(
     mut emit_intent: impl FnMut(IntentValue),
 ) -> Result<Value, String> {
     match (component_type, method) {
+        ("Shading" | "shading", "get_shade_strength" | "set_shade_strength") => {
+            let shading = world
+                .get_component_by_id_as_mut::<ShadingComponent>(id)
+                .ok_or_else(|| format!("{method}(): not a ShadingComponent"))?;
+            if shading.model != ShadingModel::Anime {
+                return Err(format!("{method}(): requires the Anime shading model"));
+            }
+            if method == "get_shade_strength" {
+                if !args.is_empty() {
+                    return Err(format!("{method}(): expected no arguments"));
+                }
+                return Ok(Value::Number(shading.shade_strength as f64));
+            }
+            let [Value::Number(value)] = args else {
+                return Err(format!("{method}(): expected one number"));
+            };
+            *shading = shading.with_shade_strength(*value as f32);
+            emit_intent(IntentValue::RegisterAnimeShading { component_id: id });
+            Ok(Value::Null)
+        }
         ("Text" | "TXT" | "text", "set_text") => {
             world
                 .get_component_by_id_as::<TextComponent>(id)
@@ -587,6 +610,57 @@ mod tests {
     use crate::engine::ecs::component::{
         AudioBandPassFilterComponent, ColorComponent, RayCastComponent, TransformComponent,
     };
+
+    #[test]
+    fn anime_shading_live_api_normalizes_reads_back_and_rejects_wrong_models() {
+        let mut world = World::default();
+        let anime = world.add_component(ShadingComponent::new());
+        let toon = world.add_component(ShadingComponent::toon());
+        for (value, expected) in [
+            (2.0, 1.0),
+            (-1.0, 0.0),
+            (f64::NAN, ShadingComponent::DEFAULT_SHADE_STRENGTH as f64),
+        ] {
+            let mut intents = Vec::new();
+            invoke_component_method(
+                &mut world,
+                anime,
+                "Shading",
+                "set_shade_strength",
+                &[Value::Number(value)],
+                |intent| intents.push(intent),
+            )
+            .unwrap();
+            // Effective readback precedes deferred render-system processing.
+            assert_eq!(
+                invoke_component_method(
+                    &mut world,
+                    anime,
+                    "Shading",
+                    "get_shade_strength",
+                    &[],
+                    |_| {}
+                )
+                .unwrap(),
+                Value::Number(expected)
+            );
+            assert!(
+                matches!(intents.as_slice(), [IntentValue::RegisterAnimeShading { component_id }] if *component_id == anime)
+            );
+        }
+        for method in ["get_shade_strength", "set_shade_strength"] {
+            let error = invoke_component_method(
+                &mut world,
+                toon,
+                "Shading",
+                method,
+                &[Value::Number(0.5)],
+                |_| panic!("invalid target emitted an intent"),
+            )
+            .unwrap_err();
+            assert!(error.contains("requires the Anime"));
+        }
+    }
 
     fn object(id: ComponentId, ty: &str) -> Value {
         Value::ComponentObject {

@@ -535,7 +535,7 @@ mod vulkano_backend {
 
         cached_overlay_instance_buffer: Option<Subbuffer<[InstanceData]>>,
         cached_overlay_instance_count: usize,
-        cached_material_sets: HashMap<
+        cached_material_sets: crate::engine::graphics::material_cache::MaterialCache<
             (
                 crate::engine::graphics::MaterialHandle,
                 TextureHandle,
@@ -2280,7 +2280,9 @@ mod vulkano_backend {
 
                 cached_overlay_instance_buffer: None,
                 cached_overlay_instance_count: 0,
-                cached_material_sets: HashMap::new(),
+                cached_material_sets: crate::engine::graphics::material_cache::MaterialCache::new(
+                    512,
+                ),
                 pending_runtime_texture_updates: HashMap::new(),
                 window_runtime_debug_targets: None,
                 window_refraction_targets: None,
@@ -4011,7 +4013,21 @@ mod vulkano_backend {
                 [],
             )?;
 
+            // Dropping the cache's Arc is safe: recorded/submitted Vulkan
+            // command buffers retain their own descriptor/resource references.
             self.cached_material_sets.insert(material_key, set.clone());
+            static DEBUG_CACHE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+            if *DEBUG_CACHE.get_or_init(|| std::env::var_os("CAT_DEBUG_MATERIAL_CACHE").is_some())
+                && self.cached_material_sets.misses % 256 == 0
+            {
+                eprintln!(
+                    "[MaterialCache] retained={} capacity=512 allocations={} hits={} evictions={}",
+                    self.cached_material_sets.len(),
+                    self.cached_material_sets.misses,
+                    self.cached_material_sets.hits,
+                    self.cached_material_sets.evictions
+                );
+            }
             Ok(Some(set))
         }
 
@@ -6228,6 +6244,25 @@ mod vulkano_backend {
             Ok(())
         }
     }
+    #[cfg(test)]
+    mod anime_tests {
+        use super::*;
+
+        #[test]
+        fn anime_shading_ubo_preserves_live_inputs_for_static_and_skinned_draws() {
+            // Window and XR eye rendering share this material UBO path.
+            let params = crate::engine::ecs::component::ShadingComponent::new()
+                .with_shade_strength(0.91).with_rim_strength(0.42).gpu_params();
+            for material in [crate::engine::graphics::MaterialHandle::ANIME_MESH,
+                crate::engine::graphics::MaterialHandle::SKINNED_ANIME_MESH] {
+                let ubo = VulkanoState::create_material_ubo(material, 3.0, params);
+                assert_eq!(ubo.anime_shade_color_strength, params.shade_color_strength);
+                assert_eq!(ubo.anime_rim_color, params.rim_color);
+                assert_eq!(ubo.anime_controls, params.controls);
+            }
+        }
+    }
+
 }
 
 /// Vulkano-only renderer.

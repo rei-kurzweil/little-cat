@@ -77,8 +77,7 @@ pub struct RenderableSystem {
     pending_quant_steps: HashMap<ComponentId, f32>,
 
     /// Per-renderable albedo-derived anime material parameters.
-    pending_anime_shading:
-        HashMap<ComponentId, crate::engine::graphics::visual_world::AnimeShadingParams>,
+    pending_anime_shading: HashMap<ComponentId, AnimeShadingComponent>,
 
     /// NormalVisualisationComponents waiting for their subtree to be spawned.
     ///
@@ -239,6 +238,19 @@ impl RenderableSystem {
         }
     }
 
+    fn shading_material_for(
+        material: MaterialHandle,
+        shading: AnimeShadingComponent,
+    ) -> MaterialHandle {
+        use crate::engine::ecs::component::ShadingModel;
+        let anime = Self::anime_material_for(material);
+        match (shading.model, anime == MaterialHandle::SKINNED_ANIME_MESH) {
+            (ShadingModel::Anime, _) => anime,
+            (ShadingModel::Toon, true) => MaterialHandle::SKINNED_TOON_MESH,
+            (ShadingModel::Toon, false) => MaterialHandle::TOON_MESH,
+        }
+    }
+
     fn uv_clone_audit_enabled() -> bool {
         std::env::var("CAT_DEBUG_RENDERABLE_UV_CLONES")
             .ok()
@@ -309,27 +321,40 @@ impl RenderableSystem {
         world: &World,
         node: ComponentId,
     ) -> Option<(ComponentId, AnimeShadingComponent)> {
-        world.children_of(node).iter().find_map(|&child| {
-            world
-                .get_component_by_id_as::<AnimeShadingComponent>(child)
-                .copied()
-                .map(|component| (child, component))
-        })
+        world
+            .children_of(node)
+            .iter()
+            .filter_map(|&child| {
+                world
+                    .get_component_by_id_as::<AnimeShadingComponent>(child)
+                    .copied()
+                    .map(|component| (child, component))
+            })
+            .min_by_key(|(_, shading)| shading.source_component().is_some())
     }
 
-    fn resolve_anime_shading(
+    pub(crate) fn resolve_anime_shading(
         world: &World,
         renderable: ComponentId,
     ) -> Option<(ComponentId, AnimeShadingComponent)> {
-        if let Some(component) = Self::immediate_anime_shading_child(world, renderable) {
-            return Some(component);
-        }
-        let mut current = renderable;
-        while let Some(parent) = world.parent_of(current) {
-            if let Some(component) = Self::immediate_anime_shading_child(world, parent) {
+        // A local model (including legacy specialized models) blocks inheritance.
+        let mut current = Some(renderable);
+        while let Some(node) = current {
+            if let Some(shading) = world.get_component_by_id_as::<AnimeShadingComponent>(node) {
+                return Some((node, *shading));
+            }
+            if Self::has_immediate_unlit_child(world, node)
+                || resolve_transmissive_model(world, node)
+                    .ok()
+                    .flatten()
+                    .is_some()
+            {
+                return None;
+            }
+            if let Some(component) = Self::immediate_anime_shading_child(world, node) {
                 return Some(component);
             }
-            current = parent;
+            current = world.parent_of(node);
         }
         None
     }
@@ -511,10 +536,13 @@ impl RenderableSystem {
                 continue;
             };
             if let Some(instance) = visuals.instance(handle) {
-                let material = Self::anime_material_for(instance.renderable.material);
+                let material = Self::material_with_emissive(
+                    Self::shading_material_for(instance.renderable.material, params),
+                    instance.emissive,
+                );
                 let _ = visuals.update_material(handle, material);
             }
-            let _ = visuals.update_anime_shading(handle, params);
+            let _ = visuals.update_anime_shading(handle, params.gpu_params());
             let _ = self.pending_anime_shading.remove(&renderable_cid);
         }
     }
@@ -954,16 +982,17 @@ impl RenderableSystem {
                         .get_component_by_id_as::<RenderableComponent>(renderable)
                         .is_some()
                     {
-                        self.pending_anime_shading
-                            .insert(renderable, source_value.gpu_params());
+                        if Self::resolve_anime_shading(world, renderable)
+                            .is_some_and(|(resolved, _)| resolved == projection_id)
+                        {
+                            self.pending_anime_shading.insert(renderable, source_value);
+                        }
                     }
                 }
             }
         }
-        let Some(owner) = world.parent_of(component) else {
-            self.apply_pending_anime_updates_to_registered_renderables(world, visuals);
-            return;
-        };
+        // A shading wrapper may itself be a scene root.
+        let owner = world.parent_of(component).unwrap_or(component);
 
         let mut queue = VecDeque::from([owner]);
         while let Some(node) = queue.pop_front() {
@@ -978,8 +1007,7 @@ impl RenderableSystem {
                 continue;
             };
             if resolved_id == component {
-                self.pending_anime_shading
-                    .insert(node, shading.gpu_params());
+                self.pending_anime_shading.insert(node, shading);
             }
         }
         self.apply_pending_anime_updates_to_registered_renderables(world, visuals);
@@ -1269,8 +1297,7 @@ impl RenderableSystem {
             },
         );
         if let Some((_, shading)) = Self::resolve_anime_shading(world, component) {
-            self.pending_anime_shading
-                .insert(component, shading.gpu_params());
+            self.pending_anime_shading.insert(component, shading);
         }
 
         // Mark draw cache dirty only when we actually insert into visuals.
@@ -1436,7 +1463,10 @@ impl RenderableSystem {
                     MaterialHandle::UNLIT_MESH
                 }
                 _ if self.pending_anime_shading.contains_key(&p.renderable_cid) => {
-                    Self::anime_material_for(p.material)
+                    Self::shading_material_for(
+                        p.material,
+                        self.pending_anime_shading[&p.renderable_cid],
+                    )
                 }
                 _ => p.material,
             };
@@ -1515,7 +1545,7 @@ impl RenderableSystem {
                 quant_steps,
             );
             if let Some(params) = self.pending_anime_shading.get(&p.renderable_cid).copied() {
-                let _ = visuals.update_anime_shading(handle, params);
+                let _ = visuals.update_anime_shading(handle, params.gpu_params());
             }
             Self::trace_registered_layout_renderable(
                 world,
@@ -2045,6 +2075,42 @@ mod tests {
             assert_eq!(visuals.refraction_stream().1.len(), 1);
             assert!(visuals.opaque_stream().1.is_empty());
             assert!(visuals.transparent_single_stream().1.is_empty());
+        }
+    }
+
+    #[test]
+    fn anime_shading_root_wrapper_updates_many_consumers_but_preserves_local_models() {
+        let mut world = World::default();
+        let mut visuals = VisualWorld::default();
+        let mut system = RenderableSystem::default();
+        let mut assets = RenderAssets::new();
+        let mut uploader = TestUploader::default();
+        let mut queue = CommandQueue::new();
+        let source = world.add_component(AnimeShadingComponent::new().with_shade_strength(0.4));
+        let nested = world.add_component(TransformComponent::new());
+        world.add_child(source, nested).unwrap();
+        let mut renderables = Vec::new();
+        for index in 0..4 {
+            let renderable = world.add_component(RenderableComponent::cube());
+            world.add_child(nested, renderable).unwrap();
+            if index == 2 {
+                let local = world.add_component(AnimeShadingComponent::toon());
+                world.add_child(renderable, local).unwrap();
+            } else if index == 3 {
+                let local = world.add_component(AnimeShadingComponent::new());
+                world.add_child(renderable, local).unwrap();
+            }
+            system.register_renderable_from_world(&mut world, &mut visuals, renderable);
+            renderables.push(renderable);
+        }
+        system.flush_pending(&mut world, &mut visuals, &mut assets, &mut uploader, &mut queue);
+        world.get_component_by_id_as_mut::<AnimeShadingComponent>(source).unwrap().shade_strength = 0.9;
+        system.register_anime_shading(&mut world, &mut visuals, source);
+        for (index, renderable) in renderables.into_iter().enumerate() {
+            let handle = world.get_component_by_id_as::<RenderableComponent>(renderable).unwrap().get_handle().unwrap();
+            let instance = visuals.instance(handle).unwrap();
+            assert_eq!(instance.renderable.material, if index == 2 { MaterialHandle::TOON_MESH } else { MaterialHandle::ANIME_MESH });
+            assert_eq!(instance.anime_shading.shade_color_strength[3], if index < 2 { 0.9 } else { AnimeShadingComponent::DEFAULT_SHADE_STRENGTH });
         }
     }
 

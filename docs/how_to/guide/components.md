@@ -357,6 +357,31 @@ UV {}
 
 ## Lighting
 
+### `ShadingComponent`
+<!-- catalog:component source="ShadingComponent" mms="direct" names="Shading,AnimeShading" -->
+
+Selects Anime or Toon shading for descendant meshes, with immediate local shading
+children overriding inherited settings. `Shading {}` and `Shading.anime()` use
+generic Anime defaults; `Shading.toon()` explicitly selects Toon. The wider
+default-material migration and other built-in constructors are still pending.
+`AnimeShading` is a temporary compatibility constructor for the same component.
+Sources: [Rust implementation](../../../src/engine/ecs/component/anime_shading.rs)
+and [live panel task](../../task/anime-shading-panel-and-live-shader-inputs.md).
+
+```mms parse-only
+Shading.anime().shade_strength(0.5).rim_strength(0.38) {
+    R.cube() {}
+    R.sphere() { Shading.toon() }
+}
+```
+
+Anime builders accept `shade_color`, `shade_strength`, `shade_threshold`,
+`lit_threshold`, `rim_color`, `rim_strength`, and `rim_power`. A retained Anime
+reference supports `set_shade_strength(value)` and `get_shade_strength()` for
+live controls. The setter uses builder normalization and updates source-linked
+GLTF primitives; the getter returns effective state immediately. These live
+methods reject a Toon target. Other live parameters are planned.
+
 ### `LightQuantizationComponent`
 <!-- catalog:component source="LightQuantizationComponent" mms="direct" names="LightQuantization" -->
 Carries light quantization state used when that engine feature is present in a component tree. Use it when a tree needs this state or behavior. Rendering systems; lifecycle registration/removal intents connect it to visual state.

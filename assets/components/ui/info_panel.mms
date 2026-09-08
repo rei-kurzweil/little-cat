@@ -9,7 +9,7 @@
 // The panel wraps `content` in its body internally. When the panel is restored
 // after minimizing, the caller receives the forwarded
 // AccordionRestoreRequested event and may attach a freshly built body to the
-// event payload's accordion_body_mount.
+// event payload's accordion_body_mount using info_panel_body(options).
 
 import { accordion, accordion_body } from "../internal/ui/accordion.mms"
 
@@ -50,10 +50,14 @@ fn info_panel_icon(icon) {
     }
 }
 
-fn panel_with_title_children(options, title_children, title_bar_background, toggle_background, body_background, body_text_color) {
-    // Body structure is an implementation detail of the panel, rather than a
-    // second public helper callers must remember to use.
-    let body = accordion_body(T {
+// Rebuild the same padded/styled body after AccordionRestoreRequested.
+// Required: content. Optional: body_background_color and body_text_color.
+export fn info_panel_body(options) {
+    let body_background = INFO_PANEL_BODY_BACKGROUND
+    if options["body_background_color"] { body_background = options.body_background_color }
+    let body_text_color = INFO_PANEL_BODY_TEXT
+    if options["body_text_color"] { body_text_color = options.body_text_color }
+    return accordion_body(T {
         name = "info_panel_content"
         Style {
             display("flex")
@@ -66,6 +70,14 @@ fn panel_with_title_children(options, title_children, title_bar_background, togg
             background_z(-0.01)
         }
         options.content
+    })
+}
+
+fn panel_with_title_children(options, title_children, title_bar_background, toggle_background, body_background, body_text_color) {
+    let body = info_panel_body({
+        content = options.content
+        body_background_color = body_background
+        body_text_color = body_text_color
     })
     return accordion({
         root_name = options.root_name

@@ -83,6 +83,7 @@ pub const SUPPORTED_COMPONENT_NAMES: &[&str] = &[
     "AmbientLight",
     "Amplitude",
     "AnimeShading",
+    "Shading",
     "Animation",
     "AssetPayload",
     "AudioBandPassFilter",
@@ -2246,6 +2247,14 @@ fn create_component(
             Some("steps") => add!(LightQuantizationComponent::steps(arg_f32(args, 0)?)),
             _ => add!(LightQuantizationComponent::new()),
         },
+        "Shading" => {
+            let component = match ctor {
+                None | Some("anime") => AnimeShadingComponent::new(),
+                Some("toon") => AnimeShadingComponent::toon(),
+                Some(other) => return Err(format!("Shading: unknown constructor '{other}'")),
+            };
+            Ok(world.add_component(component))
+        }
         "AnimeShading" => {
             let id = world.add_component(AnimeShadingComponent::new());
             if let Some(method) = ctor {
@@ -2636,6 +2645,9 @@ fn apply_call(
         return Ok(());
     }
     if let Some(component) = world.get_component_by_id_as_mut::<AnimeShadingComponent>(id) {
+        if component.model != crate::engine::ecs::component::ShadingModel::Anime {
+            return Err(format!("Shading.{method}: requires the Anime model"));
+        }
         *component = match method {
             "shade_color" => component.with_shade_color(arg_f32_arr::<3>(args, 0)?),
             "shade_strength" => component.with_shade_strength(arg_f32(args, 0)?),
