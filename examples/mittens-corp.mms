@@ -102,7 +102,7 @@ T.position(-5.0, 0.0, 0.0) {
 
         T {
             name = "car_xr_driver"
-            let cockpit_camera_offset = T.position(0.0, 3.0, 0.0) {
+            let cockpit_camera_offset = T.position(0.0, 4.5, -1) {
                 name = "car_xr_cockpit_camera"
                 CXR { Pointer {} }
             }
