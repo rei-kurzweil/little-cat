@@ -1,4 +1,4 @@
-# Anime shading controls and a future Shading component
+# Anime shading: first live slider slice and parameter panel
 
 Status: design only. No engine implementation in this change.
 
@@ -20,6 +20,94 @@ model and matching lights as the comparison baseline.
 This task includes the engine/MMS update path needed to change anime shader
 inputs while the scene is running, as well as the authored panel. Constructor
 configuration alone is insufficient: edits must reach the rendered material.
+
+## First verifiable slice: one live shade-strength slider
+
+Status: ready to implement after the required built-in Shading authoring path
+lands. This is phase 1a; the five-scalar panel below is phase 1b. Do not require
+colors, custom `Shader` schemas, or every control before proving this path.
+
+Reuse the existing panel prefab at `assets/components/ui/info_panel.mms`.
+Add a reusable content prefab at `assets/components/ui/anime_shading_controls.mms`,
+exporting `anime_shading_controls(target, reset_values)`. It returns only the
+controls subtree: one row with a label, native `Slider`, and numeric
+effective-value readout, plus Reset. The caller passes a retained reference to
+the authored `Shading.anime()` component, not a generated primitive projection,
+and the Reset values captured when the editor is first mounted.
+
+`examples/shading-models.mms` composes this content using
+`info_panel({ ..., content = anime_shading_controls(target, reset_values) })`
+and targets the right-hand Bisket's authored source. The existing `info_panel`
+owns title chrome and accordion behavior. The example owns panel placement,
+retained target/Reset state, and the restore handler; the content prefab owns
+its controls and their bindings. The left-hand model is explicitly
+`Shading.toon()`.
+
+### Scope and API contract
+
+- Expose `shade_strength` first: range 0–1, step 0.01, initially 0.50 for the
+  Bisket preset. Other Anime parameters keep that preset's values.
+- Add a typed live setter and getter to the unified component's MMS dispatch.
+  Proposed names are `set_shade_strength(value)` and `get_shade_strength()`;
+  validate final spelling against existing live method conventions. Reject a
+  target whose selected model is not Anime with a useful runtime error.
+- Use the existing Anime builder's normalization in the setter. Read back the
+  effective value from the component after mutation; do not maintain a second
+  validation implementation in MMS. The setter must make normalized CPU state
+  available to subsequent readback even if renderer updates are deferred.
+- Initialize the control from the getter. The caller captures the initial
+  effective value in `reset_values` outside the removable panel body and passes
+  it to each content instance. Thus the reusable content also works with
+  customized sources without hardcoding Bisket settings.
+- On each `SliderChanged`, set the source value, read it back, update the numeric
+  label, and silently `sync_value()` the control. Apply changes during dragging.
+  Reset uses the same mutation/readback path.
+- On restore, the example calls the content prefab again and mounts the fresh
+  subtree using the existing accordion body mechanism. Initialize from the
+  current source value, keep the original Reset values, and avoid duplicate
+  subscriptions. A source
+  getter is required here, but a general external-change subscription API is
+  outside this slice.
+
+Prerequisite from [the unified cascade task](shading-model-components-and-cascade.md):
+`Shading.anime()` and `.toon()` construction, typed Anime state, retained MMS
+references, and source resolution/projection propagation must work. Reuse the
+existing Anime propagation machinery behind that API. Do not build a second
+long-lived live API on the retiring `AnimeShading` component. Completing custom
+shader loading is not a prerequisite.
+
+### End-to-end verification gate
+
+1. Run `cargo run --release -- load examples/shading-models.mms`. Drag shade
+   strength between 0 and 1 under the matching lights. The shaded regions on
+   the right-hand model visibly change while the left-hand model stays unchanged;
+   the readout follows the effective value throughout the drag. Retain a short
+   capture or before/after screenshots and record the reproduction steps.
+2. Add a focused MMS/runtime regression that invokes the setter through normal
+   live dispatch and processes the usual update intents. Verify the source,
+   its generated GLTF projections, and corresponding VisualWorld GPU parameter
+   records agree. Include multiple consumers and an independent Anime source
+   or immediate-child override to prove isolation, not just a Toon baseline.
+3. Cover an edit before generated primitives exist, then create them and verify
+   they receive the latest value. Cover out-of-range normalization and readback
+   without bypassing the live API.
+4. Verify Reset, minimize/restore, and removal during a drag. Restored controls
+   show the current source value and a single change produces one logical edit.
+   Parameter edits do not reload the GLTF, rebuild rows/geometry, or recompile
+   shaders.
+5. Bound material descriptor/UBO cache retention as part of this slice. Exercise
+   sustained changing values, including a runtime-driven sequence beyond the
+   slider's 101 quantized values, and record cache/allocation counts, primitive
+   count, and frame cost. Retention must be bounded by an explicit policy rather
+   than all historical values, while preserving in-flight GPU resource lifetimes.
+
+This slice is complete only when both runtime regression coverage and the live
+rendered example pass. A moving slider, a changed CPU field, or a static authored
+builder example alone does not satisfy the gate. If visual execution is blocked,
+record the blocker and leave that acceptance item open.
+
+After this gate, phase 1b adds the remaining four scalar rows and coupled
+threshold synchronization using the same verified source-to-GPU path.
 
 ## Phases
 
@@ -69,7 +157,8 @@ wire this panel.
 
 ### Panel phases
 
-1. Live AnimeShading scalar setters and five Slider rows in `info_panel`.
+1. First prove the single-slider phase 1a above, then extend to five scalar rows
+   in `info_panel` for phase 1b.
 2. Live shade/rim color setters and color controls.
 3. Design custom `Shader` definitions and typed input schemas under Materials v2,
    using the unified shading cascade. This phase is a design session, not a
@@ -174,8 +263,8 @@ parameters coherently.
   slider values. Phase 1 must bound retention during sustained dragging, using
   reclamation or reusable storage that respects in-flight GPU work. Do not
   require the general phase-3 material architecture to solve this.
-- Remove the stale “native Slider is not implemented” comment in
-  `examples/shading-models.mms` when wiring the panel.
+- The stale “native Slider is not implemented” comment in
+  `examples/shading-models.mms` was corrected during the 2026-09-08 audit.
 
 ### Panel lifecycle
 
