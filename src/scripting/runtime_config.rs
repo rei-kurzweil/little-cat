@@ -984,6 +984,23 @@ pub fn build_mittens_runtime() -> Result<MittensRuntime, mms::RuntimeSpecError> 
                 "Grabbable" => {
                     no_arg_constructors(component, &["parent", "off", "on"]);
                 }
+                "Rider" => {
+                    component
+                        .constructor("anchor", any(1))
+                        .builder_call("anchor", any(1))
+                        .builder_call("movement_root", any(1))
+                        .builder_call("input", any(1))
+                        .builder_call("enabled", booleans(1));
+                }
+                "Mountable" => {
+                    component
+                        .constructor("entry_zone", any(1))
+                        .builder_call("entry_zone", any(1))
+                        .builder_call("mount_anchor", any(1))
+                        .builder_call("dismount_anchor", any(1))
+                        .builder_call("on_grip", no_args())
+                        .builder_call("enabled", booleans(1));
+                }
                 "Draggable" => {
                     no_arg_constructors(component, &["parent", "off", "on"]);
                     component

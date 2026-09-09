@@ -859,6 +859,9 @@ pub enum IntentValue {
     RegisterGrabbable {
         component_id: ComponentId,
     },
+    RegisterMountable {
+        component_id: ComponentId,
+    },
     RegisterDraggable {
         component_id: ComponentId,
     },
@@ -1102,6 +1105,7 @@ impl IntentValue {
             IntentValue::RegisterRaycastable { .. } => "register_raycastable",
             IntentValue::RegisterPointer { .. } => "register_pointer",
             IntentValue::RegisterGrabbable { .. } => "register_grabbable",
+            IntentValue::RegisterMountable { .. } => "register_mountable",
             IntentValue::RegisterDraggable { .. } => "register_draggable",
             IntentValue::RegisterSlider { .. } => "register_slider",
             IntentValue::RemoveRaycast { .. } => "remove_raycast",

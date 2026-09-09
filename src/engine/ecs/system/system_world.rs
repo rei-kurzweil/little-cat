@@ -113,6 +113,7 @@ pub struct SystemWorld {
     pub scrolling: ScrollingSystem,
 
     pub pointer: PointerSystem,
+    pub attachment: crate::engine::ecs::system::AttachmentSystem,
     pub grabbable: crate::engine::ecs::system::GrabbableSystem,
     pub draggable: crate::engine::ecs::system::DraggableSystem,
     pub raycast: RayCastSystem,
@@ -3085,12 +3086,14 @@ impl SystemWorld {
         let _ = self.process_signals(world, visuals, render_assets, queue, 100_000);
 
         // Gestures interpret ray hits + input into drag events.
-        self.gesture.tick_with_rx(
+        self.attachment.begin_frame();
+        self.gesture.tick_with_rx_and_attachments(
             world,
             input,
             &activations,
             &self.pointer,
             &self.raycast,
+            &mut self.attachment,
             &mut self.rx,
         );
 
@@ -3100,6 +3103,7 @@ impl SystemWorld {
         // Apply grab attachment/release and clearance easing after grab lifecycle events land.
         self.grabbable
             .tick(world, render_assets, &mut self.rx, dt_sec);
+        self.attachment.tick(world, &mut self.rx);
         let _ = self.process_signals(world, visuals, render_assets, queue, 100_000);
 
         // Gizmos consume drag events and apply transform changes.

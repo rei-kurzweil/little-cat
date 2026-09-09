@@ -478,6 +478,39 @@ pointer-driving transform while preserving world pose; release restores the orig
 T { Grabbable {} }
 ```
 
+### `RiderComponent`
+<!-- catalog:component source="RiderComponent" mms="direct" names="Rider" -->
+
+`Rider` declares the alignment anchor, movement root, and automatic locomotion input for a
+participant that can enter a `Mountable`. References accept selectors or live component objects.
+The attachment system preserves XR tracking while suppressing only the referenced built-in
+locomotion mapping during a mount.
+**Directly constructible** as `Rider`. Sources: [Rust implementation](../../../src/engine/ecs/component/rider.rs) and [MMS registry](../../../src/scripting/component_registry.rs).
+
+```mms parse-only
+Rider
+    .anchor("[name='rider_anchor']")
+    .movement_root("[name='locomotion_root']")
+    .input("[name='pedestrian_input']") {}
+```
+
+### `MountableComponent`
+<!-- catalog:component source="MountableComponent" mms="direct" names="Mountable" -->
+
+`Mountable` declares a single-seat destination with an entry zone, a mounted alignment anchor,
+and a dismount anchor. Grip activation mounts only when the pointer-associated Rider's anchor is
+inside the entry zone. An enabled Mountable supplies its owner with a runtime-only raycast marker
+when one is not already authored.
+**Directly constructible** as `Mountable`. Sources: [Rust implementation](../../../src/engine/ecs/component/mountable.rs) and [MMS registry](../../../src/scripting/component_registry.rs).
+
+```mms parse-only
+Mountable
+    .entry_zone("[name='entry_zone']")
+    .mount_anchor("[name='seat']")
+    .dismount_anchor("[name='exit']")
+    .on_grip() {}
+```
+
 ### `DraggableComponent`
 <!-- catalog:component source="DraggableComponent" mms="direct" names="Draggable" -->
 

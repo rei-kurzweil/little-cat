@@ -30,13 +30,13 @@ use crate::engine::ecs::component::{
     InputXRComponent, InputXRGamepadComponent, InspectLayoutComponent, JointRetargetBasisComponent,
     JustifyContent, KeyframeComponent, LayoutBoundsComponent, LayoutComponent,
     LightQuantizationComponent, MediaPipeEyeTrackingComponent, MeshComponent, MirrorComponent,
-    MorphTargetMapComponent, MusicNote, MusicNoteComponent, NormalVisualisationComponent,
-    OpacityComponent, OptionComponent, OscillatorType, Overflow, OverlayComponent,
-    PointLightComponent, PointerComponent, PointerEvents, PoseCaptureComponent,
+    MorphTargetMapComponent, MountableComponent, MusicNote, MusicNoteComponent,
+    NormalVisualisationComponent, OpacityComponent, OptionComponent, OscillatorType, Overflow,
+    OverlayComponent, PointLightComponent, PointerComponent, PointerEvents, PoseCaptureComponent,
     PoseCaptureLibraryComponent, PoseCapturePoseComponent, Position, QuatTemporalFilterComponent,
     QuatYawFollowComponent, RayCastComponent, RaycastableComponent, RaycastableShapeComponent,
     RaycastableShapeType, RefractionComponent, RenderGraphComponent, RenderableComponent,
-    RendererSettingsComponent, RendererStatsComponent, RestAttachmentComponent,
+    RendererSettingsComponent, RendererStatsComponent, RestAttachmentComponent, RiderComponent,
     RoughTransmissionComponent, RouterComponent, ScrollingComponent, SecondaryMotionComponent,
     SelectableComponent, SelectionComponent, SerializeComponent, SettingsPanelConfig,
     SignalObserverRouterComponent, SignalRouteUpwardComponent, SizeDimension, SliderComponent,
@@ -149,6 +149,7 @@ pub const SUPPORTED_COMPONENT_NAMES: &[&str] = &[
     "LightQuantization",
     "Mesh",
     "Mirror",
+    "Mountable",
     "MusicNote",
     "NormalVis",
     "ObserverRouter",
@@ -158,6 +159,7 @@ pub const SUPPORTED_COMPONENT_NAMES: &[&str] = &[
     "PointLight",
     "Pointer",
     "RestAttachment",
+    "Rider",
     "PoseCapture",
     "PoseCaptureLibrary",
     "PoseCapturePose",
@@ -558,8 +560,9 @@ fn collect_referenced_guids_filtered(
     out: &mut std::collections::HashSet<uuid::Uuid>,
 ) {
     use crate::engine::ecs::component::{
-        ComponentRef, GridBindingComponent, IKChainComponent, SliderComponent,
-        TransformApplyInverseLocalComponent, TransformParentComponent, ZoneComponent,
+        ComponentRef, GridBindingComponent, IKChainComponent, MountableComponent, RiderComponent,
+        SliderComponent, TransformApplyInverseLocalComponent, TransformParentComponent,
+        ZoneComponent,
     };
 
     let visible = filtered_save_visibility(world, node);
@@ -601,6 +604,34 @@ fn collect_referenced_guids_filtered(
             && let Some(ComponentRef::Guid(guid)) = &zone.frame_source
         {
             out.insert(*guid);
+        }
+        if let Some(rider) = world.get_component_by_id_as::<RiderComponent>(node) {
+            for source in [
+                rider.anchor.as_ref(),
+                rider.movement_root.as_ref(),
+                rider.input.as_ref(),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                if let ComponentRef::Guid(guid) = source {
+                    out.insert(*guid);
+                }
+            }
+        }
+        if let Some(mountable) = world.get_component_by_id_as::<MountableComponent>(node) {
+            for source in [
+                mountable.entry_zone.as_ref(),
+                mountable.mount_anchor.as_ref(),
+                mountable.dismount_anchor.as_ref(),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                if let ComponentRef::Guid(guid) = source {
+                    out.insert(*guid);
+                }
+            }
         }
         if let Some(slider) = world.get_component_by_id_as::<SliderComponent>(node) {
             for source in [slider.track.as_ref(), slider.thumb.as_ref()]
@@ -685,8 +716,9 @@ fn collect_referenced_guids_limited(
     out: &mut std::collections::HashSet<uuid::Uuid>,
 ) {
     use crate::engine::ecs::component::{
-        ComponentRef, GridBindingComponent, IKChainComponent, SliderComponent,
-        TransformApplyInverseLocalComponent, TransformParentComponent, ZoneComponent,
+        ComponentRef, GridBindingComponent, IKChainComponent, MountableComponent, RiderComponent,
+        SliderComponent, TransformApplyInverseLocalComponent, TransformParentComponent,
+        ZoneComponent,
     };
     if let Some(ik) = world.get_component_by_id_as::<IKChainComponent>(node) {
         for src in [&ik.target_source, &ik.end_effector_source]
@@ -725,6 +757,34 @@ fn collect_referenced_guids_limited(
         && let Some(ComponentRef::Guid(guid)) = &zone.frame_source
     {
         out.insert(*guid);
+    }
+    if let Some(rider) = world.get_component_by_id_as::<RiderComponent>(node) {
+        for source in [
+            rider.anchor.as_ref(),
+            rider.movement_root.as_ref(),
+            rider.input.as_ref(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if let ComponentRef::Guid(guid) = source {
+                out.insert(*guid);
+            }
+        }
+    }
+    if let Some(mountable) = world.get_component_by_id_as::<MountableComponent>(node) {
+        for source in [
+            mountable.entry_zone.as_ref(),
+            mountable.mount_anchor.as_ref(),
+            mountable.dismount_anchor.as_ref(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if let ComponentRef::Guid(guid) = source {
+                out.insert(*guid);
+            }
+        }
     }
     if let Some(slider) = world.get_component_by_id_as::<SliderComponent>(node) {
         for source in [slider.track.as_ref(), slider.thumb.as_ref()]
@@ -2176,6 +2236,18 @@ fn create_component(
             Some("on") => add!(GrabbableComponent::on()),
             _ => add!(GrabbableComponent::new()),
         },
+        "Rider" => match ctor {
+            Some("anchor") => add!(RiderComponent::new().anchor(arg_component_ref(
+                world, args, 0
+            )?)),
+            _ => add!(RiderComponent::new()),
+        },
+        "Mountable" => match ctor {
+            Some("entry_zone") => add!(MountableComponent::new().entry_zone(arg_component_ref(
+                world, args, 0
+            )?)),
+            _ => add!(MountableComponent::new()),
+        },
         "Draggable" => match ctor {
             Some("parent") => add!(DraggableComponent::parent()),
             Some("off") => add!(DraggableComponent::off()),
@@ -3404,6 +3476,44 @@ fn apply_call(
         *world
             .get_component_by_id_as_mut::<ZoneComponent>(id)
             .expect("checked zone") = updated;
+        return Ok(());
+    }
+    if world.get_component_by_id_as::<RiderComponent>(id).is_some() {
+        let current = world
+            .get_component_by_id_as::<RiderComponent>(id)
+            .expect("checked rider")
+            .clone();
+        let updated = match method {
+            "anchor" => current.anchor(arg_component_ref(world, args, 0)?),
+            "movement_root" => current.movement_root(arg_component_ref(world, args, 0)?),
+            "input" => current.input(arg_component_ref(world, args, 0)?),
+            "enabled" => current.enabled(arg_bool(args, 0)?),
+            _ => return Err(format!("Rider: unknown builder '{method}'")),
+        };
+        *world
+            .get_component_by_id_as_mut::<RiderComponent>(id)
+            .expect("checked rider") = updated;
+        return Ok(());
+    }
+    if world
+        .get_component_by_id_as::<MountableComponent>(id)
+        .is_some()
+    {
+        let current = world
+            .get_component_by_id_as::<MountableComponent>(id)
+            .expect("checked mountable")
+            .clone();
+        let updated = match method {
+            "entry_zone" => current.entry_zone(arg_component_ref(world, args, 0)?),
+            "mount_anchor" => current.mount_anchor(arg_component_ref(world, args, 0)?),
+            "dismount_anchor" => current.dismount_anchor(arg_component_ref(world, args, 0)?),
+            "on_grip" => current.on_grip(),
+            "enabled" => current.enabled(arg_bool(args, 0)?),
+            _ => return Err(format!("Mountable: unknown builder '{method}'")),
+        };
+        *world
+            .get_component_by_id_as_mut::<MountableComponent>(id)
+            .expect("checked mountable") = updated;
         return Ok(());
     }
     if world

@@ -8038,6 +8038,37 @@ fn roundtrip_zone_preserves_shape_frame_roles_and_enabled_state() {
 }
 
 #[test]
+fn roundtrip_rider_preserves_attachment_references() {
+    use crate::engine::ecs::component::{ComponentRef, RiderComponent};
+    let original = RiderComponent::new()
+        .anchor(ComponentRef::Query("[name='head']".into()))
+        .movement_root(ComponentRef::Query("[name='root']".into()))
+        .input(ComponentRef::Query("[name='locomotion']".into()))
+        .enabled(false);
+    let (world, id) = roundtrip_component(original.clone());
+    assert_eq!(
+        world.get_component_by_id_as::<RiderComponent>(id),
+        Some(&original)
+    );
+}
+
+#[test]
+fn roundtrip_mountable_preserves_attachment_references() {
+    use crate::engine::ecs::component::{ComponentRef, MountableComponent};
+    let original = MountableComponent::new()
+        .entry_zone(ComponentRef::Query("[name='entry']".into()))
+        .mount_anchor(ComponentRef::Query("[name='seat']".into()))
+        .dismount_anchor(ComponentRef::Query("[name='exit']".into()))
+        .on_grip()
+        .enabled(false);
+    let (world, id) = roundtrip_component(original.clone());
+    assert_eq!(
+        world.get_component_by_id_as::<MountableComponent>(id),
+        Some(&original)
+    );
+}
+
+#[test]
 fn zone_at_accepts_a_live_mms_component_object_as_a_durable_guid_ref() {
     use crate::engine::ecs::component::{ComponentRef, ZoneComponent};
 
@@ -8669,9 +8700,9 @@ fn mittens_corp_evaluates_with_bisket_player_and_car_mount_fixture() {
         AmplitudeComponent, AudioInputComponent, AvatarControlComponent, CameraXRComponent,
         CollisionShape, ComponentRef, ControllerXRComponent, EditorComponent, EditorPanel,
         EditorUIComponent, GLTFComponent, InputXRComponent, InputXRGamepadComponent,
-        PointerComponent, PoseCaptureComponent, SecondaryMotionComponent, ShadingComponent,
-        ShadingModel, SpringColliderComponent, TransformComponent, XREyeTrackingComponent,
-        ZoneComponent,
+        MountableComponent, PointerComponent, PoseCaptureComponent, RiderComponent,
+        SecondaryMotionComponent, ShadingComponent, ShadingModel, SpringColliderComponent,
+        TransformComponent, XREyeTrackingComponent, ZoneComponent,
     };
 
     let mut world = World::default();
@@ -8709,6 +8740,13 @@ fn mittens_corp_evaluates_with_bisket_player_and_car_mount_fixture() {
         world.component_label(locomotion_root),
         Some("bisket_locomotion_root")
     );
+    let rider = world
+        .all_components()
+        .find_map(|id| world.get_component_by_id_as::<RiderComponent>(id))
+        .expect("mittens-corp should declare its Bisket Rider");
+    assert!(rider.anchor.is_some());
+    assert!(rider.movement_root.is_some());
+    assert!(rider.input.is_some());
 
     let rider_anchor = world
         .all_components()
@@ -8736,6 +8774,13 @@ fn mittens_corp_evaluates_with_bisket_player_and_car_mount_fixture() {
             .translation(),
         [0.0, 4.5, -1.0]
     );
+    let mountable = world
+        .all_components()
+        .find_map(|id| world.get_component_by_id_as::<MountableComponent>(id))
+        .expect("the independent car should be Mountable");
+    assert!(mountable.entry_zone.is_some());
+    assert!(mountable.mount_anchor.is_some());
+    assert!(mountable.dismount_anchor.is_some());
 
     let car_zone = world
         .all_components()

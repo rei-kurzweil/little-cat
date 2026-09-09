@@ -102,6 +102,10 @@ tripod_light(
 ED.active() {
     T.position(-5.0, 0.0, 0.0) {
         name = "bisket_locomotion_root"
+        Rider
+            .anchor("[name='bisket_rider_cxr_anchor']")
+            .movement_root("[name='bisket_locomotion_root']")
+            .input("[name='bisket_pedestrian_locomotion']") {}
         InputXR.on() {
             let pedestrian_locomotion = InputXRGamepad {
                 name = "bisket_pedestrian_locomotion"
@@ -168,6 +172,11 @@ ED.active() {
     // is detection-only; it does not register a physical collision response.
     T.position(-19.0, -0.75, -1.5).rotation(0.0, 0.30, 0.0) {
         name = "left_display_car"
+        Mountable
+            .entry_zone("[name='left_display_car_front_zone']")
+            .mount_anchor("[name='left_display_car_cxr_mount']")
+            .dismount_anchor("[name='left_display_car_dismount']")
+            .on_grip() {}
         let car_front_zone_frame = T.position(0.0, 0.15, 3.5) {
             name = "left_display_car_front_zone_frame"
         }
@@ -180,6 +189,12 @@ ED.active() {
         // It is intentionally only a transform: the rider keeps the sole CXR.
         T.position(0.0, 4.5, -1.0) {
             name = "left_display_car_cxr_mount"
+        }
+
+        // Temporary exit target used by grip-anywhere dismount. It is outside
+        // the front entry zone and rotates/moves with the car.
+        T.position(0.0, 2.4, 4.6) {
+            name = "left_display_car_dismount"
         }
 
         GLTF.new("assets/models/car.glb") {

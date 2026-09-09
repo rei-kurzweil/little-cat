@@ -2,7 +2,7 @@
 
 ## Status and outcome
 
-Planned, 2026-09-08. Implement the first native mounting path in
+Implemented pending VR placement validation, 2026-09-09. The first native mounting path is in
 `mittens-engine` using authored `Rider` and `Mountable` components and a runtime
 `AttachmentSystem` relationship. Keep the existing `Grabbable` component and
 `GrabbableSystem` operational; eligible mounting receives grip priority and an
@@ -15,6 +15,12 @@ pressing the XR grip while pointing at the car mounts Bisket at the authored
 cockpit target. Outside that zone, gripping the car does not mount. The mount
 transaction suppresses Bisket's automatic pedestrian locomotion without
 disabling `InputXR` tracking or raw XR controller events.
+
+For the first usable loop, a later, distinct XR grip press from either pointer
+belonging to the mounted rider dismounts it even if the pointer hits nothing.
+This deliberately broad temporary gesture will be replaced by an authored
+eject-button interaction in a later phase; it is not the eventual general
+dismount policy.
 
 This task is the narrow bridge between the implemented
 [zone query foundation](interaction-zone-collision-query-foundation.md) and the
@@ -71,6 +77,7 @@ Rider
 Mountable
     .entry_zone("[name='left_display_car_front_zone']")
     .mount_anchor("[name='left_display_car_cxr_mount']")
+    .dismount_anchor("[name='left_display_car_dismount']")
     .on_grip() {}
 ```
 
@@ -85,6 +92,13 @@ avatar from a world-global search.
 bones, or a particular input topology. This permits camera-only riders,
 non-humanoid occupants, nested vehicles, and test fixtures without embedding
 Bisket-specific conventions in the attachment system.
+
+For the first slice, author `Rider` as an ancestor scope around the input/XR
+subtree that contains its pointers. Pointer association then walks upward and
+selects the nearest enabled `Rider`; it does not search unrelated roots. The
+configured movement root may be a transform above that `Rider`, referenced
+explicitly. Later nested-vehicle work can replace this nearest-scope rule with
+the active movement-authority stack where necessary.
 
 An object may carry both roles:
 
@@ -124,8 +138,25 @@ If the eligible mount check fails and the same pointed owner is enabled
 nothing. Merely entering the zone never mounts, and merely pointing at or
 gripping the car from outside the zone never mounts.
 
+Like `Grabbable`, registering an enabled `Mountable` must ensure that its owner
+has a raycast interaction marker when no authored one exists. The generated
+marker is runtime-only. A ray hit on descendant car geometry resolves upward to
+that mountable owner; the entry zone itself remains non-raycastable and
+invisible.
+
 Eligibility is a synchronous current-transform query. Cached zone enter/exit
 state may eventually drive preview feedback but cannot authorize the commit.
+
+Before selecting a ray hit, grip arbitration must first ask whether the
+initiating pointer belongs to a rider with an active mount edge. If it does,
+the press becomes a dismount request and is consumed. This lookup is based on
+pointer/rider association, not on what the pointer currently intersects. Thus
+the temporary escape gesture works while looking away from the car and cannot
+accidentally start a grab in the same press.
+
+Only a new press edge can dismount. The grip press that commits a mount cannot
+also observe the newly created edge and immediately dismount it, and holding
+the grip across the mount transition does not count as another activation.
 
 ## AttachmentSystem runtime relationship
 
@@ -140,6 +171,7 @@ struct ActiveMount {
     rider_root: ComponentId,
     rider_anchor: ComponentId,
     mount_anchor: ComponentId,
+    dismount_anchor: ComponentId,
     suspended_input: Option<ComponentId>,
     suspended_input_previous_state: Option<bool>,
     original_parent: Option<ComponentId>,
@@ -182,15 +214,24 @@ controller. Desktop `Input.disable()` gates its built-in transform mapping.
 
 ## Dismount and nested authority
 
-Provide a repeatable first-slice dismount action. Until a dedicated binding is
-selected, pressing grip on the occupied mountable again from its current rider
-may toggle that one mount edge. Dismount must:
+Provide a repeatable first-slice dismount action. Until the eject control is
+authored, a distinct grip press from any pointer associated with the current
+rider pops that rider's outermost mount edge. No ray hit is required. Dismount
+must:
 
-1. detach the rider root while preserving its current world pose;
-2. apply an authored or temporary safe exit offset outside the entry zone;
+1. resolve and validate the authored dismount anchor before mutating state;
+2. detach the rider root and align the rider anchor with that dismount anchor;
 3. restore the exact previous automatic-input state;
 4. clear occupancy and publish `MountEnded`;
 5. leave both rider and mountable eligible for another complete cycle.
+
+The car fixture authors `left_display_car_dismount` just outside the front
+entry zone. This is preferable to a magic engine offset: it makes safe exit
+placement visible in the scene, handles vehicle rotation naturally, and can be
+reused when the eject button arrives. If the anchor disappears, cleanup still
+must recover the rider by preserving its current world pose and restoring
+input; an ordinary user-requested dismount should fail before mutation rather
+than strand the rider in a partial state.
 
 Represent nesting as a stack/chain of active edges rather than a global
 "mounted" flag:
@@ -222,24 +263,41 @@ over calling `AttachmentSystem` directly from `GestureSystem`. Native mount
 outcome events can later be exposed to MMS without requiring scripts to perform
 the transaction themselves.
 
+For this slice, that attempt must exist even when there is no ray hit. It
+contains the pointer and press-edge identity plus an optional ordered hit. The
+arbiter applies this order:
+
+1. active mount for the pointer's rider -> consume and request dismount;
+2. eligible pointed `Mountable` -> consume and request mount;
+3. eligible pointed `Grabbable` -> dispatch the existing grab path;
+4. otherwise -> no action.
+
+`AttachmentSystem`, rather than `ZoneComponent`, ticks because mounted edges
+have lifecycle: it drains mount/dismount commands, commits relationship
+changes, validates active participants, and unwinds removed or invalid edges.
+It does not poll every zone every frame. Zone classification occurs only while
+evaluating a mount request (and may later be used separately for previews).
+
 Do not run mounting through the collision-response worker. Entry eligibility
 uses the synchronous zone query against current authoritative transforms.
 
 ## First implementation sequence
 
-1. Add and round-trip `RiderComponent` with anchor, movement-root, input, and
+1. [x] Add and round-trip `RiderComponent` with anchor, movement-root, input, and
    enabled configuration.
-2. Add and round-trip `MountableComponent` with entry-zone, mount-anchor,
-   activation policy, and enabled configuration.
-3. Add pointer-to-rider resolution bounded to the initiating pointer's player
+2. [x] Add and round-trip `MountableComponent` with entry-zone, mount-anchor,
+   dismount-anchor, activation policy, and enabled configuration.
+3. [x] Add pointer-to-rider resolution bounded to the initiating pointer's player
    tree; cover missing and ambiguous associations.
-4. Add pure mount eligibility and cycle-check helpers with focused tests.
-5. Introduce grip arbitration that chooses eligible mount before grab fallback.
-6. Implement atomic mount, same-rider dismount, input restoration, and removal
-   cleanup in `AttachmentSystem`.
-7. Author `Rider` and `Mountable` in `mittens-corp`, keeping the existing car
-   zone and rider/car anchors.
-8. Validate repeated XR mount/dismount cycles and ordinary grabbing regressions.
+4. [x] Add pure mount eligibility and cycle-check helpers with focused tests.
+5. [x] Introduce grip arbitration that chooses eligible mount before grab fallback.
+6. [x] Implement atomic mount, pointer-associated grip-anywhere dismount, input
+   restoration, and removal cleanup in `AttachmentSystem`.
+7. [x] Author `Rider` and `Mountable` in `mittens-corp`, keeping the existing car
+   zone and rider/car anchors and adding a front dismount anchor.
+8. [ ] Validate repeated XR mount/dismount cycles in-headset and tune the three
+   car-local zone/anchor transforms. Focused attachment, serialization, example,
+   and existing gesture/grab tests provide the automated baseline.
 
 ## Acceptance criteria
 
@@ -255,6 +313,8 @@ uses the synchronous zone query against current authoritative transforms.
   also moving independently.
 - Dismount preserves a valid world pose, exits the zone, restores the captured
   input state, and permits remounting.
+- While mounted, a new grip press from either rider-associated XR pointer
+  dismounts even with no ray hit; that press cannot also grab another object.
 - Mount failure or removal of a required component leaves no partial parent,
   occupancy, or disabled-input state.
 - An ineligible `Mountable + Grabbable` target follows the declared grab
@@ -271,10 +331,13 @@ uses the synchronous zone query against current authoritative transforms.
 - continuous zone enter/exit authoring and scripted eligibility callbacks;
 - vehicle velocity/force integration and physical collision ownership;
 - polished entry/exit animation and pose transitions;
+- the guarded red eject control (box, cylinder/button, label, translucent
+  rotatable lid) and replacement of the temporary grip-anywhere gesture;
 - full nested-vehicle UI, diagnostics, and recovery policies.
 
 ## Related work
 
+- [Editor Settings generic-zone visualization first slice](editor-settings-generic-zone-visualization-first-slice.md)
 - [Interaction zones on the collision-query foundation](interaction-zone-collision-query-foundation.md)
 - [Interaction zones, sockets, and vehicle mounting](release-zones-sockets-and-vehicle-mounting.md)
 - [E2 broom attachment first slice](e2-broom-mounting-first-slice.md)

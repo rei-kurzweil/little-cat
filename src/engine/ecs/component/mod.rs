@@ -68,6 +68,7 @@ pub mod light_quantization;
 pub mod mesh;
 pub mod mirror;
 pub mod morph_target;
+pub mod mountable;
 pub mod music_note;
 pub mod normal_visualisation;
 pub mod opacity;
@@ -100,6 +101,7 @@ pub mod renderable;
 pub mod renderer_settings;
 pub mod renderer_stats;
 pub mod rest_attachment;
+pub mod rider;
 pub mod slider;
 pub mod spot_light;
 pub mod text;
@@ -210,6 +212,7 @@ pub use morph_target::{
     MorphFactorState, MorphTargetBindingComponent, MorphTargetInfo, MorphTargetKey,
     MorphTargetMapComponent,
 };
+pub use mountable::MountableComponent;
 pub(crate) use music_note::NotePitch;
 pub use music_note::{MusicNote, MusicNoteComponent};
 pub use normal_visualisation::NormalVisualisationComponent;
@@ -229,6 +232,7 @@ pub use renderable::RenderableComponent;
 pub use renderer_settings::RendererSettingsComponent;
 pub use renderer_stats::RendererStatsComponent;
 pub use rest_attachment::RestAttachmentComponent;
+pub use rider::RiderComponent;
 pub use router::RouterComponent;
 pub use scrolling::ScrollingComponent;
 pub use secondary_motion::{

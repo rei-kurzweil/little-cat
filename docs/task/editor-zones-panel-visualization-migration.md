@@ -8,6 +8,13 @@ the existing collider and secondary-motion collider controls out of the Editor
 Settings panel only after the new panel reaches behavioral and serialization
 parity.
 
+Before this panel work, implement the narrower
+[Editor Settings generic-zone visualization first slice](editor-settings-generic-zone-visualization-first-slice.md).
+That slice adds the underlying `ZoneVisualizationSystem` and a temporary
+Settings toggle to unblock vehicle-entry-zone diagnosis. This task later moves
+that same request state into the Zones panel; it must not create a parallel
+visualizer or a second independently mutable visibility flag.
+
 The authored panel selector is `zones`:
 
 ```mms
@@ -301,6 +308,7 @@ Manual validation should include:
 
 ## Related work
 
+- [Editor Settings generic-zone visualization first slice](editor-settings-generic-zone-visualization-first-slice.md)
 - [Interaction zones on the collision-query foundation](interaction-zone-collision-query-foundation.md)
 - [Rider + Mountable attachment-system first slice](rider-mountable-attachment-system-first-slice.md)
 - [Editor panel minimize and render suspension](editor-panel-minimize-and-render-suspension.md)

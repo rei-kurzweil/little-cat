@@ -6,7 +6,7 @@ use crate::engine::ecs::system::grabbable_system::grabbable_owner_for_hit;
 use crate::engine::ecs::system::pointer_system::{
     PointerActivations, PointerSystem, pointer_topology_context,
 };
-use crate::engine::ecs::system::{BvhSystem, RayCastSystem, TransformSystem};
+use crate::engine::ecs::system::{AttachmentSystem, BvhSystem, RayCastSystem, TransformSystem};
 use crate::engine::ecs::{
     ComponentId, EventSignal, IntentValue, PointerActivationSource, RxWorld, SignalEmitter,
     SignalKind, World,
@@ -348,6 +348,7 @@ impl GestureSystem {
     ///
     /// `input` is still passed for `cursor_pos` (screen-space fields on desktop pointer events).
     /// `activations` drives press/down/release for each pointer regardless of input source.
+    #[cfg(test)]
     pub fn tick_with_rx(
         &mut self,
         world: &mut World,
@@ -355,6 +356,28 @@ impl GestureSystem {
         activations: &PointerActivations,
         pointer_system: &PointerSystem,
         raycast_system: &RayCastSystem,
+        rx: &mut RxWorld,
+    ) {
+        let mut attachment_system = AttachmentSystem::default();
+        self.tick_with_rx_and_attachments(
+            world,
+            input,
+            activations,
+            pointer_system,
+            raycast_system,
+            &mut attachment_system,
+            rx,
+        );
+    }
+
+    pub fn tick_with_rx_and_attachments(
+        &mut self,
+        world: &mut World,
+        input: &InputState,
+        activations: &PointerActivations,
+        pointer_system: &PointerSystem,
+        raycast_system: &RayCastSystem,
+        attachment_system: &mut AttachmentSystem,
         rx: &mut RxWorld,
     ) {
         let hits: Vec<(
@@ -397,9 +420,25 @@ impl GestureSystem {
             if self.grip_states.contains_key(&pointer_cid) {
                 continue;
             }
+            if attachment_system.try_dismount_for_pointer(world, pointer_cid, rx) {
+                if desktop {
+                    desktop_grab_consumed.insert(pointer_cid);
+                }
+                continue;
+            }
             let Some(raycaster) = pointer_system.raycast_for_pointer(pointer_cid) else {
                 continue;
             };
+            let mounted = hits
+                .iter()
+                .filter(|hit| hit.2 == raycaster && hit.6.captures_drag())
+                .any(|hit| attachment_system.try_mount_from_hit(world, pointer_cid, hit.3, rx));
+            if mounted {
+                if desktop {
+                    desktop_grab_consumed.insert(pointer_cid);
+                }
+                continue;
+            }
             let Some(hit) = hits.iter().find(|h| {
                 h.2 == raycaster
                     && h.6.captures_drag()
