@@ -15,6 +15,11 @@ Settings toggle to unblock vehicle-entry-zone diagnosis. This task later moves
 that same request state into the Zones panel; it must not create a parallel
 visualizer or a second independently mutable visibility flag.
 
+As of the first XR validation on 2026-09-09, generic red zone markers render,
+but the temporary Settings toggle cannot disable an authored-on request. Fix
+that owner/state reconciliation in the first-slice tracker before moving the
+control here; migration must not conceal the defect behind a new panel.
+
 The authored panel selector is `zones`:
 
 ```mms
@@ -40,18 +45,20 @@ mount eligibility semantics.
 
 The Settings panel currently contains:
 
+- `show zones`, temporarily backed by `ZoneVisualizationSystem`; its UI-off
+  lifecycle is currently defective and tracked by the focused predecessor;
 - `show all colliders`, backed by `CollisionVisualizationMode::All`;
 - `show GLTF colliders`, backed by `CollisionVisualizationMode::GltfOwned`;
 - `show spring bones`, backed by one boolean that visualizes both bound spring
   segments/endpoints and their collider spheres.
 
-The configuration is stored in `SettingsPanelConfig` as `show_colliders`,
-`show_gltf_colliders`, and `show_spring_bones`. Settings-panel click handling
-mutates `EditorContextState` and emits owner-scoped
-`CollisionVisualizationSet` or `SpringBoneVisualizationSet` intents. The
-visualization systems union requests by owner, restrict them to effective
-editor roots, create runtime-only markers, and remove those markers when the
-request or source disappears.
+The temporary and existing configuration is stored in `SettingsPanelConfig` as
+`show_zones`, `show_colliders`, `show_gltf_colliders`, and
+`show_spring_bones`. Settings-panel click handling mutates `EditorContextState`
+and emits owner-scoped `ZoneVisualizationSet`, `CollisionVisualizationSet`, or
+`SpringBoneVisualizationSet` intents. The visualization systems union requests
+by owner, restrict them to effective editor roots, create runtime-only markers,
+and remove those markers when the request or source disappears.
 
 Preserve those useful ownership and cleanup properties. The migration should
 change which panel owns the controls, not introduce a second set of marker

@@ -124,6 +124,29 @@ impl EditorInspectorSystemStopgapMmsAdapter {
         editor_memory_marker("editor setup_panels_for_editor:after runtime ui root");
 
         register_editor_root(self.workspace_runtime.installed_editor_roots(), editor_root);
+        let zones_visible = self
+            .selected_panel_specs
+            .iter()
+            .find(|spec| spec.panel == EditorPanel::Settings)
+            .and_then(EditorUIPanelSpec::settings_config)
+            .is_some_and(|config| config.show_zones);
+        editor_context_state
+            .lock()
+            .expect("editor context state mutex poisoned")
+            .zones_visible = zones_visible;
+        emit.push_intent_now(
+            runtime_ui_root,
+            IntentValue::ZoneVisualizationSet {
+                component_id: runtime_ui_root,
+                scope_roots: self
+                    .workspace_runtime
+                    .installed_editor_roots()
+                    .lock()
+                    .expect("installed editor roots mutex poisoned")
+                    .clone(),
+                visible: zones_visible,
+            },
+        );
         editor_memory_marker("editor setup_panels_for_editor:after register_editor_root");
         if self.selected_panels.contains(&EditorPanel::Grid) {
             GridSystem::new().ensure_default_grid(world, emit, editor_root);

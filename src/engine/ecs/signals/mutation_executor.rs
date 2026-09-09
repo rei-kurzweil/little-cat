@@ -735,6 +735,20 @@ impl RxMutationExecutor {
                     systems.spring_bone_visualization.remove_request(*owner);
                 }
             }
+            IntentValue::ZoneVisualizationSet {
+                component_id,
+                scope_roots,
+                visible,
+            } => {
+                let owner = component_id;
+                if *visible {
+                    systems
+                        .zone_visualization
+                        .set_request(*owner, scope_roots.clone());
+                } else {
+                    systems.zone_visualization.remove_request(*owner);
+                }
+            }
             IntentValue::CameraVisualizationSet {
                 component_id,
                 scope_roots,

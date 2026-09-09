@@ -259,6 +259,9 @@ export fn editor_settings_panel_body(config) {
             if config.show_spring_bones {
                 editor_settings_collider_row("editor_settings_spring_bones_visibility", "show spring bones", "SpringBonesVisibility", "spring_bones_toggle_slot")
             }
+            if config.show_zones {
+                editor_settings_collider_row("editor_settings_zones_visibility", "show zones", "ZonesVisibility", "zones_toggle_slot")
+            }
 
             Selection.root("#editor_settings_mode_rows") { name = "editor_settings_selection" }
     })

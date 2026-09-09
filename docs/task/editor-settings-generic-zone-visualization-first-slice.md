@@ -2,11 +2,11 @@
 
 ## Status and outcome
 
-Planned, 2026-09-09. Add one temporary **show zones** toggle to the existing
-Editor Settings panel and a `ZoneVisualizationSystem` that draws authored
-`ZoneComponent` regions. This is the smallest diagnostic slice needed to tune
-and validate the `mittens-corp` vehicle-entry zone before building the dedicated
-Zones panel.
+Implemented with a blocking toggle defect, 2026-09-09. The red translucent zone
+marker is visible and follows the authored `ZoneComponent` in XR, but the
+**show zones** row cannot currently turn it off. The marker remains permanently
+visible when `mittens-corp` authors `show_zones = true`. Fix request ownership
+and UI state synchronization before calling this slice complete.
 
 This slice visualizes only actual `ZoneComponent`s. Existing
 `CollisionComponent` shapes and secondary-motion colliders keep their existing
@@ -27,6 +27,30 @@ failure modes indistinguishable in-headset:
 
 Showing the exact region used by `zone_query` makes the first three cases
 directly observable without adding temporary renderables to the authored scene.
+
+## XR validation findings, 2026-09-09
+
+- The generic zone visualization renders successfully in-headset.
+- The `mittens-corp` car entry box is visibly authored on the back of the car,
+  despite its `front` names and comments. The car model's semantic front is the
+  opposite local-Z side from the current `z = 3.5` placement.
+- Clicking **show zones** does not make the marker disappear. Treat this as a
+  request/toggle lifecycle bug, not a marker-rendering bug.
+
+Trace the failed toggle through all three representations in one click:
+
+1. the `ZonesVisibility` row must invert `EditorContextState::zones_visible`;
+2. the emitted `ZoneVisualizationSet { visible: false }` must remove the same
+   request owner installed during editor setup;
+3. the next `ZoneVisualizationSystem` reconciliation must remove the retained
+   marker, without editor setup immediately reasserting the authored `true`
+   default.
+
+Add a test that starts with authored `show_zones = true`, materializes the real
+Settings panel, clicks the row, processes signals and a visualization tick, and
+asserts both that the request and marker are absent. The existing click test is
+not sufficient if it tests context state without the full authored
+initialization/reconciliation path.
 
 ## First-slice UI contract
 
@@ -53,9 +77,11 @@ EditorUI {
 }
 ```
 
-The setting should default to `false` globally so adding this feature does not
-cover existing scenes in overlays. Author `show_zones = true` in
-`mittens-corp` while the mounting fixture is being tuned.
+The setting defaults to `false` globally so adding this feature does not cover
+existing scenes in overlays. `mittens-corp` temporarily authors
+`show_zones = true` while the mounting fixture is being tuned. That authored
+initial value must seed runtime state once; it must not overwrite a later live
+toggle on every panel refresh or setup pass.
 
 Use `zones_visible: bool` in `EditorContextState`. A Settings-row click toggles
 that state and emits an owner-scoped request:
@@ -168,26 +194,36 @@ The rendered box must move and rotate with the car and agree with mount
 eligibility at its visible boundary. The relevant probe is the world position
 of `bisket_rider_cxr_anchor`, not either hand or ray-hit position.
 
+XR inspection showed that local `+Z` is the car's back. Move the entry frame to
+the semantic front, with `z = -3.5` as the first correction, and visually
+validate it before finalizing the number. Review the dismount anchor at the
+same time: its current `z = 4.6` was also described as a front exit and likely
+needs the corresponding `-Z` correction.
+
 If Bisket's anchor is visibly inside the red region and gripping the car still
 does not mount, continue diagnosis in pointer-to-Rider association, ray-hit to
 Mountable resolution, and grip arbitration rather than expanding the zone.
 
 ## Implementation sequence
 
-1. [ ] Add `show_zones` to `SettingsPanelConfig`, MMS parsing/serialization,
+1. [x] Add `show_zones` to `SettingsPanelConfig`, MMS parsing/serialization,
    builders, and round-trip tests; default it off.
-2. [ ] Add `zones_visible` to `EditorContextState` and the Settings panel's
+2. [x] Add `zones_visible` to `EditorContextState` and the Settings panel's
    initial-state synchronization.
-3. [ ] Add the **show zones** Settings row and click handling.
-4. [ ] Add `ZoneVisualizationSet` signal routing and request ownership.
-5. [ ] Implement retained `ZoneVisualizationSystem` markers using shared zone
+3. [x] Add the **show zones** Settings row and click handling.
+4. [x] Add `ZoneVisualizationSet` signal routing and request ownership.
+5. [x] Implement retained `ZoneVisualizationSystem` markers using shared zone
    frame/shape resolution.
-6. [ ] Register and tick the system in `SystemWorld`, including owner/source
+6. [x] Register and tick the system in `SystemWorld`, including owner/source
    cleanup.
-7. [ ] Enable the setting in `mittens-corp` and validate the entry box in VR.
-8. [ ] Tune the car entry-zone frame/shape based on the visible rider anchor and
-   verify inside/outside mount behavior.
-9. [ ] Later, migrate the toggle and request state into the dedicated Zones
+7. [x] Enable the setting in `mittens-corp` and confirm that the entry box is
+   visible in XR.
+8. [ ] Fix the full authored-on -> UI-off request and marker lifecycle; add the
+   real-panel regression test described above.
+9. [ ] Move the car entry zone from the back to the semantic front and tune its
+   frame/shape based on the visible rider anchor; inspect the exit anchor too.
+10. [ ] Verify inside/outside mount behavior after placement and toggle fixes.
+11. [ ] Later, migrate the toggle and request state into the dedicated Zones
    panel without changing marker ownership or visual semantics.
 
 ## Acceptance criteria

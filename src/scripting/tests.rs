@@ -7175,7 +7175,8 @@ fn roundtrip_editor_ui_default_and_settings_only() {
         .with_show_bounds(true)
         .with_show_cameras(false)
         .with_show_colliders(false)
-        .with_show_gltf_colliders(true);
+        .with_show_gltf_colliders(true)
+        .with_show_zones(true);
     let (world, id) =
         roundtrip_component(EditorUIComponent::new().with_panel_specs([expected.clone()]));
     let got = world
@@ -7395,6 +7396,7 @@ fn editor_ui_settings_config_conditionally_authors_diagnostic_rows() {
                         show_colliders = false
                         show_gltf_colliders = false
                         show_spring_bones = false
+                        show_zones = true
                     }
                 }])
             }
@@ -7429,6 +7431,25 @@ fn editor_ui_settings_config_conditionally_authors_diagnostic_rows() {
         world
             .find_component(editor_ui, "#editor_settings_bounds_visibility")
             .is_some()
+    );
+    assert!(
+        world
+            .find_component(editor_ui, "#editor_settings_zones_visibility")
+            .is_some()
+    );
+    assert!(
+        systems
+            .editor_context
+            .shared_state()
+            .lock()
+            .unwrap()
+            .zones_visible
+    );
+    assert!(
+        systems
+            .zone_visualization
+            .requests()
+            .contains_key(&editor_ui)
     );
     let title_bar = world
         .find_component(editor_ui, "#title_bar")

@@ -93,6 +93,7 @@ pub mod transition_system;
 pub mod vr_types;
 pub mod xr_eye_tracking_system;
 pub mod zone_query;
+pub mod zone_visualization_system;
 
 pub use amplitude_system::{AmplitudeSnapshot, AmplitudeSystem};
 pub use animation_system::AnimationSystem;
@@ -185,8 +186,10 @@ pub use transition_system::TransitionSystem;
 pub use vr_types::{XrGamepadState, XrHandGamepadState, XrInputState};
 pub use xr_eye_tracking_system::XREyeTrackingSystem;
 pub use zone_query::{
-    ZoneQueryError, ZoneRelation, classify_point as classify_zone_point, zones_in_subtree,
+    ZoneQueryError, ZoneRelation, classify_point as classify_zone_point, resolve_zone_frame,
+    zones_in_subtree,
 };
+pub use zone_visualization_system::{ZoneVisualizationRequest, ZoneVisualizationSystem};
 
 use super::World;
 use crate::engine::graphics::VisualWorld;

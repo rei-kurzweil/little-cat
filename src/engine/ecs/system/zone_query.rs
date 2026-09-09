@@ -89,7 +89,7 @@ pub fn zones_in_subtree(world: &World, root: ComponentId, role: Option<&str>) ->
     zones
 }
 
-fn resolve_zone_frame(
+pub fn resolve_zone_frame(
     world: &World,
     zone_id: ComponentId,
     zone: &ZoneComponent,
@@ -106,10 +106,19 @@ fn resolve_zone_frame(
             .parent_of(zone_id)
             .ok_or(ZoneQueryError::UnresolvedFrame(zone_id))?,
     };
-    nearest_transform(world, resolved).ok_or(ZoneQueryError::FrameHasNoTransform {
+    let frame = nearest_transform(world, resolved).ok_or(ZoneQueryError::FrameHasNoTransform {
         zone: zone_id,
         resolved,
-    })
+    })?;
+    let world_matrix =
+        TransformSystem::world_model(world, frame).ok_or(ZoneQueryError::FrameHasNoTransform {
+            zone: zone_id,
+            resolved: frame,
+        })?;
+    if mat4_inverse(world_matrix).is_none() {
+        return Err(ZoneQueryError::SingularFrame(zone_id));
+    }
+    Ok(frame)
 }
 
 fn nearest_transform(world: &World, start: ComponentId) -> Option<ComponentId> {

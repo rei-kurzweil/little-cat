@@ -267,6 +267,42 @@ Broadphase optimization, arbitrary mesh zones, candidate bounds containment,
 continuous crossing detection, and general enter/exit event authoring are
 follow-ups, not prerequisites for the point-probe broom slice.
 
+## Future: bounds-derived and adjacent zones
+
+Some zones can be initialized from the aggregate bounds of the mesh subtree
+they describe instead of requiring hand-authored dimensions. A useful future
+authoring model could separate two operations:
+
+1. fit the zone shape or selected axes to a referenced subtree's bounds;
+2. place that fitted shape adjacent to an explicitly selected face, with an
+   authored gap, inset, expansion, or thickness.
+
+This could reduce manual placement for vehicle entry regions, audio regions,
+interaction envelopes, and inventory volumes. It must remain optional: an
+aggregate bounding box cannot infer which side of a car is semantically the
+front, whether a doorway rather than the whole body should define entry, or
+whether animated/skinned extremities belong in the region. The author must
+supply a frame/axis or semantic face unless the asset has trustworthy metadata.
+
+`LayoutRoot` is relevant because bounds now contribute intrinsic width and
+height to layout. It may be useful for arranging a zone beside a bounded visual
+in the layout plane, especially for panels and flat spatial UI. It should not
+silently become the general 3D zone-placement API, however:
+
+- ordinary layout is primarily width/height and does not inherently provide
+  the depth needed for a 3D volume;
+- a world AABB loses the mesh's oriented local axes;
+- layout direction does not establish an asset's semantic front;
+- animated or reloaded bounds need an explicit live-versus-initial sizing
+  policy;
+- visualization markers and zones must not feed back into the source bounds.
+
+Prefer sharing the existing bounds measurement result with a dedicated
+bounds-fit/adjacency constraint. Let `LayoutRoot` consume that same measurement
+where its 2D semantics fit, rather than making zone authoring depend on a UI
+layout component. A later slice should compare local aggregate bounds, oriented
+bounds, and authored reference-frame placement before choosing MMS syntax.
+
 ## Acceptance criteria
 
 - Physical colliders and zones use the same internal normalized shape value and

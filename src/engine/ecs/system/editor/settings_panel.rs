@@ -32,6 +32,8 @@ pub(crate) const EDITOR_SETTINGS_GLTF_COLLIDERS_TOGGLE_SLOT_NAME: &str =
 pub(crate) const EDITOR_SETTINGS_SPRING_BONES_ROW_NAME: &str =
     "editor_settings_spring_bones_visibility";
 pub(crate) const EDITOR_SETTINGS_SPRING_BONES_TOGGLE_SLOT_NAME: &str = "spring_bones_toggle_slot";
+pub(crate) const EDITOR_SETTINGS_ZONES_ROW_NAME: &str = "editor_settings_zones_visibility";
+pub(crate) const EDITOR_SETTINGS_ZONES_TOGGLE_SLOT_NAME: &str = "zones_toggle_slot";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum EditorSettingsOption {
@@ -402,6 +404,15 @@ pub(crate) fn sync_editor_settings_panel_selection(
         "spring_bones_toggle",
         editor_context.spring_bones_visible,
     );
+    sync_boolean_toggle(
+        world,
+        emit,
+        panel_query_root,
+        EDITOR_SETTINGS_ZONES_ROW_NAME,
+        EDITOR_SETTINGS_ZONES_TOGGLE_SLOT_NAME,
+        "zones_toggle",
+        editor_context.zones_visible,
+    );
 }
 
 fn owning_editor_ui(world: &World, start: ComponentId) -> Option<ComponentId> {
@@ -598,6 +609,31 @@ pub(crate) fn handle_editor_settings_panel_click(
                 emit.push_intent_now(
                     owner,
                     IntentValue::SpringBoneVisualizationSet {
+                        component_id: owner,
+                        scope_roots: effective_editor_roots(world, installed_editor_roots),
+                        visible,
+                    },
+                );
+            }
+            let context = editor_context_state
+                .lock()
+                .expect("editor context state mutex poisoned")
+                .clone();
+            sync_editor_settings_panel_selection(world, emit, panel_query_root, &context);
+            return true;
+        }
+        if row_kind == "ZonesVisibility" {
+            let visible = {
+                let mut context = editor_context_state
+                    .lock()
+                    .expect("editor context state mutex poisoned");
+                context.zones_visible = !context.zones_visible;
+                context.zones_visible
+            };
+            if let Some(owner) = owning_editor_ui(world, settings_panel_root) {
+                emit.push_intent_now(
+                    owner,
+                    IntentValue::ZoneVisualizationSet {
                         component_id: owner,
                         scope_roots: effective_editor_roots(world, installed_editor_roots),
                         visible,
@@ -894,5 +930,55 @@ mod tests {
                 .contains_key(&editor_ui)
         );
         assert!(systems.collision_visualization.requests().is_empty());
+    }
+
+    #[test]
+    fn zone_toggle_is_owner_scoped_and_independent() {
+        let mut world = World::default();
+        let mut emit = CommandQueue::new();
+        let mut visuals = VisualWorld::default();
+        let mut render_assets = RenderAssets::new();
+        let mut systems = SystemWorld::default();
+        let editor_ui =
+            world.add_component(crate::engine::ecs::component::EditorUIComponent::new());
+        let panel = world.add_component_boxed_named(
+            "editor_settings_panel_root",
+            Box::new(crate::engine::ecs::component::TransformComponent::new()),
+        );
+        let row = world.add_component_boxed_named(
+            EDITOR_SETTINGS_ZONES_ROW_NAME,
+            Box::new(crate::engine::ecs::component::TransformComponent::new()),
+        );
+        let payload = world.add_component_boxed_named(
+            EDITOR_SETTINGS_PAYLOAD_NAME,
+            Box::new(
+                DataComponent::new()
+                    .with_entry("row_kind", DataValue::Text("ZonesVisibility".into())),
+            ),
+        );
+        world.add_child(editor_ui, panel).unwrap();
+        world.add_child(panel, row).unwrap();
+        world.add_child(row, payload).unwrap();
+        let editor_root = world.add_component(EditorComponent::new());
+        let context = Arc::new(Mutex::new(EditorContextState::default()));
+        let roots = Arc::new(Mutex::new(vec![editor_root]));
+
+        assert!(handle_editor_settings_panel_click(
+            &mut world, &mut emit, editor_ui, row, &context, &roots,
+        ));
+        systems.process_commands(&mut world, &mut visuals, &mut render_assets, &mut emit);
+        assert!(context.lock().unwrap().zones_visible);
+        assert_eq!(
+            systems.zone_visualization.requests()[&editor_ui].scope_roots,
+            vec![editor_root]
+        );
+        assert!(systems.collision_visualization.requests().is_empty());
+
+        assert!(handle_editor_settings_panel_click(
+            &mut world, &mut emit, editor_ui, row, &context, &roots,
+        ));
+        systems.process_commands(&mut world, &mut visuals, &mut render_assets, &mut emit);
+        assert!(!context.lock().unwrap().zones_visible);
+        assert!(systems.zone_visualization.requests().is_empty());
     }
 }

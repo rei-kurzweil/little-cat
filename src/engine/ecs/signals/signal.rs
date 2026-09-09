@@ -499,6 +499,11 @@ pub enum IntentValue {
         scope_roots: Vec<ComponentId>,
         visible: bool,
     },
+    ZoneVisualizationSet {
+        component_id: ComponentId,
+        scope_roots: Vec<ComponentId>,
+        visible: bool,
+    },
     CameraVisualizationSet {
         component_id: ComponentId,
         scope_roots: Vec<ComponentId>,
@@ -984,6 +989,7 @@ impl IntentValue {
             IntentValue::SliderSet { .. } => "slider_set",
             IntentValue::CollisionVisualizationSet { .. } => "collision_visualization_set",
             IntentValue::SpringBoneVisualizationSet { .. } => "spring_bone_visualization_set",
+            IntentValue::ZoneVisualizationSet { .. } => "zone_visualization_set",
             IntentValue::CameraVisualizationSet { .. } => "camera_visualization_set",
 
             IntentValue::Attach { .. } => "attach",

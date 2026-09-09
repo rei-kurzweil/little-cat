@@ -2,12 +2,11 @@
 
 ## Status and outcome
 
-Implemented pending VR placement validation, 2026-09-09. The first native mounting path is in
-`mittens-engine` using authored `Rider` and `Mountable` components and a runtime
-`AttachmentSystem` relationship. Keep the existing `Grabbable` component and
-`GrabbableSystem` operational; eligible mounting receives grip priority and an
-ineligible mount attempt falls back to ordinary grabbing when the pointed owner
-is also grabbable.
+Implemented with VR correctness fixes pending, 2026-09-09. The first native
+mount/dismount path operates in-headset, but validation exposed two fixture and
+pose defects: the car entry zone is on the back of the model, and live HMD
+pitch/roll is baked into the locomotion root during both mount and dismount.
+Keep the relationship implementation in place while correcting those semantics.
 
 Validate the slice in [mittens-corp](../../examples/mittens-corp.mms): while
 the Bisket rider is inside the independent mech/car's front entry zone,
@@ -158,6 +157,51 @@ Only a new press edge can dismount. The grip press that commits a mount cannot
 also observe the newly created edge and immediately dismount it, and holding
 the grip across the mount transition does not count as another activation.
 
+## XR validation findings and orientation correction, 2026-09-09
+
+Mounting and grip-anywhere dismount both commit, but the current full-matrix
+alignment treats the live CXR/head orientation as an authored attachment
+orientation. If the user is looking above or below the horizon during either
+transition, the inverse of that pitch is baked into the rider movement root.
+The user then remains permanently pitched after returning their head to a
+neutral pose. Entering or exiting while looking level only hides the defect.
+
+The rider's tracked head pose has two different meanings that must not be
+collapsed:
+
+- its world position is the current entry probe and the point around which the
+  rig should be relocated;
+- its live pitch and roll are device pose and must remain relative tracking,
+  not become locomotion-root orientation.
+
+For this vehicle slice, mounting and dismounting may change the movement root's
+world translation and yaw, but must never introduce pitch or roll into that
+root. The vehicle mount anchor supplies the mounted layer's yaw; the dismount
+anchor supplies the exit yaw. The live HMD orientation remains untouched, so a
+user looking up, down, or sideways continues looking that way across the
+transition without permanently tilting the world.
+
+Do not compute the corrected root pose as the mount anchor multiplied by the
+inverse of the rider anchor's unrestricted live matrix. Introduce an explicit
+horizontal attachment basis or equivalent pose helper that:
+
+1. preserves the current tracked-head world position as the relocation pivot;
+2. projects the attachment heading onto the world-up plane;
+3. applies only the destination yaw to the movement root;
+4. leaves headset pitch/roll in the `InputXR`/CXR tracking path;
+5. handles a near-vertical head-forward vector without unstable yaw extraction.
+
+Add mount and dismount tests with nonzero head pitch and roll. Assert that the
+rider anchor reaches the destination position, the movement root has no added
+pitch/roll, input state restores, and repeating the cycle does not accumulate
+orientation error.
+
+Zone visualization also confirmed that the fixture named
+`left_display_car_front_zone_frame` is currently on the car's back at local
+`z = 3.5`. Move it to the opposite side (`z = -3.5` as the first candidate),
+then verify the car model's actual forward basis in XR. Review the nominal
+front dismount anchor at `z = 4.6` in the same correction.
+
 ## AttachmentSystem runtime relationship
 
 Authored components describe capabilities and rules. Mutable mounted state
@@ -295,9 +339,15 @@ uses the synchronous zone query against current authoritative transforms.
    restoration, and removal cleanup in `AttachmentSystem`.
 7. [x] Author `Rider` and `Mountable` in `mittens-corp`, keeping the existing car
    zone and rider/car anchors and adding a front dismount anchor.
-8. [ ] Validate repeated XR mount/dismount cycles in-headset and tune the three
-   car-local zone/anchor transforms. Focused attachment, serialization, example,
-   and existing gesture/grab tests provide the automated baseline.
+8. [x] Confirm the mount and grip-anywhere dismount transactions operate in XR.
+9. [ ] Replace unrestricted live-anchor orientation alignment with the
+   translation-plus-yaw policy above and add pitched/rolled-head regression
+   tests for both transitions.
+10. [ ] Move the entry zone from the car's back to its semantic front and review
+    the dismount anchor's side.
+11. [ ] Validate repeated XR mount/dismount cycles and tune the three car-local
+    zone/anchor transforms. Focused attachment, serialization, example, and
+    existing gesture/grab tests provide the automated baseline.
 
 ## Acceptance criteria
 

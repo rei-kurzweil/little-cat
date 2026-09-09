@@ -209,7 +209,7 @@ T.position(1.25, 2.8, -1.5) {
     name = "mittens_corp_editor_ui"
     EditorUI {
         panels([
-            { panel = "settings" },
+            { panel = "settings" config = { show_zones = true } },
             { panel = "pose" },
         ])
     }

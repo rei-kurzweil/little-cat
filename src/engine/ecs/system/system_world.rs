@@ -46,6 +46,7 @@ use crate::engine::ecs::system::TransformSystem;
 use crate::engine::ecs::system::TransitionSystem;
 use crate::engine::ecs::system::XREyeTrackingSystem;
 use crate::engine::ecs::system::XrSystem;
+use crate::engine::ecs::system::ZoneVisualizationSystem;
 use crate::engine::ecs::system::bounds_system::BoundsSystem;
 use crate::engine::ecs::system::{
     AmplitudeSystem, AssetSystem, AvatarBodyYawSystem, AvatarControlSystem, Cursor3dSystem,
@@ -96,6 +97,7 @@ pub struct SystemWorld {
     pub bvh: BvhSystem,
     pub collision: CollisionSystem,
     pub collision_visualization: CollisionVisualizationSystem,
+    pub zone_visualization: ZoneVisualizationSystem,
     pub spring_bone_visualization: crate::engine::ecs::system::SpringBoneVisualizationSystem,
     pub camera_visualization: crate::engine::ecs::system::CameraVisualizationSystem,
     pub collision_response: CollisionResponseSystem,
@@ -2961,6 +2963,8 @@ impl SystemWorld {
         );
         self.collision_visualization
             .tick_with_queue(world, visuals, render_assets, queue);
+        self.zone_visualization
+            .tick_with_queue(world, render_assets, queue);
         self.camera_visualization
             .tick_with_queue(world, &self.camera, queue);
         queue.flush(world, self, visuals, render_assets);

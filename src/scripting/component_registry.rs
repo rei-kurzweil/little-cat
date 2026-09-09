@@ -1297,13 +1297,14 @@ fn parse_editor_ui_panel_specs(args: &[Value]) -> Result<Vec<EditorUIPanelSpec>,
                 };
                 match panel {
                     EditorPanel::Settings => {
-                        const KEYS: [&str; 6] = [
+                        const KEYS: [&str; 7] = [
                             "show_armature",
                             "show_bounds",
                             "show_cameras",
                             "show_colliders",
                             "show_gltf_colliders",
                             "show_spring_bones",
+                            "show_zones",
                         ];
                         if let Some(key) = config.keys().find(|key| !KEYS.contains(&key.as_str())) {
                             return Err(format!("unknown EditorUI settings config key '{key}'"));
@@ -1319,6 +1320,7 @@ fn parse_editor_ui_panel_specs(args: &[Value]) -> Result<Vec<EditorUIPanelSpec>,
                                 true,
                             )?,
                             show_spring_bones: editor_ui_bool(&config, "show_spring_bones", true)?,
+                            show_zones: editor_ui_bool(&config, "show_zones", false)?,
                         })
                     }
                     _ if config.is_empty() => EditorUIPanelConfig::Empty,

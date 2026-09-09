@@ -64,6 +64,7 @@ impl SignalPipelineProcessor {
             | IntentValue::SliderSet { component_id, .. }
             | IntentValue::CollisionVisualizationSet { component_id, .. }
             | IntentValue::SpringBoneVisualizationSet { component_id, .. }
+            | IntentValue::ZoneVisualizationSet { component_id, .. }
             | IntentValue::CameraVisualizationSet { component_id, .. }
             | IntentValue::Detach { component_id }
             | IntentValue::RemoveSubtree { component_id }
@@ -214,6 +215,7 @@ impl SignalPipelineProcessor {
             | IntentValue::SliderSet { component_id, .. }
             | IntentValue::CollisionVisualizationSet { component_id, .. }
             | IntentValue::SpringBoneVisualizationSet { component_id, .. }
+            | IntentValue::ZoneVisualizationSet { component_id, .. }
             | IntentValue::CameraVisualizationSet { component_id, .. }
             | IntentValue::Detach { component_id }
             | IntentValue::RemoveSubtree { component_id }
