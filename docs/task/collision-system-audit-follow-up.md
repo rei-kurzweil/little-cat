@@ -37,6 +37,8 @@ for the replacement/removal sequence.
 
 Longer-term dynamics and performance work belongs in
 [velocity, forces, and pluggable physics](velocity-forces-and-pluggable-physics.md).
+Public terminology is tracked in
+[spatial, collision, and physics naming](spatial-collision-and-physics-naming.md).
 
 This audit must not retroactively broaden the AVC capsule task. Characterize its
 current correction and scheduling before migration; then remove obsolete

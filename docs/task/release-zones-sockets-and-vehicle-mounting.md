@@ -132,9 +132,11 @@ at activation; preview state is not sufficient authority. Choose at most one
 winner using an explicit deterministic priority/distance/tie-break policy.
 A zone may reject incompatible or occupied attachments.
 
-Author zone geometry with a child `CollisionShape`, sharing box, sphere, and
-capsule definitions with collision detection. Zone queries are detection-only:
-they do not use collision response or assign a mechanical static/kinematic mode.
+Author zone geometry through `Zone.cube(...)`, `Zone.sphere(...)`, or
+`Zone.capsule_y(...)`. The zone embeds the same shape value and uses the same
+query math as collision detection, but does not generate a collidable,
+collision-shape child, or renderable. Zone queries are detection-only: they do
+not use collision response or assign a mechanical static/pose-driven mode.
 For the first broom slice, transform the authored probe point into each zone's
 local space and classify it synchronously. Inclusion accepts its boundary;
 exclusion wins on its boundary. Collision enter/exit or cached preview state may
@@ -212,6 +214,7 @@ that an existing physics path already provides them.
 ## Related work
 
 - [Interaction zones on the collision-query foundation](interaction-zone-collision-query-foundation.md)
+- [Spatial, collision, and physics naming](spatial-collision-and-physics-naming.md)
 - [Effective transform-parent basis resolution](../draft/effective-transform-parent-basis-resolution.md)
 - [Transform pipeline](../spec/transform-pipeline.md)
 - [Grab pose transitions](grab-animation-and-pose-transitions.md)

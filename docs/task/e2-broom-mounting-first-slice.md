@@ -51,8 +51,8 @@ The broom's mount configuration specifies:
 - participants: the held broom and the explicitly associated avatar movement
   root, not the pointer camera or an arbitrary humanoid in the scene.
 
-Zones are authored as explicit detection-only `Zone` components with child
-`CollisionShape` geometry; see
+Zones are authored as explicit detection-only `Zone` components that embed a
+shared shape value through constructors such as `Zone.cube(...)`; see
 [interaction zones on the collision-query foundation](interaction-zone-collision-query-foundation.md).
 They own geometry and their coordinate frame/placement. The attachment
 configuration on `Mountable` owns zone references, activation, eligibility

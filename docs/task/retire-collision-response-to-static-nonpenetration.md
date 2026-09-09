@@ -144,8 +144,8 @@ a future backend.
 
 ## Related work
 
+- [Spatial, collision, and physics naming](spatial-collision-and-physics-naming.md)
 - [Velocity, forces, and pluggable physics](velocity-forces-and-pluggable-physics.md)
 - [Interaction zones on the collision-query foundation](interaction-zone-collision-query-foundation.md)
 - [AVC auto-calibrated upright capsule](avc-upright-character-capsule.md)
 - [Velocity / AngularVelocity components WIP](wip/velocity-components.md)
-

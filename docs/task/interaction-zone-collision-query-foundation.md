@@ -6,26 +6,28 @@ Planned, 2026-09-08. This task makes the spatial half of
 [interaction zones, sockets, and vehicle mounting](release-zones-sockets-and-vehicle-mounting.md)
 concrete without coupling zones to the deprecated collision-response runtime.
 
-Add an explicit, detection-only `Zone` component. Reuse the existing
-`CollisionShape` vocabulary and shared intersection geometry, but do not model a
-zone as a kinematic body and do not give it automatic collision response. A zone
-reports spatial eligibility; attachment rules decide what an overlap means and
-whether an activation commits an attachment.
+Add `Zone` as the primitive ECS/runtime spatial-region component. Reuse the
+existing `CollisionShape` vocabulary and shared intersection geometry, but do
+not model a bare zone as a kinematic body or give it automatic collision
+response. Physical collidability, spring exclusion, and interaction meaning are
+consumer roles over zones. A bare zone only answers spatial queries.
 
 ## Do attachments require zones?
 
 No. Attachment negotiation requires one or more spatial predicates, and an
 attachment rule may reference a point, bounds test, socket distance, ray hit, or
-another predicate directly. `Zone` earns its place as a lightweight semantic
-tag around reusable authored geometry:
+another predicate directly. `Zone` earns its place as the reusable authored and
+system-facing region:
 
-- scripts and systems can enumerate zones without treating every collider as an
-  interaction candidate;
+- scripts and systems can enumerate zones and filter their roles without
+  treating every region as a physical contact candidate;
 - zones can be named, referenced, enabled, inspected, and visualized;
 - collision shapes stay concerned with geometry rather than acquiring mouth,
   legs, seat, inventory, or attachment meaning;
-- a zone remains non-physical even if the collision response architecture
-  changes or a third-party physics backend is selected.
+- a bare zone remains non-physical even if the collision response architecture
+  changes or a third-party physics backend is selected;
+- collidables and spring colliders can share the same transform-aware region
+  representation rather than maintaining separate shape registries.
 
 Do not require a zone when a simpler explicit predicate is sufficient. In the
 E2 broom case, named leg inclusion and torso exclusion regions are reused by
@@ -43,6 +45,14 @@ The useful existing pieces are:
 - `CollisionSystem` tracks overlap pairs and emits `CollisionStarted` and
   `CollisionEnded` without requiring `CollisionResponseComponent`.
 - collision shapes can be visualized through the existing diagnostic path.
+
+Secondary motion supplies a second existing shape path:
+`SpringCollider.sphere(s)` binds target-referenced spheres inside a GLTF
+instance, scales each radius from its target transform, and performs its own
+sphere exclusion in `SecondaryMotionSystem`. These are not general collision
+participants. Their independent representation is evidence that the common
+primitive should be a target-bound zone/region, with spring exclusion as a
+consumer role.
 
 This means collision detection and collision response are already separable.
 Removing response must not remove shapes, overlap queries, or collision events.
@@ -73,23 +83,21 @@ Initial authoring shape:
 ```mms
 T.position(0.0, 0.75, 0.0) {
     name = "rider_leg_zone"
-    Zone {
-        CollisionShape.cube([0.30, 0.45, 0.24])
-    }
+    Zone.cube([0.30, 0.45, 0.24]).role("mount_legs") {}
 }
 
 T.position(0.0, 1.35, 0.0) {
     name = "rider_torso_exclusion"
-    Zone {
-        CollisionShape.capsule_y(0.24, 0.32)
-    }
+    Zone.capsule_y(0.24, 0.32).role("torso_exclusion") {}
 }
 ```
 
 `Zone` is a semantic owner for one spatial volume. Its immediate transform
-defines the volume's coordinate frame. Its child `CollisionShape` defines the
-geometry in that local frame. Missing or ambiguous shapes disable the zone with
-a diagnostic; they must not silently become a unit cube.
+defines the volume's coordinate frame. The component embeds the same normalized
+shape value used by collision detection, so the ordinary case is one component
+rather than `Zone + Collision + CollisionShape`. It creates neither a
+`Collidable` nor a `Renderable`. Require a shape constructor; a shape-less
+`Zone {}` must not silently become a unit cube.
 
 The first slice supports a point probe against a zone. The probe is an ordinary
 named transform on the candidate tree, such as `broom_mount_probe`. It does not
@@ -107,6 +115,11 @@ shape-overlap or full-containment tests using an authored candidate shape.
 It does not own activation gestures, accepted capabilities, attachment
 direction, anchors, priority, occupancy, or the action performed. Those belong
 to the `Grabbable`/`Mountable` attachment rule and attachment system.
+
+Likewise, a zone does not own physical body policy or secondary-motion solver
+policy. A `Collidable` role supplies physical layers/body participation, while a
+spring-exclusion role or chain reference tells secondary motion to consume the
+zone. The zone remains the shared frame-plus-shape record.
 
 ## Discovery and pointer association
 
@@ -174,6 +187,12 @@ observation, indexing, or visualization needs persistent runtime state. Do not
 create one merely to answer a synchronous containment query, and do not make
 zone behavior depend on collision worker timing.
 
+As collision and secondary motion migrate, their system-specific records should
+resolve through the same region registry. This need not happen in the first
+attachment slice: adapters can translate current `CollisionComponent` and
+`SpringColliderComponent` authoring into runtime zones before public syntax is
+migrated.
+
 It is acceptable for the first zone slice to use direct synchronous queries
 without broadphase registration: the E2 test has two zones and one active held
 probe. If later scenes need many continuously observed zones, register their
@@ -210,16 +229,19 @@ queries and changes that motion under an explicit authority policy.
 
 ## First implementation slice
 
-1. Add `ZoneComponent` with enabled state, serialization, and an
-   exactly-one-child `CollisionShapeComponent` contract. Add registration only
-   if the first implementation actually needs a persistent zone index.
+1. Add `ZoneComponent` with enabled state, semantic role, embedded shared shape
+   value, serialization, and `cube`/`sphere`/`capsule_y` MMS constructors. Add
+   registration only if the first implementation actually needs a persistent
+   zone index.
 2. Add transform-aware synchronous point classification for cube, sphere, and
    capsule zones, including boundary and singular-transform behavior.
 3. Add focused tests for translation, rotation, uniform/non-uniform scale,
    boundary contact, missing shape, removal, and unresolved transform basis.
-4. Author Bisket's leg inclusion and torso exclusion zones plus the broom probe
+4. Add deterministic role filtering and owner-scoped enumeration, without
+   yet migrating physical collision or secondary-motion authoring.
+5. Author Bisket's leg inclusion and torso exclusion zones plus the broom probe
    in E2, with non-raycastable debug visualization.
-5. Feed the query into mount eligibility preview and intentional-release
+6. Feed the query into mount eligibility preview and intentional-release
    revalidation. Do not implement this as example-local collision event handlers.
 
 Broadphase optimization, arbitrary mesh zones, candidate bounds containment,
@@ -228,8 +250,12 @@ follow-ups, not prerequisites for the point-probe broom slice.
 
 ## Acceptance criteria
 
-- The same `CollisionShape` constructors author physical colliders and zones;
-  there is no duplicate box/sphere/capsule schema.
+- Physical colliders and zones use the same internal normalized shape value and
+  query math; there is no duplicate box/sphere/capsule schema.
+- An ordinary authored zone is one invisible component and does not generate a
+  collidable, collision response, collision shape child, or renderable.
+- Existing physical and spring collider descriptions can be adapted to the same
+  runtime region representation without making spring colliders physical.
 - A `Zone` never pushes, bounces, integrates, or otherwise moves either party.
 - Rotated and scaled zones classify current world-space points correctly.
 - Inclusion and exclusion boundary policies can be expressed deterministically.
@@ -238,3 +264,9 @@ follow-ups, not prerequisites for the point-probe broom slice.
 - Removing or disabling a zone makes dependent rules ineligible and leaves
   ordinary collision detection operational.
 - No new code depends on `CollisionResponseComponent` or its private velocity.
+
+## Related work
+
+- [Spatial, collision, and physics naming](spatial-collision-and-physics-naming.md)
+- [Retire collision response to static non-penetration](retire-collision-response-to-static-nonpenetration.md)
+- [Velocity, forces, and pluggable physics](velocity-forces-and-pluggable-physics.md)

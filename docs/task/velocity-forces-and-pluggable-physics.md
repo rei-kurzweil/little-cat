@@ -17,8 +17,9 @@ The current collision-response path mixes detection, contact policy, velocity,
 forces, and transform mutation. The replacement architecture keeps these
 separate:
 
-- **Shape/query:** collision geometry, broadphase candidates, overlaps,
-  raycasts, zones, and sensors.
+- **Zone/shape/query:** primitive spatial regions, geometry, broadphase
+  candidates, overlaps, raycasts, and sensors. Physical collision and spring
+  exclusion consume zones rather than defining separate region types.
 - **Motion state:** linear/angular velocity and optional history.
 - **Forces:** accumulated force/torque or acceleration requests with explicit
   lifetime and coordinate space.
@@ -64,8 +65,10 @@ Opts a transform into simulation and carries backend-independent body policy:
 - continuous/discrete motion request;
 - stable backend handle lifecycle.
 
-Static collision geometry need not carry velocity or a simulated body. Zones
-are sensors/queries and never become bodies merely because they reuse a shape.
+Static collision geometry need not carry velocity or a simulated body. A bare
+zone is queryable only. A `Collidable` role exposes that zone to contact or a
+physics backend; a separate `PhysicsBody` role opts an eligible transform into
+simulation.
 
 ## Authority model
 
@@ -182,9 +185,11 @@ normalized into engine IDs and engine-owned event types. Event publication must
 define started/persisted/ended semantics, ordering, filtering, and behavior when
 a participant is removed during delivery.
 
-Do not require every `Zone` to be registered as a simulated sensor. A few zones
-can use direct core queries; many continuously observed zones may opt into an
-accelerated backend or shared broadphase.
+Do not require every zone to be registered as a simulated sensor. A few bare
+zones can use direct core queries; zones with `Collidable` roles enter physical
+collision; spring-exclusion zones remain solver-local unless deliberately
+shared. Many continuously observed zones may opt into an accelerated backend or
+shared broadphase.
 
 ## Delivery slices
 
@@ -223,9 +228,9 @@ only one component may correct/integrate a given movement target in production.
 
 ## Related work
 
+- [Spatial, collision, and physics naming](spatial-collision-and-physics-naming.md)
 - [Scriptable Velocity pose driver](scriptable-velocity-pose-driver.md)
 - [Velocity / AngularVelocity components WIP](wip/velocity-components.md)
 - [Retire collision response to static non-penetration](retire-collision-response-to-static-nonpenetration.md)
 - [Interaction zones on the collision-query foundation](interaction-zone-collision-query-foundation.md)
 - [Broom flight follow-up](broom-flight-followup.md)
-
