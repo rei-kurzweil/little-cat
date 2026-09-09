@@ -715,6 +715,9 @@ pub fn build_mittens_runtime() -> Result<MittensRuntime, mms::RuntimeSpecError> 
                     no_arg_builders(component, &["playing", "paused", "looping"]);
                     constructor_and_builder(component, "length", floats(1));
                     constructor_and_builder(component, "scope", any(1));
+                    for name in ["play", "loop_anim", "pause", "next", "previous"] {
+                        host_method(component, canonical, name, no_args());
+                    }
                 }
                 "TextureFiltering" => {
                     no_arg_constructors(component, &["linear", "nearest_magnification", "nearest"]);
@@ -1332,6 +1335,8 @@ pub fn build_mittens_runtime() -> Result<MittensRuntime, mms::RuntimeSpecError> 
         "DragEnd",
         "GrabStart",
         "GrabEnd",
+        "MountStarted",
+        "MountEnded",
         "ParentChanged",
         "RayIntersected",
         "Scrolling",

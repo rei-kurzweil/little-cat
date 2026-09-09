@@ -2,11 +2,12 @@
 
 ## Status and outcome
 
-Implemented with VR correctness fixes pending, 2026-09-09. The first native
-mount/dismount path operates in-headset, but validation exposed two fixture and
-pose defects: the car entry zone is on the back of the model, and live HMD
-pitch/roll is baked into the locomotion root during both mount and dismount.
-Keep the relationship implementation in place while correcting those semantics.
+Implemented with final XR validation pending, 2026-09-09. The first native
+mount/dismount path operates in-headset. The car entry/exit fixtures have moved
+to the observed semantic front, and attachment alignment now limits the
+locomotion root to translation plus yaw so tracked HMD pitch/roll is not baked
+into it. Exact anchor placement and repeated-cycle behavior still need testing
+in-headset.
 
 Validate the slice in [mittens-corp](../../examples/mittens-corp.mms): while
 the Bisket rider is inside the independent mech/car's front entry zone,
@@ -15,11 +16,11 @@ cockpit target. Outside that zone, gripping the car does not mount. The mount
 transaction suppresses Bisket's automatic pedestrian locomotion without
 disabling `InputXR` tracking or raw XR controller events.
 
-For the first usable loop, a later, distinct XR grip press from either pointer
-belonging to the mounted rider dismounts it even if the pointer hits nothing.
-This deliberately broad temporary gesture will be replaced by an authored
-eject-button interaction in a later phase; it is not the eventual general
-dismount policy.
+For the first usable loop, a later, distinct left XR grip press belonging to
+the mounted rider dismounts it even if the pointer hits nothing. Right grip is
+reserved for mounted actions such as the car's firing chord. This temporary
+gesture will be replaced by an authored eject-button interaction in a later
+phase; it is not the eventual general dismount policy.
 
 This task is the narrow bridge between the implemented
 [zone query foundation](interaction-zone-collision-query-foundation.md) and the
@@ -159,12 +160,10 @@ the grip across the mount transition does not count as another activation.
 
 ## XR validation findings and orientation correction, 2026-09-09
 
-Mounting and grip-anywhere dismount both commit, but the current full-matrix
-alignment treats the live CXR/head orientation as an authored attachment
-orientation. If the user is looking above or below the horizon during either
-transition, the inverse of that pitch is baked into the rider movement root.
-The user then remains permanently pitched after returning their head to a
-neutral pose. Entering or exiting while looking level only hides the defect.
+Mounting and grip-anywhere dismount both committed in the initial XR test, but
+the original full-matrix alignment treated live CXR/head orientation as an
+authored attachment orientation. Looking above or below the horizon during a
+transition therefore baked inverse pitch into the rider movement root.
 
 The rider's tracked head pose has two different meanings that must not be
 collapsed:
@@ -176,14 +175,15 @@ collapsed:
 
 For this vehicle slice, mounting and dismounting may change the movement root's
 world translation and yaw, but must never introduce pitch or roll into that
-root. The vehicle mount anchor supplies the mounted layer's yaw; the dismount
-anchor supplies the exit yaw. The live HMD orientation remains untouched, so a
-user looking up, down, or sideways continues looking that way across the
-transition without permanently tilting the world.
+root. The vehicle mount anchor supplies the mounted layer's yaw. Dismount resets
+movement-root pitch and roll to zero while preserving its current world yaw;
+the dismount anchor supplies position, not a surprise heading change. The live
+HMD orientation remains untouched, so a user looking up, down, or sideways
+continues looking that way across the transition without permanently tilting
+the world.
 
-Do not compute the corrected root pose as the mount anchor multiplied by the
-inverse of the rider anchor's unrestricted live matrix. Introduce an explicit
-horizontal attachment basis or equivalent pose helper that:
+The implemented horizontal attachment helper avoids multiplying the mount
+anchor by the inverse of the rider anchor's unrestricted live matrix. It:
 
 1. preserves the current tracked-head world position as the relocation pivot;
 2. projects the attachment heading onto the world-up plane;
@@ -191,16 +191,14 @@ horizontal attachment basis or equivalent pose helper that:
 4. leaves headset pitch/roll in the `InputXR`/CXR tracking path;
 5. handles a near-vertical head-forward vector without unstable yaw extraction.
 
-Add mount and dismount tests with nonzero head pitch and roll. Assert that the
-rider anchor reaches the destination position, the movement root has no added
-pitch/roll, input state restores, and repeating the cycle does not accumulate
-orientation error.
+The focused unit test covers nonzero pitch and roll and asserts that the rider
+anchor reaches the destination position without adding pitch/roll to the
+movement root. Repeated-cycle and subjective comfort validation remain XR work.
 
-Zone visualization also confirmed that the fixture named
-`left_display_car_front_zone_frame` is currently on the car's back at local
-`z = 3.5`. Move it to the opposite side (`z = -3.5` as the first candidate),
-then verify the car model's actual forward basis in XR. Review the nominal
-front dismount anchor at `z = 4.6` in the same correction.
+Zone visualization also confirmed that the original fixture at local
+`z = 3.5` was on the car's back. It now uses `z = -3.5`; the provisional
+dismount anchor moved from `z = 4.6` to `z = -4.6`. Verify both distances and
+the car model's actual forward basis in XR.
 
 ## AttachmentSystem runtime relationship
 
@@ -242,8 +240,8 @@ Commit mounting as one coordinated operation:
    automatic-mapping state.
 3. Reject transform cycles before changing either tree.
 4. Attach the rider movement root under the vehicle mount basis.
-5. Align the rider anchor's full position and orientation with the mount anchor;
-   do not snap arbitrary root origins together.
+5. Align the rider anchor's position and vehicle yaw with the mount anchor
+   without copying tracked head pitch/roll into the movement root.
 6. Disable only the rider's automatic locomotion mapping.
 7. Publish the active edge and a `MountStarted` observation.
 
@@ -259,9 +257,9 @@ controller. Desktop `Input.disable()` gates its built-in transform mapping.
 ## Dismount and nested authority
 
 Provide a repeatable first-slice dismount action. Until the eject control is
-authored, a distinct grip press from any pointer associated with the current
-rider pops that rider's outermost mount edge. No ray hit is required. Dismount
-must:
+authored, a distinct left-grip press from the rider-associated pointer pops
+that rider's outermost mount edge. Right grip remains available as a mounted
+vehicle action modifier. No ray hit is required. Dismount must:
 
 1. resolve and validate the authored dismount anchor before mutating state;
 2. detach the rider root and align the rider anchor with that dismount anchor;
@@ -340,11 +338,11 @@ uses the synchronous zone query against current authoritative transforms.
 7. [x] Author `Rider` and `Mountable` in `mittens-corp`, keeping the existing car
    zone and rider/car anchors and adding a front dismount anchor.
 8. [x] Confirm the mount and grip-anywhere dismount transactions operate in XR.
-9. [ ] Replace unrestricted live-anchor orientation alignment with the
-   translation-plus-yaw policy above and add pitched/rolled-head regression
-   tests for both transitions.
-10. [ ] Move the entry zone from the car's back to its semantic front and review
-    the dismount anchor's side.
+9. [x] Replace unrestricted live-anchor orientation alignment with horizontal
+   translation-plus-yaw alignment and cover tracked pitch/roll projection.
+   Both transitions still need in-headset validation.
+10. [x] Move the entry zone and provisional dismount anchor from the car's back
+    to its observed semantic-front side; exact XR tuning remains.
 11. [ ] Validate repeated XR mount/dismount cycles and tune the three car-local
     zone/anchor transforms. Focused attachment, serialization, example, and
     existing gesture/grab tests provide the automated baseline.
@@ -363,8 +361,9 @@ uses the synchronous zone query against current authoritative transforms.
   also moving independently.
 - Dismount preserves a valid world pose, exits the zone, restores the captured
   input state, and permits remounting.
-- While mounted, a new grip press from either rider-associated XR pointer
+- While mounted, a new left-grip press from the rider-associated XR pointer
   dismounts even with no ray hit; that press cannot also grab another object.
+- Right grip remains available for mounted-layer action chords.
 - Mount failure or removal of a required component leaves no partial parent,
   occupancy, or disabled-input state.
 - An ineligible `Mountable + Grabbable` target follows the declared grab
@@ -388,6 +387,7 @@ uses the synchronous zone query against current authoritative transforms.
 ## Related work
 
 - [Editor Settings generic-zone visualization first slice](editor-settings-generic-zone-visualization-first-slice.md)
+- [`mittens-corp` mounted vehicle controls and laser first slice](mittens-corp-mounted-vehicle-controls-and-laser-first-slice.md)
 - [Interaction zones on the collision-query foundation](interaction-zone-collision-query-foundation.md)
 - [Interaction zones, sockets, and vehicle mounting](release-zones-sockets-and-vehicle-mounting.md)
 - [E2 broom attachment first slice](e2-broom-mounting-first-slice.md)

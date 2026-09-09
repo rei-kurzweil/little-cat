@@ -15,10 +15,11 @@ Settings toggle to unblock vehicle-entry-zone diagnosis. This task later moves
 that same request state into the Zones panel; it must not create a parallel
 visualizer or a second independently mutable visibility flag.
 
-As of the first XR validation on 2026-09-09, generic red zone markers render,
-but the temporary Settings toggle cannot disable an authored-on request. Fix
-that owner/state reconciliation in the first-slice tracker before moving the
-control here; migration must not conceal the defect behind a new panel.
+Generic red zone markers now render, and the temporary Settings control has a
+real-panel off/on/materialize/off cleanup regression. `show_zones` means row
+inclusion rather than forced initial visibility. Preserve that single
+owner-scoped state when moving the control here; do not create a second flag or
+request path.
 
 The authored panel selector is `zones`:
 
@@ -45,8 +46,8 @@ mount eligibility semantics.
 
 The Settings panel currently contains:
 
-- `show zones`, temporarily backed by `ZoneVisualizationSystem`; its UI-off
-  lifecycle is currently defective and tracked by the focused predecessor;
+- `show zones`, temporarily backed by `ZoneVisualizationSystem`; its off/on
+  lifecycle is covered by the focused predecessor's real-panel regression;
 - `show all colliders`, backed by `CollisionVisualizationMode::All`;
 - `show GLTF colliders`, backed by `CollisionVisualizationMode::GltfOwned`;
 - `show spring bones`, backed by one boolean that visualizes both bound spring

@@ -100,6 +100,24 @@ tripod_light(
 // and rotation; only the gamepad's built-in locomotion mapping is handed off
 // when a vehicle layer takes movement authority.
 ED.active() {
+    let vehicle_controls = InputXRGamepad {
+        name = "bisket_pedestrian_locomotion"
+        locomotion()
+        speed(1.5)
+    }
+    // MMS tables are heap-backed, so every deferred handler below observes the
+    // same mutable vehicle state rather than its own captured scalar snapshot.
+    let vehicle_state = {
+        mounted = false
+        left_stick = [0.0, 0.0]
+        right_grip_held = false
+        position = [-19.0, -0.75, -1.5]
+        yaw = 0.30
+    }
+    let car_drive_speed = 5.0
+    let car_turn_speed = 1.25
+    let car_stick_deadzone = 0.16
+
     T.position(-5.0, 0.0, 0.0) {
         name = "bisket_locomotion_root"
         Rider
@@ -107,12 +125,7 @@ ED.active() {
             .movement_root("[name='bisket_locomotion_root']")
             .input("[name='bisket_pedestrian_locomotion']") {}
         InputXR.on() {
-            let pedestrian_locomotion = InputXRGamepad {
-                name = "bisket_pedestrian_locomotion"
-                locomotion()
-                speed(1.5)
-            }
-            pedestrian_locomotion
+            vehicle_controls
 
             T {
                 name = "bisket_xr_driver"
@@ -122,6 +135,7 @@ ED.active() {
                     mouth_open_rms_ceiling(0.09)
                     mouth_open_smoothing(16.0)
                     voice_level
+                    
                     initial_yaw(3.14159)
                     left_arm_pole_direction([1, -0.35, 1])
                     right_arm_pole_direction([-1, -0.35, 1])
@@ -170,14 +184,89 @@ ED.active() {
 
     // The independent car is the next vehicle-mounting fixture. Its front zone
     // is detection-only; it does not register a physical collision response.
-    T.position(-19.0, -0.75, -1.5).rotation(0.0, 0.30, 0.0) {
+    let car_mountable = Mountable
+        .entry_zone("[name='left_display_car_front_zone']")
+        .mount_anchor("[name='left_display_car_cxr_mount']")
+        .dismount_anchor("[name='left_display_car_dismount']")
+        .on_grip() {}
+
+    let muzzle_flash_emissive = Emissive.off()
+    let laser_outer_emissive = Emissive.off()
+    let laser_middle_emissive = Emissive.off()
+    let laser_core_emissive = Emissive.off()
+
+    let muzzle_flash = T.position(0.0, 3.15, -4.25).scale(0.0, 0.0, 0.0) {
+        name = "car_laser_muzzle_flash"
+        R.sphere() {
+            C.rgba(1.0, 0.22, 0.08, 1.0)
+            Opacity.opacity(0.72)
+            muzzle_flash_emissive
+        }
+    }
+
+    // The beam extends along the car's semantic local -Z axis. Nested widths
+    // approximate an emissive falloff until a textured beam asset replaces it.
+    let laser_beam_glow = T.position(0.0, 3.15, -12.25)
+        .rotation(-1.5708, 0.0, 0.0).scale(0.0, 0.0, 0.0) {
+        name = "laser_beam_glow"
+        T.scale(0.16, 8.0, 1.0) {
+            R.square() {
+                C.rgba(1.0, 0.06, 0.03, 1.0)
+                Opacity.opacity(0.18)
+                laser_outer_emissive
+            }
+        }
+        T.position(0.0, 0.0, 0.002).scale(0.08, 8.0, 1.0) {
+            R.square() {
+                C.rgba(1.0, 0.22, 0.08, 1.0)
+                Opacity.opacity(0.38)
+                laser_middle_emissive
+            }
+        }
+        T.position(0.0, 0.0, 0.004).scale(0.028, 8.0, 1.0) {
+            R.square() {
+                C.rgba(1.0, 0.88, 0.58, 1.0)
+                Opacity.opacity(0.88)
+                laser_core_emissive
+            }
+        }
+    }
+
+    let laser_shot = Animation.paused().length(0.22) {
+        Keyframe.at(0.0) {
+            muzzle_flash.update_transform(
+                [0.0, 3.15, -4.25], [0.0, 0.0, 0.0], [0.48, 0.48, 0.48]
+            )
+            laser_beam_glow.update_transform(
+                [0.0, 3.15, -12.25], [-1.5708, 0.0, 0.0], [1.0, 1.0, 1.0]
+            )
+            muzzle_flash_emissive.set_intensity(8.0)
+            laser_outer_emissive.set_intensity(3.0)
+            laser_middle_emissive.set_intensity(6.0)
+            laser_core_emissive.set_intensity(12.0)
+        }
+        Keyframe.at(0.10) {
+            muzzle_flash.update_transform(
+                [0.0, 3.15, -4.25], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]
+            )
+            laser_beam_glow.update_transform(
+                [0.0, 3.15, -12.25], [-1.5708, 0.0, 0.0], [0.0, 0.0, 0.0]
+            )
+            muzzle_flash_emissive.off()
+            laser_outer_emissive.off()
+            laser_middle_emissive.off()
+            laser_core_emissive.off()
+        }
+    }
+
+    fn fire_laser() {
+        laser_shot.play()
+    }
+
+    let car_root = T.position(-19.0, -0.75, -1.5).rotation(0.0, 0.30, 0.0) {
         name = "left_display_car"
-        Mountable
-            .entry_zone("[name='left_display_car_front_zone']")
-            .mount_anchor("[name='left_display_car_cxr_mount']")
-            .dismount_anchor("[name='left_display_car_dismount']")
-            .on_grip() {}
-        let car_front_zone_frame = T.position(0.0, 0.15, 3.5) {
+        car_mountable
+        let car_front_zone_frame = T.position(0.0, 0.15, -3.5) {
             name = "left_display_car_front_zone_frame"
         }
         car_front_zone_frame
@@ -193,14 +282,73 @@ ED.active() {
 
         // Temporary exit target used by grip-anywhere dismount. It is outside
         // the front entry zone and rotates/moves with the car.
-        T.position(0.0, 2.4, 4.6) {
+        T.position(0.0, 2.4, -4.6) {
             name = "left_display_car_dismount"
         }
 
         GLTF.new("assets/models/car.glb") {
             bisket_anime_shading()
         }
+        muzzle_flash
+        laser_beam_glow
+        laser_shot
     }
+    car_root
+
+    on(car_mountable, "MountStarted", fn(event) {
+        vehicle_state.mounted = true
+        vehicle_state.left_stick = [0.0, 0.0]
+    })
+
+    on(car_mountable, "MountEnded", fn(event) {
+        vehicle_state.mounted = false
+        vehicle_state.left_stick = [0.0, 0.0]
+        vehicle_state.right_grip_held = false
+    })
+
+    on(vehicle_controls, "XrAxisChanged", fn(event) {
+        if event.control == "LeftStick" {
+            vehicle_state.left_stick = event.value
+        }
+    })
+
+    on(vehicle_controls, "XrButtonDown", fn(event) {
+        if event.control == "RightGrip" {
+            vehicle_state.right_grip_held = true
+        } else if event.control == "RightTrigger" {
+            if vehicle_state.mounted && vehicle_state.right_grip_held {
+                fire_laser()
+            }
+        }
+    })
+
+    on(vehicle_controls, "XrButtonUp", fn(event) {
+        if event.control == "RightGrip" {
+            vehicle_state.right_grip_held = false
+        }
+    })
+
+    on_global("FrameTick", fn(event) {
+        if vehicle_state.mounted {
+            let steering = vehicle_state.left_stick[0]
+            let throttle = vehicle_state.left_stick[1]
+            let stick_length = Math.sqrt(steering * steering + throttle * throttle)
+            if stick_length > car_stick_deadzone {
+                vehicle_state.yaw = vehicle_state.yaw - steering * car_turn_speed * event.dt_sec
+                let distance = throttle * car_drive_speed * event.dt_sec
+                vehicle_state.position = [
+                    vehicle_state.position[0] - Math.sin(vehicle_state.yaw) * distance,
+                    -0.75,
+                    vehicle_state.position[2] - Math.cos(vehicle_state.yaw) * distance,
+                ]
+                car_root.update_transform(
+                    vehicle_state.position,
+                    [0.0, vehicle_state.yaw, 0.0],
+                    [1.0, 1.0, 1.0],
+                )
+            }
+        }
+    })
 }
 
 // Explicit selection disables every editor window except the two needed for

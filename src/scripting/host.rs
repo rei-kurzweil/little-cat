@@ -745,6 +745,8 @@ fn signal_kind(name: &str) -> Option<SignalKind> {
         "DragStart" => SignalKind::DragStart,
         "GrabStart" => SignalKind::GrabStart,
         "GrabEnd" => SignalKind::GrabEnd,
+        "MountStarted" => SignalKind::MountStarted,
+        "MountEnded" => SignalKind::MountEnded,
         "DragMove" => SignalKind::DragMove,
         "DragEnd" => SignalKind::DragEnd,
         "ParentChanged" => SignalKind::ParentChanged,

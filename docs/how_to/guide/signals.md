@@ -306,6 +306,32 @@ on(scope, "CollisionEnded", fn(event) { print(event) })
 scope
 ```
 
+#### `MountStarted`
+<!-- catalog:signal source="MountStarted" kind="event" mms="observable-payload" -->
+**Event.** `AttachmentSystem` committed a Rider-to-Mountable relationship. The
+payload contains live `rider` and `mountable` component handles. The event is
+scoped to the `Mountable`, and MMS `on(...)` accepts it.
+```mms parse-only
+let vehicle = Mountable {}
+on(vehicle, "MountStarted", fn(event) {
+    print(event.rider, event.mountable)
+})
+vehicle
+```
+
+#### `MountEnded`
+<!-- catalog:signal source="MountEnded" kind="event" mms="observable-payload" -->
+**Event.** `AttachmentSystem` ended or unwound a Rider-to-Mountable
+relationship. The payload contains live `rider` and `mountable` component
+handles. The event is scoped to the `Mountable`, and MMS `on(...)` accepts it.
+```mms parse-only
+let vehicle = Mountable {}
+on(vehicle, "MountEnded", fn(event) {
+    print(event.rider, event.mountable)
+})
+vehicle
+```
+
 #### `DragStart`
 <!-- catalog:signal source="DragStart" kind="event" mms="observable-null" -->
 **Event.** A gesture crossed into the dragging state. The interaction and physics subsystem produces it; scoped RX handlers consume it at a signal drain point after execution stages. Events are immediate observations, bubble from the signal scope to ancestor handler scopes, and do not carry `SignalWhen`. Related components are the producers or scopes named by the variant and its subsystem. MMS `on(...)` accepts this event. Handler exposure: **Observable with `null`**. Sources: [event definition](../../../src/engine/ecs/signals/signal.rs), [MMS handler names](../../../src/scripting/world_evaluator.rs), and [payload conversion](../../../src/scripting/runner.rs).
@@ -330,6 +356,28 @@ scope
 ```mms parse-only
 let scope = Transform {}
 on(scope, "DragEnd", fn(event) { print(event) })
+scope
+```
+
+#### `GrabStart`
+<!-- catalog:signal source="GrabStart" kind="event" mms="observable-null" -->
+**Event.** A pointer attached an eligible `Grabbable` target. MMS accepts this
+event name; its structured engine payload is not yet exposed to MMS, so the
+handler currently receives `null`.
+```mms parse-only
+let scope = Transform {}
+on(scope, "GrabStart", fn(event) { print(event) })
+scope
+```
+
+#### `GrabEnd`
+<!-- catalog:signal source="GrabEnd" kind="event" mms="observable-null" -->
+**Event.** A pointer released its attached `Grabbable` target. MMS accepts this
+event name; its structured engine payload is not yet exposed to MMS, so the
+handler currently receives `null`.
+```mms parse-only
+let scope = Transform {}
+on(scope, "GrabEnd", fn(event) { print(event) })
 scope
 ```
 
@@ -476,6 +524,28 @@ scope
 ```mms parse-only
 let scope = Transform {}
 on(scope, "XrAxisChanged", fn(event) { print(event) })
+scope
+```
+
+#### `XrEyeTrackingUpdated`
+<!-- catalog:signal source="XrEyeTrackingUpdated" kind="event" mms="observable-payload" -->
+**Event.** The generic XR eye-tracking source published a new sample. The MMS
+payload contains optional `combined_look`, `left_look`, `right_look`, and
+`combined_openness` values.
+```mms parse-only
+let scope = Transform {}
+on(scope, "XrEyeTrackingUpdated", fn(event) { print(event.combined_look) })
+scope
+```
+
+#### `XrEyeTrackingHtcUpdated`
+<!-- catalog:signal source="XrEyeTrackingHtcUpdated" kind="event" mms="observable-payload" -->
+**Event.** The HTC eye-tracking source published a new sample. The MMS payload
+contains `left` and `right` tables with optional look, position, openness, and
+pupil-diameter fields.
+```mms parse-only
+let scope = Transform {}
+on(scope, "XrEyeTrackingHtcUpdated", fn(event) { print(event.left.look) })
 scope
 ```
 

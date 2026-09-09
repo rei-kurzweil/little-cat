@@ -306,6 +306,25 @@ pub(crate) fn event_arg_value(signal: &crate::engine::ecs::Signal) -> Value {
                 ("value".into(), Value::Bool(*value)),
             ]))
         }
+        Some(crate::engine::ecs::EventSignal::MountStarted { rider, mountable })
+        | Some(crate::engine::ecs::EventSignal::MountEnded { rider, mountable }) => {
+            Value::Map(HashMap::from([
+                (
+                    "rider".into(),
+                    Value::ComponentObject {
+                        id: *rider,
+                        component_type: "Rider".into(),
+                    },
+                ),
+                (
+                    "mountable".into(),
+                    Value::ComponentObject {
+                        id: *mountable,
+                        component_type: "Mountable".into(),
+                    },
+                ),
+            ]))
+        }
         Some(crate::engine::ecs::EventSignal::SliderChanged { slider, value })
         | Some(crate::engine::ecs::EventSignal::SliderCommitted { slider, value }) => {
             Value::Map(HashMap::from([

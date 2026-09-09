@@ -1,14 +1,14 @@
 use crate::engine::ecs::component::{
-    ComponentRef, InputComponent, InputXRGamepadComponent, MountableComponent, QueryRootMode,
-    RiderComponent, SerializeComponent, TransformComponent, TransformParentComponent,
-    resolve_component_ref,
+    ComponentRef, ControllerHand, InputComponent, InputXRGamepadComponent, MountableComponent,
+    QueryRootMode, RiderComponent, SerializeComponent, TransformComponent,
+    TransformParentComponent, XRHandComponent, resolve_component_ref,
 };
 use crate::engine::ecs::system::grabbable_system::ensure_generated_raycastable;
 use crate::engine::ecs::system::pointer_system::nearest_ancestor_transform;
 use crate::engine::ecs::system::{TransformSystem, ZoneRelation, classify_zone_point};
 use crate::engine::ecs::{ComponentId, EventSignal, IntentValue, SignalEmitter, World};
 use crate::engine::transform::TransformTrs;
-use crate::utils::math::{mat4_inverse, mat4_mul};
+use crate::utils::math::{mat_to_quat, mat4_inverse, mat4_mul, quat_normalize, quat_rotate_vec3};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, Copy)]
@@ -74,14 +74,18 @@ impl AttachmentSystem {
         self.mounted_this_frame.clear();
     }
 
-    /// Temporary first-slice escape gesture: a new grip press from any pointer
-    /// in the mounted Rider's scope pops that Rider's current edge.
+    /// Temporary first-slice escape gesture: a new left-hand (or non-XR)
+    /// grip press in the mounted Rider's scope pops that Rider's current edge.
+    /// Right grip remains available to the mounted control layer.
     pub fn try_dismount_for_pointer(
         &mut self,
         world: &mut World,
         pointer: ComponentId,
         emit: &mut dyn SignalEmitter,
     ) -> bool {
+        if pointer_hand(world, pointer) == Some(ControllerHand::Right) {
+            return false;
+        }
         let Some(rider) = rider_for_pointer(world, pointer) else {
             return false;
         };
@@ -176,16 +180,14 @@ impl AttachmentSystem {
             return false;
         }
 
-        let Some(anchor_from_root) = relative_matrix(world, rider_root, rider_anchor) else {
-            return false;
-        };
         let Some(mount_world) = TransformSystem::world_model(world, mount_anchor) else {
             return false;
         };
-        let Some(root_from_anchor) = mat4_inverse(anchor_from_root) else {
+        let Some(desired_root_world) =
+            horizontal_anchor_alignment(world, rider_root, rider_anchor, mount_world, mount_world)
+        else {
             return false;
         };
-        let desired_root_world = mat4_mul(mount_world, root_from_anchor);
         let Some(suspended_input) = snapshot_input(world, input) else {
             return false;
         };
@@ -241,6 +243,13 @@ impl AttachmentSystem {
         self.by_rider.insert(rider_id, edge);
         self.rider_by_mountable.insert(mountable_id, rider_id);
         self.mounted_this_frame.insert(rider_id);
+        emit.push_event(
+            mountable_id,
+            EventSignal::MountStarted {
+                rider: rider_id,
+                mountable: mountable_id,
+            },
+        );
         true
     }
 
@@ -267,9 +276,14 @@ impl AttachmentSystem {
         };
         let desired_world =
             TransformSystem::world_model(world, edge.dismount_anchor).and_then(|target| {
-                relative_matrix(world, edge.rider_root, edge.rider_anchor)
-                    .and_then(mat4_inverse)
-                    .map(|root_from_anchor| mat4_mul(target, root_from_anchor))
+                let current_root = TransformSystem::world_model(world, edge.rider_root)?;
+                horizontal_anchor_alignment(
+                    world,
+                    edge.rider_root,
+                    edge.rider_anchor,
+                    target,
+                    current_root,
+                )
             });
         if require_dismount_anchor && desired_world.is_none() {
             return false;
@@ -303,6 +317,13 @@ impl AttachmentSystem {
         }
         self.by_rider.remove(&rider);
         self.rider_by_mountable.remove(&edge.mountable);
+        emit.push_event(
+            edge.mountable,
+            EventSignal::MountEnded {
+                rider: edge.rider,
+                mountable: edge.mountable,
+            },
+        );
         true
     }
 }
@@ -351,6 +372,17 @@ fn rider_for_pointer(world: &World, pointer: ComponentId) -> Option<ComponentId>
     None
 }
 
+fn pointer_hand(world: &World, pointer: ComponentId) -> Option<ControllerHand> {
+    let mut current = Some(pointer);
+    while let Some(id) = current {
+        if let Some(hand) = world.get_component_by_id_as::<XRHandComponent>(id) {
+            return Some(hand.hand);
+        }
+        current = world.parent_of(id);
+    }
+    None
+}
+
 fn mountable_for_hit(world: &World, renderable: ComponentId) -> Option<(ComponentId, ComponentId)> {
     let mut current = Some(renderable);
     while let Some(id) = current {
@@ -386,6 +418,42 @@ fn relative_matrix(
     let root_world = TransformSystem::world_model(world, root)?;
     let descendant_world = TransformSystem::world_model(world, descendant)?;
     Some(mat4_mul(mat4_inverse(root_world)?, descendant_world))
+}
+
+/// Place the rider anchor at `target_world` while keeping the movement root
+/// horizontal. `yaw_source_world` supplies heading independently from target
+/// pitch/roll: the mount anchor supplies it on entry, while the current rider
+/// root supplies it on exit.
+fn horizontal_anchor_alignment(
+    world: &World,
+    rider_root: ComponentId,
+    rider_anchor: ComponentId,
+    target_world: [[f32; 4]; 4],
+    yaw_source_world: [[f32; 4]; 4],
+) -> Option<[[f32; 4]; 4]> {
+    let anchor_from_root =
+        TransformTrs::from_matrix(relative_matrix(world, rider_root, rider_anchor)?).ok()?;
+    let root_world =
+        TransformTrs::from_matrix(TransformSystem::world_model(world, rider_root)?).ok()?;
+    let source_rotation = mat_to_quat(yaw_source_world);
+    let yaw_rotation = quat_normalize([0.0, source_rotation[1], 0.0, source_rotation[3]]);
+    let scaled_anchor_offset = [
+        anchor_from_root.translation[0] * root_world.scale[0],
+        anchor_from_root.translation[1] * root_world.scale[1],
+        anchor_from_root.translation[2] * root_world.scale[2],
+    ];
+    let anchor_offset_world = quat_rotate_vec3(yaw_rotation, scaled_anchor_offset);
+    TransformTrs::new(
+        [
+            target_world[3][0] - anchor_offset_world[0],
+            target_world[3][1] - anchor_offset_world[1],
+            target_world[3][2] - anchor_offset_world[2],
+        ],
+        yaw_rotation,
+        root_world.scale,
+    )
+    .to_matrix()
+    .ok()
 }
 
 fn is_descendant_or_self(world: &World, ancestor: ComponentId, mut node: ComponentId) -> bool {
@@ -533,7 +601,10 @@ fn edge_is_valid(world: &World, edge: ActiveMount) -> bool {
 mod tests {
     use super::*;
     use crate::engine::ecs::CommandQueue;
-    use crate::engine::ecs::component::{PointerComponent, RaycastableComponent, ZoneComponent};
+    use crate::engine::ecs::RxWorld;
+    use crate::engine::ecs::component::{
+        ControllerPoseKind, PointerComponent, RaycastableComponent, ZoneComponent,
+    };
 
     fn guid_ref(world: &World, component: ComponentId) -> ComponentRef {
         ComponentRef::Guid(world.get_component_record(component).unwrap().guid)
@@ -619,6 +690,13 @@ mod tests {
             fixture.car,
             &mut emit,
         ));
+        let mut rx = RxWorld::default();
+        emit.drain_into_rx(&mut rx);
+        assert!(rx.drain_ready_events().iter().any(|signal| matches!(
+            signal.event,
+            Some(EventSignal::MountStarted { rider, mountable })
+                if rider == fixture.rider && mountable == fixture.mountable
+        )));
         assert!(
             !fixture
                 .world
@@ -657,6 +735,12 @@ mod tests {
 
         system.begin_frame();
         assert!(system.try_dismount_for_pointer(&mut fixture.world, fixture.pointer, &mut emit,));
+        emit.drain_into_rx(&mut rx);
+        assert!(rx.drain_ready_events().iter().any(|signal| matches!(
+            signal.event,
+            Some(EventSignal::MountEnded { rider, mountable })
+                if rider == fixture.rider && mountable == fixture.mountable
+        )));
         assert_eq!(fixture.world.parent_of(fixture.root), None);
         assert_eq!(
             TransformSystem::world_position(&fixture.world, fixture.root),
@@ -671,6 +755,95 @@ mod tests {
         );
         assert!(!system.by_rider.contains_key(&fixture.rider));
         assert!(!system.rider_by_mountable.contains_key(&fixture.mountable));
+    }
+
+    #[test]
+    fn right_grip_is_reserved_while_left_grip_dismounts() {
+        let mut fixture = fixture([0.0, 0.0, 0.0]);
+        let mut system = AttachmentSystem::default();
+        let mut emit = CommandQueue::new();
+
+        assert!(system.try_mount_from_hit(
+            &mut fixture.world,
+            fixture.pointer,
+            fixture.car,
+            &mut emit,
+        ));
+        system.begin_frame();
+
+        let hand = fixture.world.add_component(XRHandComponent::new(
+            true,
+            ControllerHand::Right,
+            ControllerPoseKind::GripAim,
+        ));
+        fixture
+            .world
+            .set_parent(fixture.pointer, Some(hand))
+            .unwrap();
+        fixture.world.add_child(fixture.anchor, hand).unwrap();
+        assert!(!system.try_dismount_for_pointer(&mut fixture.world, fixture.pointer, &mut emit,));
+        assert!(system.by_rider.contains_key(&fixture.rider));
+
+        fixture
+            .world
+            .get_component_by_id_as_mut::<XRHandComponent>(hand)
+            .unwrap()
+            .hand = ControllerHand::Left;
+        assert!(system.try_dismount_for_pointer(&mut fixture.world, fixture.pointer, &mut emit,));
+    }
+
+    #[test]
+    fn horizontal_alignment_does_not_bake_tracked_pitch_or_roll_into_root() {
+        let mut world = World::default();
+        let root = world.add_component(TransformComponent::new());
+        let anchor = world.add_component(TransformComponent::new());
+        world.add_child(root, anchor).unwrap();
+
+        let root_world = TransformTrs::new(
+            [1.0, 0.0, 2.0],
+            crate::utils::math::quat_from_axis_angle([1.0, 0.0, 0.0], 0.55),
+            [1.0, 1.0, 1.0],
+        )
+        .to_matrix()
+        .unwrap();
+        let anchor_local = TransformTrs::new(
+            [0.2, 1.65, 0.1],
+            crate::utils::math::quat_from_axis_angle([0.0, 0.0, 1.0], -0.35),
+            [1.0, 1.0, 1.0],
+        )
+        .to_matrix()
+        .unwrap();
+        world
+            .get_component_by_id_as_mut::<TransformComponent>(root)
+            .unwrap()
+            .transform
+            .matrix_world = root_world;
+        world
+            .get_component_by_id_as_mut::<TransformComponent>(anchor)
+            .unwrap()
+            .transform
+            .matrix_world = mat4_mul(root_world, anchor_local);
+
+        let target_world = TransformTrs::new(
+            [8.0, 3.0, -4.0],
+            crate::utils::math::quat_mul(
+                crate::utils::math::quat_rotation_y(0.8),
+                crate::utils::math::quat_from_axis_angle([1.0, 0.0, 0.0], -0.4),
+            ),
+            [1.0, 1.0, 1.0],
+        )
+        .to_matrix()
+        .unwrap();
+        let aligned =
+            horizontal_anchor_alignment(&world, root, anchor, target_world, target_world).unwrap();
+        let aligned_trs = TransformTrs::from_matrix(aligned).unwrap();
+
+        assert!(aligned_trs.rotation_quat_xyzw[0].abs() < 1e-6);
+        assert!(aligned_trs.rotation_quat_xyzw[2].abs() < 1e-6);
+        let aligned_anchor = mat4_mul(aligned, anchor_local);
+        for axis in 0..3 {
+            assert!((aligned_anchor[3][axis] - target_world[3][axis]).abs() < 1e-5);
+        }
     }
 
     #[test]

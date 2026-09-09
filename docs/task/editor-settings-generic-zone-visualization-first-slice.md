@@ -2,11 +2,11 @@
 
 ## Status and outcome
 
-Implemented with a blocking toggle defect, 2026-09-09. The red translucent zone
-marker is visible and follows the authored `ZoneComponent` in XR, but the
-**show zones** row cannot currently turn it off. The marker remains permanently
-visible when `mittens-corp` authors `show_zones = true`. Fix request ownership
-and UI state synchronization before calling this slice complete.
+Implemented, with the toggle lifecycle corrected on 2026-09-09. The red
+translucent marker follows the authored `ZoneComponent` in XR. `show_zones`
+now has the same meaning as the other Settings-panel config flags: it includes
+the control, but does not force the diagnostic on. Zone visibility starts off
+and is controlled solely by the live toggle.
 
 This slice visualizes only actual `ZoneComponent`s. Existing
 `CollisionComponent` shapes and secondary-motion colliders keep their existing
@@ -34,8 +34,9 @@ directly observable without adding temporary renderables to the authored scene.
 - The `mittens-corp` car entry box is visibly authored on the back of the car,
   despite its `front` names and comments. The car model's semantic front is the
   opposite local-Z side from the current `z = 3.5` placement.
-- Clicking **show zones** does not make the marker disappear. Treat this as a
-  request/toggle lifecycle bug, not a marker-rendering bug.
+- The original implementation incorrectly treated `show_zones = true` as both
+  row inclusion and initial live state. This differed from the other Settings
+  config flags and made the fixture start covered by a marker.
 
 Trace the failed toggle through all three representations in one click:
 
@@ -46,11 +47,10 @@ Trace the failed toggle through all three representations in one click:
    marker, without editor setup immediately reasserting the authored `true`
    default.
 
-Add a test that starts with authored `show_zones = true`, materializes the real
-Settings panel, clicks the row, processes signals and a visualization tick, and
-asserts both that the request and marker are absent. The existing click test is
-not sufficient if it tests context state without the full authored
-initialization/reconciliation path.
+The regression test materializes the real MMS Settings panel with
+`show_zones = true`, verifies that visibility initially remains off, clicks a
+descendant renderable to enable it, materializes the marker, clicks again, and
+asserts that both the owner-scoped request and marker are removed.
 
 ## First-slice UI contract
 
@@ -77,11 +77,10 @@ EditorUI {
 }
 ```
 
-The setting defaults to `false` globally so adding this feature does not cover
-existing scenes in overlays. `mittens-corp` temporarily authors
-`show_zones = true` while the mounting fixture is being tuned. That authored
-initial value must seed runtime state once; it must not overwrite a later live
-toggle on every panel refresh or setup pass.
+The setting defaults to `false` globally so existing Settings panels do not
+gain the row. `mittens-corp` temporarily authors `show_zones = true` to expose
+the control while the mounting fixture is tuned. As with `show_bounds`, this is
+control inclusion, not the control's initial live value.
 
 Use `zones_visible: bool` in `EditorContextState`. A Settings-row click toggles
 that state and emits an owner-scoped request:
@@ -177,11 +176,11 @@ visualization performance work.
 
 ## `mittens-corp` validation
 
-With `show_zones = true`, the independent car should display one translucent red
-front-entry box derived from:
+After enabling the row included by `show_zones = true`, the independent car
+should display one translucent red front-entry box derived from:
 
 ```mms
-let car_front_zone_frame = T.position(0.0, 0.15, 3.5) {
+let car_front_zone_frame = T.position(0.0, 0.15, -3.5) {
     name = "left_display_car_front_zone_frame"
 }
 car_front_zone_frame
@@ -194,11 +193,10 @@ The rendered box must move and rotate with the car and agree with mount
 eligibility at its visible boundary. The relevant probe is the world position
 of `bisket_rider_cxr_anchor`, not either hand or ray-hit position.
 
-XR inspection showed that local `+Z` is the car's back. Move the entry frame to
-the semantic front, with `z = -3.5` as the first correction, and visually
-validate it before finalizing the number. Review the dismount anchor at the
-same time: its current `z = 4.6` was also described as a front exit and likely
-needs the corresponding `-Z` correction.
+XR inspection showed that local `+Z` is the car's back. The entry frame now
+uses `z = -3.5` as the first semantic-front correction, and the dismount anchor
+now uses the corresponding `z = -4.6`. Visually validate both before finalizing
+the numbers.
 
 If Bisket's anchor is visibly inside the red region and gripping the car still
 does not mount, continue diagnosis in pointer-to-Rider association, ray-hit to
@@ -218,10 +216,10 @@ Mountable resolution, and grip arbitration rather than expanding the zone.
    cleanup.
 7. [x] Enable the setting in `mittens-corp` and confirm that the entry box is
    visible in XR.
-8. [ ] Fix the full authored-on -> UI-off request and marker lifecycle; add the
-   real-panel regression test described above.
-9. [ ] Move the car entry zone from the back to the semantic front and tune its
-   frame/shape based on the visible rider anchor; inspect the exit anchor too.
+8. [x] Separate row inclusion from live state and cover the real-panel
+   off -> on -> materialized marker -> off lifecycle.
+9. [x] Move the car entry zone and provisional exit anchor from positive to
+   negative local Z, the observed semantic-front side. XR tuning remains.
 10. [ ] Verify inside/outside mount behavior after placement and toggle fixes.
 11. [ ] Later, migrate the toggle and request state into the dedicated Zones
    panel without changing marker ownership or visual semantics.

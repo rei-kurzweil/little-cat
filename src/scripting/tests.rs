@@ -4546,6 +4546,64 @@ fn mms_xr_axis_handler_receives_table_payload() {
 }
 
 #[test]
+fn mms_mount_lifecycle_handler_receives_component_payload() {
+    let src = r##"
+        let target = Text { "idle" name = "target" }
+        let rider = Rider {}
+        let mountable = Mountable {}
+        T { target rider mountable }
+
+        on(mountable, "MountStarted", fn(event) {
+            target.set_text("mounted")
+        })
+        on(mountable, "MountEnded", fn(event) {
+            target.set_text("dismounted")
+        })
+    "##;
+
+    let mut world = World::default();
+    let mut rx = RxWorld::default();
+    let mut emit = CommandQueue::new();
+    let out = MeowMeowRunner::eval_with_world(src, &mut world, &mut rx, &mut emit);
+    assert!(out.errors.is_empty(), "errors: {:?}", out.errors);
+
+    let rider = world
+        .all_components()
+        .find(|&id| {
+            world
+                .get_component_by_id_as::<crate::engine::ecs::component::RiderComponent>(id)
+                .is_some()
+        })
+        .unwrap();
+    let mountable = world
+        .all_components()
+        .find(|&id| {
+            world
+                .get_component_by_id_as::<crate::engine::ecs::component::MountableComponent>(id)
+                .is_some()
+        })
+        .unwrap();
+
+    rx.dispatch_event_handlers(
+        &mut world,
+        &Signal::event(mountable, EventSignal::MountStarted { rider, mountable }),
+    );
+    assert!(rx.drain_ready_intents().iter().any(|signal| matches!(
+        signal.intent.as_ref().map(|intent| &intent.value),
+        Some(IntentValue::SetText { text, .. }) if text == "mounted"
+    )));
+
+    rx.dispatch_event_handlers(
+        &mut world,
+        &Signal::event(mountable, EventSignal::MountEnded { rider, mountable }),
+    );
+    assert!(rx.drain_ready_intents().iter().any(|signal| matches!(
+        signal.intent.as_ref().map(|intent| &intent.value),
+        Some(IntentValue::SetText { text, .. }) if text == "dismounted"
+    )));
+}
+
+#[test]
 fn xr_input_gamepad_example_parses() {
     let mut world = World::default();
     let mut rx = RxWorld::default();
@@ -7384,7 +7442,12 @@ fn editor_ui_settings_only_materializes_under_authored_transform() {
 #[test]
 fn editor_ui_settings_config_conditionally_authors_diagnostic_rows() {
     let source = r#"
-        Editor.active() { T { name = "editable_scene" } }
+        Editor.active() {
+            T {
+                name = "editable_scene"
+                Zone.cube([1, 1, 1])
+            }
+        }
         T {
             EditorUI {
                 panels([{
@@ -7438,18 +7501,93 @@ fn editor_ui_settings_config_conditionally_authors_diagnostic_rows() {
             .is_some()
     );
     assert!(
+        !systems
+            .editor_context
+            .shared_state()
+            .lock()
+            .unwrap()
+            .zones_visible,
+        "show_zones authors the control; it does not force the diagnostic on"
+    );
+    assert!(systems.zone_visualization.requests().is_empty());
+    let zones_row = world
+        .find_component(editor_ui, "#editor_settings_zones_visibility")
+        .expect("authored zones visibility row");
+    let zones_row_renderable = world
+        .all_components()
+        .find(|&id| {
+            crate::engine::ecs::system::panel_system::is_descendant_or_self(&world, zones_row, id)
+                && world
+                    .get_component_by_id_as::<crate::engine::ecs::component::RenderableComponent>(
+                        id,
+                    )
+                    .is_some()
+        })
+        .expect("renderable hit target in authored zones row");
+    systems.rx.push_event(
+        zones_row_renderable,
+        EventSignal::Click {
+            raycaster: ComponentId::default(),
+            renderable: zones_row_renderable,
+            hit_point: [0.0; 3],
+            screen_pos_px: None,
+        },
+    );
+    systems.process_commands(&mut world, &mut visuals, &mut render_assets, &mut queue);
+    assert!(
         systems
             .editor_context
             .shared_state()
             .lock()
             .unwrap()
-            .zones_visible
+            .zones_visible,
+        "the first click should turn zone visualization on"
     );
     assert!(
         systems
             .zone_visualization
             .requests()
-            .contains_key(&editor_ui)
+            .contains_key(&editor_ui),
+        "the toggle should create a request owned by the authored EditorUI"
+    );
+    systems
+        .zone_visualization
+        .tick_with_queue(&mut world, &mut render_assets, &mut queue);
+    systems.process_commands(&mut world, &mut visuals, &mut render_assets, &mut queue);
+    let zone_marker = world
+        .all_components()
+        .find(|&id| world.component_label(id) == Some("zone_visualization_marker"))
+        .expect("marker after enabling zones");
+    systems.rx.push_event(
+        zones_row_renderable,
+        EventSignal::Click {
+            raycaster: ComponentId::default(),
+            renderable: zones_row_renderable,
+            hit_point: [0.0; 3],
+            screen_pos_px: None,
+        },
+    );
+    systems.process_commands(&mut world, &mut visuals, &mut render_assets, &mut queue);
+    assert!(
+        !systems
+            .editor_context
+            .shared_state()
+            .lock()
+            .unwrap()
+            .zones_visible,
+        "the second click should turn zone visualization off"
+    );
+    assert!(
+        systems.zone_visualization.requests().is_empty(),
+        "turning zones off must remove the authored EditorUI request"
+    );
+    systems
+        .zone_visualization
+        .tick_with_queue(&mut world, &mut render_assets, &mut queue);
+    systems.process_commands(&mut world, &mut visuals, &mut render_assets, &mut queue);
+    assert!(
+        world.get_component_record(zone_marker).is_none(),
+        "turning zones off must remove an already materialized marker"
     );
     let title_bar = world
         .find_component(editor_ui, "#title_bar")
@@ -8723,21 +8861,22 @@ fn mittens_corp_evaluates_with_bisket_player_and_car_mount_fixture() {
         EditorUIComponent, GLTFComponent, InputXRComponent, InputXRGamepadComponent,
         MountableComponent, PointerComponent, PoseCaptureComponent, RiderComponent,
         SecondaryMotionComponent, ShadingComponent, ShadingModel, SpringColliderComponent,
-        TransformComponent, XREyeTrackingComponent, ZoneComponent,
+        TransformComponent, XREyeTrackingComponent, XrAxisControl, XrButtonControl, ZoneComponent,
     };
 
     let mut world = World::default();
     let mut rx = RxWorld::default();
     let mut queue = CommandQueue::new();
     let mut assets = RenderAssets::new();
-    let output = MeowMeowRunner::eval_with_world_and_assets_at_path(
+    let (mut session, output) = RuntimeSpecSession::start_at_path(
         include_str!("../../examples/mittens-corp.mms"),
-        Some("examples/mittens-corp.mms"),
+        "examples/mittens-corp.mms",
         &mut world,
         &mut rx,
         Some(&mut assets),
         &mut queue,
-    );
+    )
+    .expect("mittens-corp retained runtime should start");
     assert!(output.errors.is_empty(), "{:?}", output.errors);
 
     let driver = world
@@ -8795,10 +8934,17 @@ fn mittens_corp_evaluates_with_bisket_player_and_car_mount_fixture() {
             .translation(),
         [0.0, 4.5, -1.0]
     );
-    let mountable = world
+    let mountable_id = world
         .all_components()
-        .find_map(|id| world.get_component_by_id_as::<MountableComponent>(id))
+        .find(|&id| {
+            world
+                .get_component_by_id_as::<MountableComponent>(id)
+                .is_some()
+        })
         .expect("the independent car should be Mountable");
+    let mountable = world
+        .get_component_by_id_as::<MountableComponent>(mountable_id)
+        .unwrap();
     assert!(mountable.entry_zone.is_some());
     assert!(mountable.mount_anchor.is_some());
     assert!(mountable.dismount_anchor.is_some());
@@ -8826,6 +8972,25 @@ fn mittens_corp_evaluates_with_bisket_player_and_car_mount_fixture() {
             world.get_component_record(zone_frame).unwrap().guid
         ))
     );
+    assert_eq!(
+        world
+            .get_component_by_id_as::<TransformComponent>(zone_frame)
+            .unwrap()
+            .translation(),
+        [0.0, 0.15, -3.5],
+        "the entry zone should be on the car's semantic front (-Z)"
+    );
+    let dismount_anchor = world
+        .all_components()
+        .find(|&id| world.component_label(id) == Some("left_display_car_dismount"))
+        .unwrap();
+    assert_eq!(
+        world
+            .get_component_by_id_as::<TransformComponent>(dismount_anchor)
+            .unwrap()
+            .translation(),
+        [0.0, 2.4, -4.6]
+    );
 
     assert_eq!(
         world
@@ -8836,11 +9001,14 @@ fn mittens_corp_evaluates_with_bisket_player_and_car_mount_fixture() {
             .count(),
         1
     );
-    assert!(world.all_components().any(|id| {
-        world
-            .get_component_by_id_as::<InputXRGamepadComponent>(id)
-            .is_some_and(|gamepad| gamepad.locomotion && gamepad.speed == 1.5)
-    }));
+    let vehicle_controls = world
+        .all_components()
+        .find(|&id| {
+            world
+                .get_component_by_id_as::<InputXRGamepadComponent>(id)
+                .is_some_and(|gamepad| gamepad.locomotion && gamepad.speed == 1.5)
+        })
+        .expect("Bisket should expose canonical vehicle controls");
 
     let hands: Vec<_> = world
         .all_components()
@@ -8948,6 +9116,128 @@ fn mittens_corp_evaluates_with_bisket_player_and_car_mount_fixture() {
         editor_panels,
         vec![EditorPanel::Settings, EditorPanel::Pose]
     );
+
+    let car_root = world
+        .all_components()
+        .find(|&id| world.component_label(id) == Some("left_display_car"))
+        .unwrap();
+    rx.dispatch_event_handlers(
+        &mut world,
+        &Signal::event(
+            mountable_id,
+            EventSignal::MountStarted {
+                rider: ComponentId::default(),
+                mountable: mountable_id,
+            },
+        ),
+    );
+    rx.dispatch_event_handlers(
+        &mut world,
+        &Signal::event(
+            vehicle_controls,
+            EventSignal::XrAxisChanged {
+                source_component: vehicle_controls,
+                hand: crate::engine::ecs::component::ControllerHand::Left,
+                control: XrAxisControl::LeftStick,
+                value: [0.0, 1.0],
+            },
+        ),
+    );
+    rx.dispatch_event_handlers(
+        &mut world,
+        &Signal::event(
+            ComponentId::default(),
+            EventSignal::FrameTick { dt_sec: 1.0 },
+        ),
+    );
+    let movement_output = session.service_callbacks(&mut world, &mut rx, None, &mut queue);
+    assert!(
+        movement_output.errors.is_empty(),
+        "{:?}",
+        movement_output.errors
+    );
+    assert!(movement_output.intents.iter().any(|intent| matches!(
+        intent,
+        IntentValue::UpdateTransform {
+            component_id,
+            translation,
+            ..
+        } if *component_id == car_root
+            && translation[1] == -0.75
+            && (translation[0] - -19.0).abs() > 0.01
+            && (translation[2] - -1.5).abs() > 0.01
+    )));
+
+    for control in [XrButtonControl::RightGrip, XrButtonControl::RightTrigger] {
+        rx.dispatch_event_handlers(
+            &mut world,
+            &Signal::event(
+                vehicle_controls,
+                EventSignal::XrButtonDown {
+                    source_component: vehicle_controls,
+                    hand: crate::engine::ecs::component::ControllerHand::Right,
+                    control,
+                    value: 1.0,
+                },
+            ),
+        );
+    }
+    let fire_output = session.service_callbacks(&mut world, &mut rx, None, &mut queue);
+    assert!(fire_output.errors.is_empty(), "{:?}", fire_output.errors);
+    assert!(fire_output.intents.iter().any(|intent| matches!(
+        intent,
+        IntentValue::SetAnimationState {
+            state: crate::engine::ecs::component::AnimationState::Playing,
+            ..
+        }
+    )));
+
+    rx.dispatch_event_handlers(
+        &mut world,
+        &Signal::event(
+            mountable_id,
+            EventSignal::MountEnded {
+                rider: ComponentId::default(),
+                mountable: mountable_id,
+            },
+        ),
+    );
+    rx.dispatch_event_handlers(
+        &mut world,
+        &Signal::event(
+            ComponentId::default(),
+            EventSignal::FrameTick { dt_sec: 1.0 },
+        ),
+    );
+    rx.dispatch_event_handlers(
+        &mut world,
+        &Signal::event(
+            vehicle_controls,
+            EventSignal::XrButtonDown {
+                source_component: vehicle_controls,
+                hand: crate::engine::ecs::component::ControllerHand::Right,
+                control: XrButtonControl::RightTrigger,
+                value: 1.0,
+            },
+        ),
+    );
+    let dismounted_output = session.service_callbacks(&mut world, &mut rx, None, &mut queue);
+    assert!(
+        dismounted_output.errors.is_empty(),
+        "{:?}",
+        dismounted_output.errors
+    );
+    assert!(dismounted_output.intents.iter().all(|intent| !matches!(
+        intent,
+        IntentValue::UpdateTransform { component_id, .. } if *component_id == car_root
+    )));
+    assert!(dismounted_output.intents.iter().all(|intent| !matches!(
+        intent,
+        IntentValue::SetAnimationState {
+            state: crate::engine::ecs::component::AnimationState::Playing,
+            ..
+        }
+    )));
 }
 
 #[test]

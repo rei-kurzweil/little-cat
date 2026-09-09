@@ -177,6 +177,18 @@ pub enum EventSignal {
         target: ComponentId,
     },
 
+    /// A Rider-to-Mountable attachment transaction committed.
+    MountStarted {
+        rider: ComponentId,
+        mountable: ComponentId,
+    },
+
+    /// A previously active Rider-to-Mountable attachment ended.
+    MountEnded {
+        rider: ComponentId,
+        mountable: ComponentId,
+    },
+
     /// A click: a drag gesture that ended close to where it started.
     ///
     /// Emitted by `GestureSystem` at `DragEnd` time when the net pointer displacement is below
@@ -364,6 +376,8 @@ impl EventSignal {
             EventSignal::DragEnd { .. } => SignalKind::DragEnd,
             EventSignal::GrabStart { .. } => SignalKind::GrabStart,
             EventSignal::GrabEnd { .. } => SignalKind::GrabEnd,
+            EventSignal::MountStarted { .. } => SignalKind::MountStarted,
+            EventSignal::MountEnded { .. } => SignalKind::MountEnded,
             EventSignal::Click { .. } => SignalKind::Click,
             EventSignal::ToggleChanged { .. } => SignalKind::ToggleChanged,
             EventSignal::SliderChanged { .. } => SignalKind::SliderChanged,
@@ -1172,6 +1186,8 @@ pub enum SignalKind {
     DragEnd,
     GrabStart,
     GrabEnd,
+    MountStarted,
+    MountEnded,
     Click,
     ToggleChanged,
     SliderChanged,

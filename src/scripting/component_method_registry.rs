@@ -1,7 +1,8 @@
 use crate::engine::ecs::component::{
-    AudioBandPassFilterComponent, AudioInputComponent, EmissiveComponent, InputComponent,
-    InputXRGamepadComponent, RayCastComponent, ShadingComponent, ShadingModel, SliderComponent,
-    TextComponent, TransformComponent, TransitionComponent,
+    AnimationComponent, AnimationState, AnimationStepDirection, AudioBandPassFilterComponent,
+    AudioInputComponent, EmissiveComponent, InputComponent, InputXRGamepadComponent,
+    RayCastComponent, ShadingComponent, ShadingModel, SliderComponent, TextComponent,
+    TransformComponent, TransitionComponent,
 };
 use crate::engine::ecs::{ComponentId, IntentValue, PoseApplyMode, World};
 use crate::engine::transform::TransformSpace;
@@ -64,6 +65,42 @@ pub(crate) fn invoke_component_method(
     mut emit_intent: impl FnMut(IntentValue),
 ) -> Result<Value, String> {
     match (component_type, method) {
+        ("A" | "Animation" | "animation", method @ ("play" | "loop_anim" | "pause")) => {
+            if !args.is_empty() {
+                return Err(format!("{method}(): expected no arguments, got {args:?}"));
+            }
+            world
+                .get_component_by_id_as::<AnimationComponent>(id)
+                .ok_or_else(|| format!("{method}(): not an AnimationComponent"))?;
+            let state = match method {
+                "play" => AnimationState::Playing,
+                "loop_anim" => AnimationState::Looping,
+                "pause" => AnimationState::Paused,
+                _ => unreachable!(),
+            };
+            emit_intent(IntentValue::SetAnimationState {
+                component_id: id,
+                state,
+            });
+            Ok(Value::Null)
+        }
+        ("A" | "Animation" | "animation", method @ ("next" | "previous")) => {
+            if !args.is_empty() {
+                return Err(format!("{method}(): expected no arguments, got {args:?}"));
+            }
+            world
+                .get_component_by_id_as::<AnimationComponent>(id)
+                .ok_or_else(|| format!("{method}(): not an AnimationComponent"))?;
+            emit_intent(IntentValue::StepAnimation {
+                component_id: id,
+                direction: if method == "next" {
+                    AnimationStepDirection::Next
+                } else {
+                    AnimationStepDirection::Previous
+                },
+            });
+            Ok(Value::Null)
+        }
         ("I" | "Input" | "input", "enable" | "disable") => {
             if !args.is_empty() {
                 return Err(format!("{method}(): expected no arguments, got {args:?}"));
