@@ -109,7 +109,7 @@ T.position(-5.0, 0.0, 0.0) {
             cockpit_camera_offset
 
             // Simplest inverse-anchor case: InputXR supplies P and the car
-            // receives P * inverse(C). C is +3m on Y, so the car is placed 3m
+            // receives P * inverse(C). C is +4.5m on Y, so the car is placed 3m
             // below the physical XR camera without AVC or another adjustment.
             TransformApplyInverseLocal.source(cockpit_camera_offset) {
                 T {

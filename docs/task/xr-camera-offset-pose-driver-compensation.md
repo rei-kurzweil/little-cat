@@ -2,7 +2,7 @@
 
 Date: 2026-09-08
 
-Status: phases 1 and 2 implemented; pending XR visual validation and AVC humanoid integration.
+Status: phases 1 and 2 implemented and validated in XR; AVC humanoid integration deferred.
 
 This task records the transform relationship discovered while using a
 non-humanoid car model under `InputXR` in
@@ -407,8 +407,10 @@ Implementation note (2026-09-08): the first implementation uses the public
 name `TransformApplyInverseLocal`, applies a complete invertible local matrix,
 retains the last valid inverse while a source is unresolved or singular, and
 rejects a structurally downstream source. `mittens-corp.mms` now uses the
-operator for its rigid car without `AvatarControl`; XR visual validation is
-still required before beginning the AVC-specific phase.
+operator for its rigid car without `AvatarControl`. The deliberately simple
+camera-height case was validated in XR: the inverse places the rigid model at
+the intended offset while headset rotation and gamepad locomotion remain
+coherent.
 
 ### Phase 1: Add the generic inverse-local operator
 
@@ -427,6 +429,13 @@ still required before beginning the AVC-specific phase.
 - Verify with a deliberately large camera Y offset.
 
 ### Phase 3: Refactor humanoid integration
+
+Priority note (2026-09-08): defer this phase. The generic operator solves the
+rigid/non-humanoid case without AVC changes, and consolidating AVC's partial
+camera-offset handling does not currently unlock required behavior. Revisit
+when humanoid camera compensation or AVC topology is otherwise being changed;
+at that point, use the generic operator for the authored camera offset and
+take care not to apply AVC's existing eye-offset compensation twice.
 
 - Reuse the generic operator relationship for the camera offset.
 - Keep head-anchor calibration and body-follow behavior as AVC
