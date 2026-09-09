@@ -57,3 +57,5 @@ Gravity/lift, acceleration, drag, momentum/velocity inheritance, and collision
 response are later policies. The initial example must state that collisions
 do not yet constrain flight if that remains the implementation. Later collision
 integration must share motion authority rather than apply displacement twice.
+The backend-independent version of that follow-up is tracked in
+[velocity, forces, and pluggable physics](velocity-forces-and-pluggable-physics.md).

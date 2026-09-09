@@ -51,14 +51,19 @@ The broom's mount configuration specifies:
 - participants: the held broom and the explicitly associated avatar movement
   root, not the pointer camera or an arbitrary humanoid in the scene.
 
-Zones own geometry and their coordinate frame/placement. The attachment
+Zones are authored as explicit detection-only `Zone` components with child
+`CollisionShape` geometry; see
+[interaction zones on the collision-query foundation](interaction-zone-collision-query-foundation.md).
+They own geometry and their coordinate frame/placement. The attachment
 configuration on `Mountable` owns zone references, activation, eligibility
 conditions, and anchor references. Zone geometry does not decide the action.
 Use ordinary named transforms for the anchors and probe. A single authored
 probe avoids requiring full broom-bounds containment in a small leg zone.
-For this slice, test point containment in authored boxes; exclusion wins at
-the boundary. Tune dimensions and transforms against the actual asset and
-Bisket rather than assuming its root origin or model axis is suitable.
+For this slice, synchronously test point containment in authored boxes at
+release; inclusion accepts its boundary and exclusion wins at its boundary.
+Collision/zone enter events are preview only. Tune dimensions and transforms
+against the actual asset and Bisket rather than assuming its root origin or
+model axis is suitable.
 
 Keep multiple alternative configurations per component open as a future
 extension, for example release near legs versus grabbing a mount handle.

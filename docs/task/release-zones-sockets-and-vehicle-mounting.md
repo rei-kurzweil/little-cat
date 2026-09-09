@@ -13,6 +13,11 @@ Design updated 2026-09-07. The filename is retained for existing links.
 This is also the vehicle-entry/mounting design record; vehicle driving and
 flight behavior still require implementation policy below.
 
+Foundation decision, 2026-09-08: `Zone` is an explicit detection-only component.
+It reuses `CollisionShape` and shared collision-query geometry, but it is not a
+`Collision.kinematic()` body and never opts into `CollisionResponse`. See
+[interaction zones on the collision-query foundation](interaction-zone-collision-query-foundation.md).
+
 ## Terminology and activation
 
 The general mechanism is **event-driven user attachment negotiation**. A
@@ -55,13 +60,13 @@ to the same parent tree. Multiple alternative rules per component remain a
 possible extension, not a requirement of the initial API. Keep implicit default
 pickup configuration for existing `Grabbable {}` authors.
 
-`InteractionZone`, `Socket`, and `InteractionAction` were possible API shapes,
-not agreed required components. For now, zones, activation rules, and anchors
-support `Mountable`; their packaging into components or configuration remains
-open. Ordinary named transforms can supply grip, contact, and riding anchors;
-separate anchor component types are not required by this design. Attachment
-negotiation names shared machinery, not a replacement public component for
-`Grabbable` or a commitment to a new `UserAttachment` component.
+`Zone` is now the agreed component packaging for reusable eligibility geometry.
+`Socket` and `InteractionAction` remain possible API shapes rather than required
+components. Ordinary named transforms can supply grip, contact, and riding
+anchors; separate anchor component types are not required by this design.
+Attachment negotiation names shared machinery, not a replacement public
+component for `Grabbable`. The committed attachment relationship still needs a
+concrete runtime representation in the attachment-system implementation slice.
 
 ## Negotiation and component coexistence
 
@@ -113,11 +118,27 @@ its geometry and coordinate frame/placement. Attachment configuration on
 zone conditions, and source/destination anchor references. A zone does not
 choose the attachment action. Socket API packaging remains open.
 
+Rules should explicitly reference zones when the relationship is known. They
+may alternatively enumerate zones beneath the initiating pointer's resolved
+interaction owner (avatar/rider movement tree or configured camera-rig root)
+and filter by semantic role. Do not search the whole world forest or infer an
+arbitrary humanoid. Resolve and retain that owner when the grab begins so
+release uses the same participant context; topology and zone changes invalidate
+the cached candidate set before synchronous revalidation.
+
 Define which point or bounds of the candidate tree or rider is tested, overlap versus
 containment, exclusions, and any entry/exit hysteresis. Reevaluate eligibility
 at activation; preview state is not sufficient authority. Choose at most one
 winner using an explicit deterministic priority/distance/tie-break policy.
 A zone may reject incompatible or occupied attachments.
+
+Author zone geometry with a child `CollisionShape`, sharing box, sphere, and
+capsule definitions with collision detection. Zone queries are detection-only:
+they do not use collision response or assign a mechanical static/kinematic mode.
+For the first broom slice, transform the authored probe point into each zone's
+local space and classify it synchronously. Inclusion accepts its boundary;
+exclusion wins on its boundary. Collision enter/exit or cached preview state may
+drive feedback, but release must query current transforms again before commit.
 
 Release handling must choose ordinary drop or a zone action as one coordinated
 handoff. Existing grab release restores the original parent while preserving
@@ -190,6 +211,7 @@ that an existing physics path already provides them.
 
 ## Related work
 
+- [Interaction zones on the collision-query foundation](interaction-zone-collision-query-foundation.md)
 - [Effective transform-parent basis resolution](../draft/effective-transform-parent-basis-resolution.md)
 - [Transform pipeline](../spec/transform-pipeline.md)
 - [Grab pose transitions](grab-animation-and-pose-transitions.md)

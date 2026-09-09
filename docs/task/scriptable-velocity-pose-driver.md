@@ -151,6 +151,8 @@ to the flight example's policy.
 
 ## Related work
 
+- [Velocity, forces, and pluggable physics](velocity-forces-and-pluggable-physics.md):
+  longer-term authority, integration, backend, and performance boundary.
 - [Global MMS keyboard events first slice](mms-keyboard-events-first-slice.md):
   implemented input edges that can update a live `Velocity` reference.
 - [MMS keyboard and regular gamepad events](mms-keyboard-and-gamepad-events.md):

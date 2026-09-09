@@ -1,5 +1,11 @@
 # Collision response
 
+> Deprecated as of 2026-09-08. This document describes the current legacy
+> runtime, not the target architecture. Preserve collision detection, shapes,
+> and overlap events, but do not add new users of `CollisionResponseComponent`.
+> Migration/removal is tracked in
+> [retire collision response to static non-penetration](../task/retire-collision-response-to-static-nonpenetration.md).
+
 Collision response is an **opt-in** behavior layer for movable colliders.
 
 - Collision detection/queries work without it.

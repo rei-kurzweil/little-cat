@@ -23,9 +23,11 @@ actions before committing a coordinated handoff.
 
 A broom can be both `Grabbable` and `Mountable`: grab to hold, release near the
 legs to ride. Neither capability globally overrides the other. Zones and
-activation rules distinguish the interactions. Separate `InteractionAction`,
-`InteractionZone`, or `Socket` components remain possible packaging, not API
-commitments; ordinary transforms can serve as the authored anchors.
+activation rules distinguish the interactions. `Zone` is the agreed
+detection-only component packaging and reuses authored `CollisionShape`
+geometry. Separate `InteractionAction` or `Socket` components remain possible
+packaging, not API commitments; ordinary transforms can serve as the authored
+anchors.
 Start with one attachment configuration per `Grabbable`/`Mountable`, potentially
 sharing an internal struct. Multiple alternatives remain a future option.
 Components own the interaction conditions; zones own geometry and placement.
@@ -73,6 +75,7 @@ Priority entry point: [Desktop interaction priorities](../../desktop/interaction
 - [ ] [Hand-relative, bounds-aware grab placement](../grab-hand-relative-bounds-placement.md)
 - [ ] [Grab poses and reusable pose transitions](../grab-animation-and-pose-transitions.md)
 - [ ] [Interaction zones, sockets, and vehicle mounting](../release-zones-sockets-and-vehicle-mounting.md)
+  - [ ] [Zone collision-query foundation](../interaction-zone-collision-query-foundation.md)
   - [ ] [E2 broom attachment first slice](../e2-broom-mounting-first-slice.md)
 
 ## Existing foundations and delivery order

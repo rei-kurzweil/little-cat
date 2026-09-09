@@ -1,0 +1,240 @@
+# Task: interaction zones on the collision-query foundation
+
+## Status and outcome
+
+Planned, 2026-09-08. This task makes the spatial half of
+[interaction zones, sockets, and vehicle mounting](release-zones-sockets-and-vehicle-mounting.md)
+concrete without coupling zones to the deprecated collision-response runtime.
+
+Add an explicit, detection-only `Zone` component. Reuse the existing
+`CollisionShape` vocabulary and shared intersection geometry, but do not model a
+zone as a kinematic body and do not give it automatic collision response. A zone
+reports spatial eligibility; attachment rules decide what an overlap means and
+whether an activation commits an attachment.
+
+## Do attachments require zones?
+
+No. Attachment negotiation requires one or more spatial predicates, and an
+attachment rule may reference a point, bounds test, socket distance, ray hit, or
+another predicate directly. `Zone` earns its place as a lightweight semantic
+tag around reusable authored geometry:
+
+- scripts and systems can enumerate zones without treating every collider as an
+  interaction candidate;
+- zones can be named, referenced, enabled, inspected, and visualized;
+- collision shapes stay concerned with geometry rather than acquiring mouth,
+  legs, seat, inventory, or attachment meaning;
+- a zone remains non-physical even if the collision response architecture
+  changes or a third-party physics backend is selected.
+
+Do not require a zone when a simpler explicit predicate is sufficient. In the
+E2 broom case, named leg inclusion and torso exclusion regions are reused by
+preview, release validation, diagnostics, and potentially other interactions,
+so explicit zones are justified.
+
+## Existing collision foundation
+
+The useful existing pieces are:
+
+- `CollisionShapeComponent` and `CollisionShape` already describe authored
+  boxes, spheres, and upright Y capsules.
+- `collision_geometry` already contains inclusive shape-pair intersection and
+  minimum-translation calculations.
+- `CollisionSystem` tracks overlap pairs and emits `CollisionStarted` and
+  `CollisionEnded` without requiring `CollisionResponseComponent`.
+- collision shapes can be visualized through the existing diagnostic path.
+
+This means collision detection and collision response are already separable.
+Removing response must not remove shapes, overlap queries, or collision events.
+
+The existing collision system is not, unchanged, an adequate zone API:
+
+- `CollisionMode::{Static, Kinematic, Rigged}` describes mechanical roles. A
+  detection-only volume has no honest mode in that enum.
+- static/static pairs are deliberately skipped. A stationary probe and a
+  stationary zone therefore cannot rely on the existing pair matrix.
+- collision records carry only a world-space center plus an untransformed
+  shape. Parent rotation and scale do not affect box/capsule geometry.
+- a `CollisionComponent` participates only as a direct child of a `Transform`.
+- worker results are asynchronous start/end observations. A release decision
+  must re-query current world transforms and cannot treat a previous preview
+  event as authority.
+- events identify collider component IDs and a center delta, but do not encode
+  zone membership, candidate probes, containment, exclusions, occupancy, or
+  attachment-rule priority.
+
+These are reasons to share a geometric/query foundation, not reasons to create
+a second independent shape language.
+
+## Proposed authored contract
+
+Initial authoring shape:
+
+```mms
+T.position(0.0, 0.75, 0.0) {
+    name = "rider_leg_zone"
+    Zone {
+        CollisionShape.cube([0.30, 0.45, 0.24])
+    }
+}
+
+T.position(0.0, 1.35, 0.0) {
+    name = "rider_torso_exclusion"
+    Zone {
+        CollisionShape.capsule_y(0.24, 0.32)
+    }
+}
+```
+
+`Zone` is a semantic owner for one spatial volume. Its immediate transform
+defines the volume's coordinate frame. Its child `CollisionShape` defines the
+geometry in that local frame. Missing or ambiguous shapes disable the zone with
+a diagnostic; they must not silently become a unit cube.
+
+The first slice supports a point probe against a zone. The probe is an ordinary
+named transform on the candidate tree, such as `broom_mount_probe`. It does not
+need to be registered as a physical collider. Later rules may request
+shape-overlap or full-containment tests using an authored candidate shape.
+
+`Zone` owns only reusable spatial facts and optional diagnostic presentation:
+
+- enabled state;
+- local shape and world-space placement;
+- point containment and, later, shape overlap/containment;
+- stable identity for references;
+- optional enter/exit/eligible preview publication.
+
+It does not own activation gestures, accepted capabilities, attachment
+direction, anchors, priority, occupancy, or the action performed. Those belong
+to the `Grabbable`/`Mountable` attachment rule and attachment system.
+
+## Discovery and pointer association
+
+An attachment rule may reference zones explicitly. Explicit references are the
+authoritative and cheapest path for known interactions such as the E2 broom.
+
+Rules may also request dynamic zone discovery. Discovery begins from the
+initiating pointer's resolved interaction owner: the associated avatar/rider
+movement tree or an explicitly configured camera-rig/user root. Enumerate
+eligible `Zone` descendants of that owner and filter them by the rule's semantic
+role/capability. Do not walk the entire world forest merely because the pointer
+and avatar eventually share a scene root.
+
+Structural ancestry is only a resolution aid. The actual resolved owner must be
+recorded in active grab/attachment state so later release does not select a
+different avatar or a newly inserted ancestor. If no owner can be resolved, a
+camera-only pointer may still use explicitly referenced world zones, but it must
+not invent body-relative mouth, back, torso, or leg zones.
+
+Zone role/tag representation and the exact owner-boundary component remain to be
+settled with the attachment runtime. Enumeration must be deterministic and
+cacheable, invalidated by zone attach/detach, enable changes, reference changes,
+and relevant owner/topology changes. Release still revalidates the selected
+zone's current geometry synchronously.
+
+## Query contract
+
+Provide a synchronous query used both by preview evaluation and commit-time
+revalidation:
+
+```rust,ignore
+enum ZoneRelation {
+    Outside,
+    Boundary,
+    Inside,
+}
+
+fn classify_point(
+    world: &World,
+    zone: ComponentId,
+    point_world: [f32; 3],
+) -> Result<ZoneRelation, ZoneQueryError>;
+```
+
+Transform the world point into the zone shape's local space using the zone's
+current effective world matrix, then test the local shape. This naturally
+supports translated, rotated, and non-uniformly scaled box zones without
+pretending the shape remains world-axis-aligned. Reject singular bases.
+
+Boundary classification must be explicit so an attachment rule can state that
+an inclusion zone accepts its boundary while an exclusion zone wins on its
+boundary. The E2 broom rule uses exactly that policy.
+
+The authoritative release path performs this synchronous query after resolving
+the current broom probe and avatar zones. Cached enter/exit state is preview
+only. If a zone, probe, transform basis, or reference is unavailable, the rule
+is ineligible and release falls back to an ordinary drop.
+
+## Relationship to `CollisionSystem`
+
+Refactor shared shape resolution and transform-aware query math into a small
+collision/spatial-query module consumed by both `CollisionSystem` and zone
+queries. A dedicated `ZoneSystem` is only necessary if continuous enter/exit
+observation, indexing, or visualization needs persistent runtime state. Do not
+create one merely to answer a synchronous containment query, and do not make
+zone behavior depend on collision worker timing.
+
+It is acceptable for the first zone slice to use direct synchronous queries
+without broadphase registration: the E2 test has two zones and one active held
+probe. If later scenes need many continuously observed zones, register their
+world AABBs in a shared broadphase while preserving synchronous narrow-phase
+revalidation.
+
+Keep `CollisionStarted`/`CollisionEnded` for collider observations. Zone-specific
+enter/exit events, if added, should name the zone and candidate/probe explicitly
+rather than laundering them through mechanical collision modes.
+
+## Collision-response retirement boundary
+
+`CollisionResponseComponent` and `CollisionResponseSystem` are deprecated. They
+currently combine penetration correction, gravity, friction, bounce, transform
+integration, and a private runtime velocity accumulator. Do not extend them for
+zones, mounting, broom flight, or new movable-body behavior.
+
+Retirement is a separate migration because AvatarControl and a few examples
+still opt into `CollisionResponse.slide()`/`push()`. The migration must:
+
+1. preserve collision shapes, overlap detection, and collision events;
+2. move commanded/observed motion state to the agreed first-class
+   `VelocityComponent`/velocity-driver contract;
+3. decide separately whether player non-penetration needs a small character
+   constraint/controller rather than a general bounce solver;
+4. migrate or remove response-dependent examples and component registration;
+5. delete the private velocity accumulator and then remove the response system,
+   intents, serialization surface, and obsolete documentation.
+
+IK, pose solving, spring/secondary motion, and collision detection are outside
+that deletion. `Velocity` must not become a new name for collision response: it
+owns or observes motion, while any future contact constraint consumes collision
+queries and changes that motion under an explicit authority policy.
+
+## First implementation slice
+
+1. Add `ZoneComponent` with enabled state, serialization, and an
+   exactly-one-child `CollisionShapeComponent` contract. Add registration only
+   if the first implementation actually needs a persistent zone index.
+2. Add transform-aware synchronous point classification for cube, sphere, and
+   capsule zones, including boundary and singular-transform behavior.
+3. Add focused tests for translation, rotation, uniform/non-uniform scale,
+   boundary contact, missing shape, removal, and unresolved transform basis.
+4. Author Bisket's leg inclusion and torso exclusion zones plus the broom probe
+   in E2, with non-raycastable debug visualization.
+5. Feed the query into mount eligibility preview and intentional-release
+   revalidation. Do not implement this as example-local collision event handlers.
+
+Broadphase optimization, arbitrary mesh zones, candidate bounds containment,
+continuous crossing detection, and general enter/exit event authoring are
+follow-ups, not prerequisites for the point-probe broom slice.
+
+## Acceptance criteria
+
+- The same `CollisionShape` constructors author physical colliders and zones;
+  there is no duplicate box/sphere/capsule schema.
+- A `Zone` never pushes, bounces, integrates, or otherwise moves either party.
+- Rotated and scaled zones classify current world-space points correctly.
+- Inclusion and exclusion boundary policies can be expressed deterministically.
+- An intentional broom release revalidates current zone membership
+  synchronously; stale preview state cannot mount it.
+- Removing or disabling a zone makes dependent rules ineligible and leaves
+  ordinary collision detection operational.
+- No new code depends on `CollisionResponseComponent` or its private velocity.

@@ -6,6 +6,16 @@ Date: 2026-05-07
 defines an active descendant-motion driver for broom flight. This older draft
 describes storage/observation; reconcile those roles before implementation.
 
+2026-09-08 decision: `CollisionResponseComponent`/`CollisionResponseSystem` are
+deprecated and should be removed after their remaining AvatarControl and example
+consumers migrate. First-class velocity must replace their private motion state,
+but it must not preserve the general push/bounce response system under a new
+name. Any retained character non-penetration behavior is a separate, narrow
+constraint design. See
+[interaction zones on the collision-query foundation](../interaction-zone-collision-query-foundation.md).
+The broader integration/backend design is tracked in
+[velocity, forces, and pluggable physics](../velocity-forces-and-pluggable-physics.md).
+
 Sketch for promoting velocity from a private field hidden inside
 `CollisionResponseComponent` to first-class components attached to a `TransformComponent`.
 Goal: a single source of truth for "this thing is moving" / "this thing is rotating",
@@ -175,9 +185,13 @@ VelocitySystem::push_history ← snapshot all into history (final pass)
 
 ---
 
-## Refactor of `CollisionResponseComponent`
+## Historical migration sketch for `CollisionResponseComponent`
 
-`CollisionResponseComponent` stops owning velocity. It instead requires a sibling
+The section below predates the decision to retire general collision response.
+It remains useful as an inventory of state that must leave the response
+component, but it is not a proposal to retain that component indefinitely.
+
+As an intermediate migration, `CollisionResponseComponent` stops owning velocity. It instead requires a sibling
 `VelocityComponent` on its TC (authored explicitly, or auto-spawned at register
 time if missing).
 
