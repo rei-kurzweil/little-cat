@@ -346,7 +346,8 @@ impl InputSystem {
         for input_cid in inputs {
             let speed_units_per_sec =
                 match world.get_component_by_id_as::<InputComponent>(input_cid) {
-                    Some(input_comp) => input_comp.speed,
+                    Some(input_comp) if input_comp.enabled => input_comp.speed,
+                    Some(_) => continue,
                     None => continue,
                 };
 

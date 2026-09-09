@@ -53,7 +53,7 @@ use crate::engine::ecs::component::{
     TransitionEasing, TransitionReplacePolicy, TransparentCutoutComponent, UVComponent,
     UnlitComponent, VRChatOSCEyeTrackingComponent, Vector3TemporalFilterComponent, WordWrapMode,
     XREyeTrackingComponent, XREyeTrackingHtcComponent, XRHandComponent, XrComponent,
-    XrHandPreference,
+    XrHandPreference, ZoneComponent,
 };
 use crate::engine::ecs::{ComponentId, World};
 use crate::engine::graphics::CameraTarget;
@@ -125,6 +125,7 @@ pub const SUPPORTED_COMPONENT_NAMES: &[&str] = &[
     "HttpClient",
     "HttpServer",
     "XREyeTracking",
+    "Zone",
     "XREyeTrackingHTC",
     "VRChatOSCEyeTracking",
     "HTCEyeTracking",
@@ -558,7 +559,7 @@ fn collect_referenced_guids_filtered(
 ) {
     use crate::engine::ecs::component::{
         ComponentRef, GridBindingComponent, IKChainComponent, SliderComponent,
-        TransformApplyInverseLocalComponent, TransformParentComponent,
+        TransformApplyInverseLocalComponent, TransformParentComponent, ZoneComponent,
     };
 
     let visible = filtered_save_visibility(world, node);
@@ -593,6 +594,11 @@ fn collect_referenced_guids_filtered(
         }
         if let Some(binding) = world.get_component_by_id_as::<GridBindingComponent>(node)
             && let ComponentRef::Guid(guid) = &binding.grid
+        {
+            out.insert(*guid);
+        }
+        if let Some(zone) = world.get_component_by_id_as::<ZoneComponent>(node)
+            && let Some(ComponentRef::Guid(guid)) = &zone.frame_source
         {
             out.insert(*guid);
         }
@@ -680,7 +686,7 @@ fn collect_referenced_guids_limited(
 ) {
     use crate::engine::ecs::component::{
         ComponentRef, GridBindingComponent, IKChainComponent, SliderComponent,
-        TransformApplyInverseLocalComponent, TransformParentComponent,
+        TransformApplyInverseLocalComponent, TransformParentComponent, ZoneComponent,
     };
     if let Some(ik) = world.get_component_by_id_as::<IKChainComponent>(node) {
         for src in [&ik.target_source, &ik.end_effector_source]
@@ -712,6 +718,11 @@ fn collect_referenced_guids_limited(
     }
     if let Some(binding) = world.get_component_by_id_as::<GridBindingComponent>(node)
         && let ComponentRef::Guid(guid) = &binding.grid
+    {
+        out.insert(*guid);
+    }
+    if let Some(zone) = world.get_component_by_id_as::<ZoneComponent>(node)
+        && let Some(ComponentRef::Guid(guid)) = &zone.frame_source
     {
         out.insert(*guid);
     }
@@ -2334,6 +2345,18 @@ fn create_component(
             )),
             _ => add!(CollisionShapeComponent::cube()),
         },
+        "Zone" => {
+            let zone = match ctor {
+                Some("cube") => ZoneComponent::cube(arg_f32_arr::<3>(args, 0)?),
+                Some("sphere") => ZoneComponent::sphere(arg_f32(args, 0)?),
+                Some("capsule_y") => {
+                    ZoneComponent::capsule_y(arg_f32(args, 0)?, arg_f32(args, 1)?)
+                }
+                _ => return Err("Zone requires .cube(...), .sphere(...), or .capsule_y(...)".into()),
+            };
+            let id = world.add_component(zone);
+            Ok(id)
+        }
         "RaycastableShape" => {
             let shape = match ctor {
                 Some("aabb") => RaycastableShapeType::Aabb,
@@ -3367,6 +3390,22 @@ fn apply_call(
         }
         return Ok(());
     }
+    if world.get_component_by_id_as::<ZoneComponent>(id).is_some() {
+        let current = world
+            .get_component_by_id_as::<ZoneComponent>(id)
+            .expect("checked zone")
+            .clone();
+        let updated = match method {
+            "at" => current.at(arg_component_ref(world, args, 0)?),
+            "role" => current.role(arg_str(args, 0)?),
+            "enabled" => current.enabled(arg_bool(args, 0)?),
+            _ => return Err(format!("Zone: unknown builder '{method}'")),
+        };
+        *world
+            .get_component_by_id_as_mut::<ZoneComponent>(id)
+            .expect("checked zone") = updated;
+        return Ok(());
+    }
     if world
         .get_component_by_id_as::<TransformApplyInverseLocalComponent>(id)
         .is_some()
@@ -3591,8 +3630,10 @@ fn apply_call(
         return Ok(());
     }
     if let Some(inp) = world.get_component_by_id_as_mut::<InputComponent>(id) {
-        if method == "speed" {
-            inp.speed = arg_f32(args, 0)?;
+        match method {
+            "speed" => inp.speed = arg_f32(args, 0)?,
+            "enabled" => inp.enabled = arg_bool(args, 0)?,
+            _ => {}
         }
         return Ok(());
     }

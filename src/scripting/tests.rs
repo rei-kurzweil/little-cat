@@ -7066,11 +7066,12 @@ fn roundtrip_keyframe() {
 }
 
 #[test]
-fn roundtrip_input_speed() {
+fn roundtrip_input_speed_and_mapping_state() {
     use crate::engine::ecs::component::InputComponent;
-    let (world, id) = roundtrip_component(InputComponent::new().with_speed(0.25));
+    let (world, id) = roundtrip_component(InputComponent::new().with_speed(0.25).enabled(false));
     let got = world.get_component_by_id_as::<InputComponent>(id).unwrap();
     assert!((got.speed - 0.25).abs() < 1e-6);
+    assert!(!got.enabled);
 }
 
 #[test]
@@ -8018,6 +8019,110 @@ fn roundtrip_collision_shape_capsule_clamps_dimensions() {
 }
 
 #[test]
+fn roundtrip_zone_preserves_shape_frame_roles_and_enabled_state() {
+    use crate::engine::ecs::component::{CollisionShape, ComponentRef, ZoneComponent};
+    let original = ZoneComponent::capsule_y(0.25, 0.75)
+        .at(ComponentRef::Query("../[name='head']".to_string()))
+        .role("spring_exclusion")
+        .role("head")
+        .enabled(false);
+    let (world, id) = roundtrip_component(original);
+    let got = world.get_component_by_id_as::<ZoneComponent>(id).unwrap();
+    assert_eq!(got.shape, CollisionShape::capsule_y(0.25, 0.75));
+    assert_eq!(
+        got.frame_source,
+        Some(ComponentRef::Query("../[name='head']".to_string()))
+    );
+    assert_eq!(got.roles, vec!["spring_exclusion", "head"]);
+    assert!(!got.enabled);
+}
+
+#[test]
+fn zone_at_accepts_a_live_mms_component_object_as_a_durable_guid_ref() {
+    use crate::engine::ecs::component::{ComponentRef, ZoneComponent};
+
+    let mut world = World::default();
+    let mut rx = RxWorld::default();
+    let mut assets = RenderAssets::new();
+    let mut queue = CommandQueue::new();
+    let output = MeowMeowRunner::eval_with_world_and_assets(
+        r#"
+            let target = T { name = "zone_target" }
+            let zone = Zone.sphere(0.5).at(target) { name = "test_zone" }
+            T { target zone }
+        "#,
+        &mut world,
+        &mut rx,
+        &mut assets,
+        &mut queue,
+    );
+    assert!(output.errors.is_empty(), "{:?}", output.errors);
+
+    let target = world
+        .all_components()
+        .find(|id| {
+            world
+                .get_component_record(*id)
+                .is_some_and(|node| node.name == "zone_target")
+        })
+        .expect("target transform");
+    let zone = world
+        .all_components()
+        .find_map(|id| {
+            world
+                .get_component_by_id_as::<ZoneComponent>(id)
+                .map(|zone| (id, zone))
+        })
+        .expect("zone component")
+        .1;
+    assert_eq!(
+        zone.frame_source,
+        Some(ComponentRef::Guid(
+            world.get_component_record(target).unwrap().guid
+        ))
+    );
+}
+
+#[test]
+fn live_input_handles_can_relinquish_automatic_locomotion() {
+    use crate::engine::ecs::component::{InputComponent, InputXRGamepadComponent};
+
+    let mut world = World::default();
+    let mut rx = RxWorld::default();
+    let mut assets = RenderAssets::new();
+    let mut queue = CommandQueue::new();
+    let output = MeowMeowRunner::eval_with_world_and_assets(
+        r#"
+            let desktop_input = I {}
+            let xr_input = InputXRGamepad {}
+            T { desktop_input xr_input }
+            desktop_input.disable()
+            xr_input.disable()
+        "#,
+        &mut world,
+        &mut rx,
+        &mut assets,
+        &mut queue,
+    );
+    assert!(output.errors.is_empty(), "{:?}", output.errors);
+
+    let desktop = world
+        .all_components()
+        .find_map(|id| world.get_component_by_id_as::<InputComponent>(id))
+        .expect("desktop input");
+    let xr = world
+        .all_components()
+        .find_map(|id| world.get_component_by_id_as::<InputXRGamepadComponent>(id))
+        .expect("XR gamepad input");
+    assert!(!desktop.enabled);
+    assert!(xr.enabled, "raw XR controls stay observable");
+    assert!(
+        !xr.locomotion,
+        "only the automatic XR movement map is disabled"
+    );
+}
+
+#[test]
 fn roundtrip_raycastable_shape() {
     use crate::engine::ecs::component::{RaycastableShapeComponent, RaycastableShapeType};
     let (world, id) = roundtrip_component(RaycastableShapeComponent::cone());
@@ -8559,12 +8664,14 @@ fn draggable_plane_builder_accepts_object_camera_and_world_axes() {
 }
 
 #[test]
-fn mittens_corp_evaluates_with_inverse_local_xr_rig_and_pose_editor() {
+fn mittens_corp_evaluates_with_bisket_player_and_car_mount_fixture() {
     use crate::engine::ecs::component::{
-        CameraXRComponent, ComponentRef, ControllerXRComponent, EditorComponent, EditorPanel,
+        AmplitudeComponent, AudioInputComponent, AvatarControlComponent, CameraXRComponent,
+        CollisionShape, ComponentRef, ControllerXRComponent, EditorComponent, EditorPanel,
         EditorUIComponent, GLTFComponent, InputXRComponent, InputXRGamepadComponent,
-        PointerComponent, PoseCaptureComponent, TransformApplyInverseLocalComponent,
-        TransformComponent,
+        PointerComponent, PoseCaptureComponent, SecondaryMotionComponent, ShadingComponent,
+        ShadingModel, SpringColliderComponent, TransformComponent, XREyeTrackingComponent,
+        ZoneComponent,
     };
 
     let mut world = World::default();
@@ -8581,19 +8688,10 @@ fn mittens_corp_evaluates_with_inverse_local_xr_rig_and_pose_editor() {
     );
     assert!(output.errors.is_empty(), "{:?}", output.errors);
 
-    let operator = world
-        .all_components()
-        .find(|id| {
-            world
-                .get_component_by_id_as::<TransformApplyInverseLocalComponent>(*id)
-                .is_some()
-        })
-        .expect("mittens-corp should author an inverse-local car rig");
     let driver = world
         .all_components()
-        .find(|&id| world.component_label(id) == Some("car_xr_driver"))
-        .expect("mittens-corp should name its XR driver");
-    assert_eq!(world.parent_of(operator), Some(driver));
+        .find(|&id| world.component_label(id) == Some("bisket_xr_driver"))
+        .expect("mittens-corp should name its Bisket XR driver");
     let input_xr = world
         .all_components()
         .find(|&id| {
@@ -8609,66 +8707,59 @@ fn mittens_corp_evaluates_with_inverse_local_xr_rig_and_pose_editor() {
         .expect("InputXRGamepad should resolve the outer locomotion transform");
     assert_eq!(
         world.component_label(locomotion_root),
-        Some("car_locomotion_root")
+        Some("bisket_locomotion_root")
     );
 
-    let source = world
-        .get_component_by_id_as::<TransformApplyInverseLocalComponent>(operator)
-        .and_then(|operator| match &operator.source {
-            ComponentRef::Guid(guid) => world.component_id_by_guid(*guid),
-            ComponentRef::Query(_) => None,
-        })
-        .expect("the live camera handle should resolve to a durable GUID reference");
-    assert_eq!(world.component_label(source), Some("car_xr_cockpit_camera"));
-    assert_eq!(
-        world.parent_of(source),
-        Some(driver),
-        "the camera anchor must remain inside InputXR so OpenXR uses the locomotion root"
-    );
-    let source_transform = world
-        .get_component_by_id_as::<TransformComponent>(source)
-        .expect("the inverse-local source must be an explicit transform");
-    assert_eq!(source_transform.translation(), [0.0, 3.0, 0.0]);
-    let car = world
+    let rider_anchor = world
         .all_components()
-        .find(|id| {
-            world
-                .get_component_by_id_as::<GLTFComponent>(*id)
-                .is_some_and(|gltf| gltf.uri == "assets/models/car.glb")
-        })
-        .expect("mittens-corp should load the car model");
-    let mut car_ancestor = world.parent_of(car);
-    while car_ancestor.is_some() && car_ancestor != Some(operator) {
-        car_ancestor = car_ancestor.and_then(|id| world.parent_of(id));
+        .find(|&id| world.component_label(id) == Some("bisket_rider_cxr_anchor"))
+        .expect("Bisket should expose a rider-side CXR anchor");
+    let mut rider_ancestor = world.parent_of(rider_anchor);
+    while rider_ancestor.is_some() && rider_ancestor != Some(driver) {
+        rider_ancestor = rider_ancestor.and_then(|id| world.parent_of(id));
     }
-    assert_eq!(
-        car_ancestor,
-        Some(operator),
-        "only the car branch must receive inverse-local compensation"
-    );
-    let car_vehicle_id = world
-        .all_components()
-        .find(|&id| world.component_label(id) == Some("car_vehicle"))
-        .expect("the car's identity model-root transform should remain present");
-    let car_vehicle = world
-        .get_component_by_id_as::<TransformComponent>(car_vehicle_id)
-        .expect("the named car root should be a transform");
-    assert_eq!(car_vehicle.translation(), [0.0, 0.0, 0.0]);
+    assert_eq!(rider_ancestor, Some(driver));
+    assert!(world.children_of(rider_anchor).iter().any(|id| {
+        world
+            .get_component_by_id_as::<CameraXRComponent>(*id)
+            .is_some()
+    }));
 
-    let identity = TransformComponent::new().transform.model;
-    let (compensated_world, outputs) = crate::engine::ecs::system::TransformStreamSystem::new()
-        .evaluate_stream_node(&world, operator, identity)
-        .expect("the inverse-local operator should evaluate");
+    let car_mount = world
+        .all_components()
+        .find(|&id| world.component_label(id) == Some("left_display_car_cxr_mount"))
+        .expect("car should expose its old cockpit CXR offset as a mount target");
     assert_eq!(
-        [
-            compensated_world[3][0],
-            compensated_world[3][1],
-            compensated_world[3][2],
-        ],
-        [0.0, -3.0, 0.0],
-        "a +3m camera anchor should move only the car branch 3m down"
+        world
+            .get_component_by_id_as::<TransformComponent>(car_mount)
+            .unwrap()
+            .translation(),
+        [0.0, 4.5, -1.0]
     );
-    assert_eq!(outputs, vec![car_vehicle_id]);
+
+    let car_zone = world
+        .all_components()
+        .find_map(|id| {
+            world
+                .get_component_by_id_as::<ZoneComponent>(id)
+                .filter(|_| world.component_label(id) == Some("left_display_car_front_zone"))
+        })
+        .expect("car should expose a detection-only front entry zone");
+    assert_eq!(
+        car_zone.shape,
+        CollisionShape::cube_half_extents([4.6, 3.8, 0.8])
+    );
+    assert_eq!(car_zone.roles, vec!["vehicle_entry"]);
+    let zone_frame = world
+        .all_components()
+        .find(|&id| world.component_label(id) == Some("left_display_car_front_zone_frame"))
+        .unwrap();
+    assert_eq!(
+        car_zone.frame_source,
+        Some(ComponentRef::Guid(
+            world.get_component_record(zone_frame).unwrap().guid
+        ))
+    );
 
     assert_eq!(
         world
@@ -8682,13 +8773,11 @@ fn mittens_corp_evaluates_with_inverse_local_xr_rig_and_pose_editor() {
     assert!(world.all_components().any(|id| {
         world
             .get_component_by_id_as::<InputXRGamepadComponent>(id)
-            .is_some_and(|gamepad| gamepad.locomotion && gamepad.speed == 4.0)
+            .is_some_and(|gamepad| gamepad.locomotion && gamepad.speed == 1.5)
     }));
 
     let hands: Vec<_> = world
-        .children_of(driver)
-        .iter()
-        .copied()
+        .all_components()
         .filter(|id| {
             world
                 .get_component_by_id_as::<ControllerXRComponent>(*id)
@@ -8698,7 +8787,7 @@ fn mittens_corp_evaluates_with_inverse_local_xr_rig_and_pose_editor() {
     assert_eq!(
         hands.len(),
         2,
-        "both laser hands must remain direct, uncompensated XR-driver children"
+        "the Bisket player should retain both tracked laser hands"
     );
     for hand in hands {
         let mut pending = vec![hand];
@@ -8740,6 +8829,41 @@ fn mittens_corp_evaluates_with_inverse_local_xr_rig_and_pose_editor() {
         bisket_ancestor = bisket_ancestor.and_then(|id| world.parent_of(id));
     }
     assert_eq!(bisket_ancestor, Some(editor));
+    assert!(world.all_components().any(|id| {
+        world
+            .get_component_by_id_as::<AvatarControlComponent>(id)
+            .is_some()
+    }));
+    assert!(world.all_components().any(|id| {
+        world
+            .get_component_by_id_as::<XREyeTrackingComponent>(id)
+            .is_some()
+    }));
+    assert!(world.all_components().any(|id| {
+        world
+            .get_component_by_id_as::<AudioInputComponent>(id)
+            .is_some()
+    }));
+    assert!(world.all_components().any(|id| {
+        world
+            .get_component_by_id_as::<AmplitudeComponent>(id)
+            .is_some()
+    }));
+    assert!(world.all_components().any(|id| {
+        world
+            .get_component_by_id_as::<SecondaryMotionComponent>(id)
+            .is_some()
+    }));
+    assert!(world.all_components().any(|id| {
+        world
+            .get_component_by_id_as::<SpringColliderComponent>(id)
+            .is_some()
+    }));
+    assert!(world.all_components().any(|id| {
+        world
+            .get_component_by_id_as::<ShadingComponent>(id)
+            .is_some_and(|shading| shading.model == ShadingModel::Anime)
+    }));
     assert!(world.children_of(bisket).iter().any(|id| {
         world
             .get_component_by_id_as::<PoseCaptureComponent>(*id)

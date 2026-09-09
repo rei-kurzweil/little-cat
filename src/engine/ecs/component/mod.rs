@@ -89,6 +89,7 @@ pub mod transmission;
 pub mod transparent_cutout;
 pub mod xr;
 pub mod xr_eye_tracking;
+pub mod zone;
 
 pub mod point_light;
 pub mod pointer;
@@ -283,6 +284,7 @@ pub use xr_eye_tracking::{
     MediaPipeEyeTrackingComponent, VRChatOSCEyeTrackingComponent, XREyeTrackingComponent,
     XREyeTrackingHtcComponent, combined_eye_rotation_limits,
 };
+pub use zone::ZoneComponent;
 pub type XRHandComponent = ControllerXRComponent;
 
 /// For now, our "LightComponent" is a point light.

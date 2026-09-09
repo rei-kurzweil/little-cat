@@ -186,6 +186,29 @@ Vehicle controls, flight forces, velocity inheritance, and collision details
 need a concrete policy during implementation; this ticket does not presume
 that an existing physics path already provides them.
 
+## Nested movement authority and canonical controls
+
+Mounting transfers the built-in movement mapping one layer outward; it does not
+disable the input device or XR tracking. `InputXR` must continue applying the
+tracked HMD pose. `InputXRGamepad.disable()` suppresses only its automatic
+pedestrian locomotion while its canonical axis/button events remain available
+to the mounted vehicle controller. `enable()` restores pedestrian locomotion.
+Desktop `Input.disable()` and `enable()` apply the same authority gate to its
+built-in keyboard movement mapping.
+
+Model mounted contexts as a stack of movement authorities. The innermost rider
+relinquishes movement to the mech, the mech can relinquish movement to a larger
+carrier, and so on. Canonical controls are offered to the top active layer; an
+inner layer may remain attached and posed but must not also integrate the same
+movement. Dismount pops exactly one layer and restores the immediately inner
+authority. Removal and failed mount commits must unwind the affected layers and
+must not leave an input mapping disabled.
+
+The live enable/disable methods are the first gating mechanism, not the complete
+stack manager. Attachment state should eventually record which input mapping it
+suspended and its prior state, so nested mounts restore state transactionally
+instead of blindly enabling every inner controller.
+
 ## Acceptance criteria
 
 - Releasing a compatible prop in the mouth zone aligns its authored contact to
@@ -213,6 +236,7 @@ that an existing physics path already provides them.
 
 ## Related work
 
+- [Rider + Mountable attachment-system first slice](rider-mountable-attachment-system-first-slice.md)
 - [Interaction zones on the collision-query foundation](interaction-zone-collision-query-foundation.md)
 - [Spatial, collision, and physics naming](spatial-collision-and-physics-naming.md)
 - [Effective transform-parent basis resolution](../draft/effective-transform-parent-basis-resolution.md)

@@ -626,7 +626,18 @@ pub fn build_mittens_runtime() -> Result<MittensRuntime, mms::RuntimeSpecError> 
                     no_arg_constructors(component, &["multiple_layers"]);
                     no_arg_builders(component, &["multiple_layers"]);
                 }
-                "Input" => constructor_and_builder(component, "speed", floats(1)),
+                "Input" => {
+                    constructor_and_builder(component, "speed", floats(1));
+                    component.builder_call("enabled", booleans(1));
+                    for method_name in ["enable", "disable"] {
+                        host_method(
+                            component,
+                            canonical,
+                            method_name,
+                            method(vec![], mms::ValueType::Null),
+                        );
+                    }
+                }
                 "InputXR" => no_arg_constructors(component, &["on", "off"]),
                 "XR" => no_arg_constructors(component, &["on", "off", "auto", "openxr"]),
                 "InputXRGamepad" => {
@@ -640,6 +651,14 @@ pub fn build_mittens_runtime() -> Result<MittensRuntime, mms::RuntimeSpecError> 
                     );
                     for method in ["speed", "deadzone"] {
                         constructor_and_builder(component, method, floats(1));
+                    }
+                    for method_name in ["enable", "disable"] {
+                        host_method(
+                            component,
+                            canonical,
+                            method_name,
+                            method(vec![], mms::ValueType::Null),
+                        );
                     }
                 }
                 "InputTransformMode" => {
@@ -1086,6 +1105,15 @@ pub fn build_mittens_runtime() -> Result<MittensRuntime, mms::RuntimeSpecError> 
                         .constructor("cube", any(1))
                         .constructor("sphere", floats(1))
                         .constructor("capsule_y", floats(2));
+                }
+                "Zone" => {
+                    component
+                        .constructor("cube", any(1))
+                        .constructor("sphere", floats(1))
+                        .constructor("capsule_y", floats(2))
+                        .builder_call("at", any(1))
+                        .builder_call("role", strings(1))
+                        .builder_call("enabled", booleans(1));
                 }
                 "RaycastableShape" => {
                     no_arg_constructors(

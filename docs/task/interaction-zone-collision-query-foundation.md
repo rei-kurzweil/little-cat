@@ -2,9 +2,14 @@
 
 ## Status and outcome
 
-Planned, 2026-09-08. This task makes the spatial half of
+First synchronous query slice implemented, 2026-09-08. This task makes the spatial half of
 [interaction zones, sockets, and vehicle mounting](release-zones-sockets-and-vehicle-mounting.md)
 concrete without coupling zones to the deprecated collision-response runtime.
+
+The implemented slice includes the `ZoneComponent` shape constructors and MMS
+round-tripping, component-reference-aware `.at(...)`, deterministic subtree and
+role discovery, and transform-aware point classification. E2 authoring and the
+grabbing/mounting attachment rules remain the next slices.
 
 Add `Zone` as the primitive ECS/runtime spatial-region component. Reuse the
 existing `CollisionShape` vocabulary and shared intersection geometry, but do
@@ -229,6 +234,20 @@ queries and changes that motion under an explicit authority policy.
 
 ## First implementation slice
 
+Current progress:
+
+- [x] `ZoneComponent`, normalized shared shapes, MMS constructors/builders, and
+  serialization round-tripping.
+- [x] `.at(...)` accepts either a live MMS component object (stored as a durable
+  GUID reference) or a string query. Unprefixed queries resolve in the zone's
+  containing scope; `/` and `../` retain their standard meanings.
+- [x] Synchronous point classification for cube, sphere, and Y capsule zones,
+  including transformed boundaries and singular-frame rejection.
+- [x] Stable enabled-zone enumeration with optional role filtering beneath an
+  explicit owner root.
+- [ ] Author the E2 avatar zones and broom probe.
+- [ ] Connect preview and release-time revalidation to attachment negotiation.
+
 1. Add `ZoneComponent` with enabled state, semantic role, embedded shared shape
    value, serialization, and `cube`/`sphere`/`capsule_y` MMS constructors. Add
    registration only if the first implementation actually needs a persistent
@@ -267,6 +286,8 @@ follow-ups, not prerequisites for the point-probe broom slice.
 
 ## Related work
 
+- [Editor Zones panel and visualization migration](editor-zones-panel-visualization-migration.md)
+- [Rider + Mountable attachment-system first slice](rider-mountable-attachment-system-first-slice.md)
 - [Spatial, collision, and physics naming](spatial-collision-and-physics-naming.md)
 - [Retire collision response to static non-penetration](retire-collision-response-to-static-nonpenetration.md)
 - [Velocity, forces, and pluggable physics](velocity-forces-and-pluggable-physics.md)

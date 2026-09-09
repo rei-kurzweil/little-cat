@@ -465,6 +465,7 @@ the original repeated-cycle acceptance contract complete.
 
 ## Related documents
 
+- [Editor Zones panel and spatial-visualization migration](editor-zones-panel-visualization-migration.md)
 - [Panel system](panel-system.md)
 - [World/inspector panel selection refresh slowness](editor-panel-selection-refresh-perf-investigation.md)
 - [Editor UI rerender audit and clean reducer boundary](editor-ui-rerender-audit-and-clean-reducer-boundary.md)

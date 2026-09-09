@@ -1,7 +1,7 @@
 use crate::engine::ecs::component::{
-    AudioBandPassFilterComponent, AudioInputComponent, EmissiveComponent, RayCastComponent,
-    ShadingComponent, ShadingModel, SliderComponent, TextComponent, TransformComponent,
-    TransitionComponent,
+    AudioBandPassFilterComponent, AudioInputComponent, EmissiveComponent, InputComponent,
+    InputXRGamepadComponent, RayCastComponent, ShadingComponent, ShadingModel, SliderComponent,
+    TextComponent, TransformComponent, TransitionComponent,
 };
 use crate::engine::ecs::{ComponentId, IntentValue, PoseApplyMode, World};
 use crate::engine::transform::TransformSpace;
@@ -39,6 +39,16 @@ pub(crate) fn legacy_supports_component_method(component_type: &str, method: &st
         ) && method == "set_center_hz")
         || (matches!(component_type, "AudioInput" | "audio_input")
             && method == "select_device_number")
+        || (matches!(component_type, "I" | "Input" | "input")
+            && matches!(method, "enable" | "disable"))
+        || (matches!(
+            component_type,
+            "InputXRGamepad"
+                | "InputXrGamepad"
+                | "InputVRGamepad"
+                | "InputVrGamepad"
+                | "input_vr_gamepad"
+        ) && matches!(method, "enable" | "disable"))
         || (matches!(component_type, "HttpClient" | "http_client")
             && matches!(method, "get" | "post" | "put" | "delete"))
         || (matches!(component_type, "HttpServer" | "http_server")
@@ -54,6 +64,32 @@ pub(crate) fn invoke_component_method(
     mut emit_intent: impl FnMut(IntentValue),
 ) -> Result<Value, String> {
     match (component_type, method) {
+        ("I" | "Input" | "input", "enable" | "disable") => {
+            if !args.is_empty() {
+                return Err(format!("{method}(): expected no arguments, got {args:?}"));
+            }
+            let input = world
+                .get_component_by_id_as_mut::<InputComponent>(id)
+                .ok_or_else(|| format!("{method}(): not an InputComponent"))?;
+            input.enabled = method == "enable";
+            Ok(Value::Null)
+        }
+        (
+            "InputXRGamepad" | "InputXrGamepad" | "InputVRGamepad" | "InputVrGamepad"
+            | "input_vr_gamepad",
+            "enable" | "disable",
+        ) => {
+            if !args.is_empty() {
+                return Err(format!("{method}(): expected no arguments, got {args:?}"));
+            }
+            let input = world
+                .get_component_by_id_as_mut::<InputXRGamepadComponent>(id)
+                .ok_or_else(|| format!("{method}(): not an InputXRGamepadComponent"))?;
+            // Keep the component and its canonical axis/button events live;
+            // only transfer authority away from the built-in locomotion map.
+            input.locomotion = method == "enable";
+            Ok(Value::Null)
+        }
         ("Shading" | "shading", "get_shade_strength" | "set_shade_strength") => {
             let shading = world
                 .get_component_by_id_as_mut::<ShadingComponent>(id)
@@ -667,6 +703,60 @@ mod tests {
             id,
             component_type: ty.to_string(),
         }
+    }
+
+    #[test]
+    fn input_live_enable_disable_transfers_only_automatic_locomotion_authority() {
+        let mut world = World::default();
+        let desktop = world.add_component(InputComponent::new());
+        let xr_gamepad = world.add_component(InputXRGamepadComponent::new());
+
+        invoke_component_method(&mut world, desktop, "Input", "disable", &[], |_| {}).unwrap();
+        invoke_component_method(
+            &mut world,
+            xr_gamepad,
+            "InputXRGamepad",
+            "disable",
+            &[],
+            |_| {},
+        )
+        .unwrap();
+
+        assert!(
+            !world
+                .get_component_by_id_as::<InputComponent>(desktop)
+                .unwrap()
+                .enabled
+        );
+        let xr = world
+            .get_component_by_id_as::<InputXRGamepadComponent>(xr_gamepad)
+            .unwrap();
+        assert!(xr.enabled, "raw XR gamepad observation remains enabled");
+        assert!(!xr.locomotion, "built-in XR locomotion is relinquished");
+
+        invoke_component_method(&mut world, desktop, "Input", "enable", &[], |_| {}).unwrap();
+        invoke_component_method(
+            &mut world,
+            xr_gamepad,
+            "InputXRGamepad",
+            "enable",
+            &[],
+            |_| {},
+        )
+        .unwrap();
+
+        assert!(
+            world
+                .get_component_by_id_as::<InputComponent>(desktop)
+                .unwrap()
+                .enabled
+        );
+        assert!(
+            world
+                .get_component_by_id_as::<InputXRGamepadComponent>(xr_gamepad)
+                .unwrap()
+                .locomotion
+        );
     }
 
     #[test]
