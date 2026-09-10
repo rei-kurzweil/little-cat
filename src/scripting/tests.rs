@@ -9168,6 +9168,96 @@ fn mittens_corp_evaluates_with_bisket_player_and_car_mount_fixture() {
             && (translation[2] - -1.5).abs() > 0.01
     )));
 
+    // Import only the car and publish its bounds without starting audio or XR.
+    let car_model = world
+        .all_components()
+        .find(|&id| world.component_label(id) == Some("left_display_car_model"))
+        .unwrap();
+    let car_gltf = world
+        .children_of(car_model)
+        .iter()
+        .copied()
+        .find(|&id| world.get_component_by_id_as::<GLTFComponent>(id).is_some())
+        .unwrap();
+    let mut gltf_system = crate::engine::ecs::system::GLTFSystem::new();
+    let mut renderable_system = crate::engine::ecs::system::RenderableSystem::default();
+    let mut skinned = crate::engine::ecs::system::SkinnedMeshSystem::new();
+    let mut visuals = VisualWorld::default();
+    gltf_system.register_component(car_gltf);
+    gltf_system.tick_with_queue(
+        &mut world,
+        &mut visuals,
+        &mut skinned,
+        &mut renderable_system,
+        &mut queue,
+        0.0,
+    );
+    gltf_system.flush_mesh_imports_only(&mut assets);
+    let mut pending = vec![car_model];
+    while let Some(node) = pending.pop() {
+        pending.extend(world.children_of(node).iter().copied());
+        if world
+            .get_component_by_id_as::<RenderableComponent>(node)
+            .is_some()
+        {
+            renderable_system.register_renderable_from_world(&mut world, &mut visuals, node);
+        }
+    }
+    struct CarUploader(u32);
+    impl crate::engine::graphics::MeshUploader for CarUploader {
+        fn upload_mesh(
+            &mut self,
+            _: &crate::engine::graphics::CpuMesh,
+        ) -> Result<crate::engine::graphics::MeshHandle, Box<dyn std::error::Error>> {
+            self.0 += 1;
+            Ok(crate::engine::graphics::MeshHandle(self.0))
+        }
+    }
+    renderable_system.flush_pending(
+        &mut world,
+        &mut visuals,
+        &mut assets,
+        &mut CarUploader(0),
+        &mut queue,
+    );
+    let model_bounds = crate::engine::ecs::system::bounds_system::BoundsSystem::measure_cached_renderable_subtree_bounds(&world, car_model, |_| false).unwrap();
+    rx.dispatch_event_handlers(
+        &mut world,
+        &Signal::event(
+            ComponentId::default(),
+            EventSignal::FrameTick { dt_sec: 0.0 },
+        ),
+    );
+    let placement_output = session.service_callbacks(&mut world, &mut rx, None, &mut queue);
+    assert!(
+        placement_output.errors.is_empty(),
+        "{:?}",
+        placement_output.errors
+    );
+    let origin = world
+        .all_components()
+        .find(|&id| world.component_label(id) == Some("car_laser_origin"))
+        .unwrap();
+    let origin_translation = placement_output
+        .intents
+        .iter()
+        .find_map(|intent| match intent {
+            IntentValue::UpdateTransform {
+                component_id,
+                translation,
+                ..
+            } if *component_id == origin => Some(*translation),
+            _ => None,
+        })
+        .expect("model readiness should position the shared muzzle frame");
+    assert!((origin_translation[2] - (model_bounds.min[2] - 0.10)).abs() < 1e-4);
+    assert!(
+        (origin_translation[1]
+            - (model_bounds.min[1] + (model_bounds.max[1] - model_bounds.min[1]) * 0.56))
+            .abs()
+            < 1e-4
+    );
+
     for control in [XrButtonControl::RightGrip, XrButtonControl::RightTrigger] {
         rx.dispatch_event_handlers(
             &mut world,
@@ -9191,6 +9281,60 @@ fn mittens_corp_evaluates_with_bisket_player_and_car_mount_fixture() {
             ..
         }
     )));
+
+    let animation_id = fire_output
+        .intents
+        .iter()
+        .find_map(|intent| match intent {
+            IntentValue::SetAnimationState { component_id, .. } => Some(*component_id),
+            _ => None,
+        })
+        .unwrap();
+    let mut animation = crate::engine::ecs::system::AnimationSystem::new();
+    animation.register_animation(&mut world, animation_id);
+    for keyframe in world.children_of(animation_id).to_vec() {
+        if world
+            .get_component_by_id_as::<crate::engine::ecs::component::KeyframeComponent>(keyframe)
+            .is_some()
+        {
+            animation.register_keyframe(&mut world, keyframe);
+        }
+    }
+    animation.set_animation_state(
+        animation_id,
+        crate::engine::ecs::component::AnimationState::Playing,
+    );
+    animation.tick_with_beat(&mut world, 0.0, 60.0, &mut rx);
+    let shot_output = session.service_callbacks(&mut world, &mut rx, None, &mut queue);
+    assert!(shot_output.errors.is_empty(), "{:?}", shot_output.errors);
+    let mut shot_intents = shot_output.intents;
+    shot_intents.extend(
+        rx.drain_ready_intents()
+            .into_iter()
+            .filter_map(|signal| signal.intent.map(|intent| intent.value)),
+    );
+    for (name, offset) in [("car_laser_muzzle_flash", 0.0), ("laser_beam_glow", -8.0)] {
+        let effect = world
+            .all_components()
+            .find(|&id| world.component_label(id) == Some(name))
+            .unwrap();
+        let translation = shot_intents
+            .iter()
+            .find_map(|intent| match intent {
+                IntentValue::UpdateTransform {
+                    component_id,
+                    translation,
+                    ..
+                } if *component_id == effect => Some(*translation),
+                _ => None,
+            })
+            .expect("shot should position its effects using the live bounds-derived state");
+        assert!(
+            (origin_translation[2] + translation[2] - (model_bounds.min[2] - 0.10 + offset)).abs()
+                < 1e-4
+        );
+        assert_eq!(translation[1], 0.0);
+    }
 
     rx.dispatch_event_handlers(
         &mut world,
@@ -9239,6 +9383,7 @@ fn mittens_corp_evaluates_with_bisket_player_and_car_mount_fixture() {
         }
     )));
 }
+
 
 #[test]
 fn xr_grab_demo_evaluates_with_editor_settings_and_grabbable_playground() {

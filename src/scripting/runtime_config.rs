@@ -241,6 +241,12 @@ pub fn build_mittens_runtime() -> Result<MittensRuntime, mms::RuntimeSpecError> 
                     host_method(
                         component,
                         canonical,
+                        "local_bounds",
+                        method(vec![], mms::ValueType::Any),
+                    );
+                    host_method(
+                        component,
+                        canonical,
                         "update_transform",
                         method(vec![mms::ValueType::Array; 3], mms::ValueType::Null),
                     );

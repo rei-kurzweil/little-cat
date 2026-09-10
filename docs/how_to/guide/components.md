@@ -57,6 +57,26 @@ Stores local translation, rotation, and scale and the derived world transform us
 Transform {}
 ```
 
+`transform.local_bounds()` returns `{ min = [x, y, z], max = [x, y, z] }`
+for descendant renderable geometry in that transform's local frame. Nested
+transforms are included; the queried root's own position, rotation, and scale
+are excluded. It returns `null` for an empty subtree or while any GLTF import
+or renderable's cached bounds are still pending, rather than a partial box.
+These are cached mesh bounds, not exact bounds of a skinned animation pose.
+
+Keep the model in a dedicated transform if effects, debug visuals, or other
+geometry should not count toward its bounds. Since imported GLTF nodes are
+attached to their transform anchor, query that anchor rather than the GLTF
+component itself. For example, poll until ready and calculate a front-facing
+attachment offset once:
+
+```mms parse-only
+let model_box = model_root.local_bounds()
+if model_box {
+    let front_z = model_box["min"][2] - 0.10
+}
+```
+
 ### `TransformDropComponent`
 <!-- catalog:component source="TransformDropComponent" mms="direct" names="TransformDrop" -->
 Carries transform drop state used when that engine feature is present in a component tree. Use it when a tree needs this state or behavior. Transform and bounds systems; transform update/removal intents and `ParentChanged` are relevant.

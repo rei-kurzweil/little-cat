@@ -48,11 +48,11 @@ stage_box("stage_upper_step", [0.0, -0.24,  5.7], [32.0, 0.28,  0.8], [0.14, 0.1
 stage_box("stage_lower_step", [0.0, -0.56,  6.3], [32.0, 0.36,  0.8], [0.10, 0.10, 0.12])
 stage_box("stage_back_wall",  [0.0,  4.00, -8.35], [32.0, 8.00, 0.35], [0.105, 0.105, 0.12])
 
-T.position(0.0, 2.55, 8.10).scale(5.0, 5.0, 0.08).rotation(0.0, 3.1416, 0.0) {
+T.position(0.0, 2.55, 8.10).scale(1.5, 1.5, 0.08).rotation(0.0, 3.1416, 0.0) {
     name = "stage_mirror"
     Grabbable {}
     R.cube() {
-        Mirror.quality(2048) {}
+        Mirror.quality(1440) {}
         Raycastable.enabled()
     }
 }
@@ -190,12 +190,19 @@ ED.active() {
         .dismount_anchor("[name='left_display_car_dismount']")
         .on_grip() {}
 
+    // Measure once after import; animate within a positioned muzzle frame so
+    // keyframe closures do not need to capture late-loaded placement values.
+    let laser_placement = { ready = false }
+    let laser_half_length = 8.0
+    let muzzle_clearance = 0.10
+    let muzzle_height_fraction = 0.56
+
     let muzzle_flash_emissive = Emissive.off()
     let laser_outer_emissive = Emissive.off()
     let laser_middle_emissive = Emissive.off()
     let laser_core_emissive = Emissive.off()
 
-    let muzzle_flash = T.position(0.0, 3.15, -4.25).scale(0.0, 0.0, 0.0) {
+    let muzzle_flash = T.position(0.0, 0.0, 0.0).scale(0.0, 0.0, 0.0) {
         name = "car_laser_muzzle_flash"
         R.sphere() {
             C.rgba(1.0, 0.22, 0.08, 1.0)
@@ -206,24 +213,24 @@ ED.active() {
 
     // The beam extends along the car's semantic local -Z axis. Nested widths
     // approximate an emissive falloff until a textured beam asset replaces it.
-    let laser_beam_glow = T.position(0.0, 3.15, -12.25)
+    let laser_beam_glow = T.position(0.0, 0.0, 0.0)
         .rotation(-1.5708, 0.0, 0.0).scale(0.0, 0.0, 0.0) {
         name = "laser_beam_glow"
-        T.scale(0.16, 8.0, 1.0) {
+        T.scale(0.16, laser_half_length, 1.0) {
             R.square() {
                 C.rgba(1.0, 0.06, 0.03, 1.0)
                 Opacity.opacity(0.18)
                 laser_outer_emissive
             }
         }
-        T.position(0.0, 0.0, 0.002).scale(0.08, 8.0, 1.0) {
+        T.position(0.0, 0.0, 0.002).scale(0.08, laser_half_length, 1.0) {
             R.square() {
                 C.rgba(1.0, 0.22, 0.08, 1.0)
                 Opacity.opacity(0.38)
                 laser_middle_emissive
             }
         }
-        T.position(0.0, 0.0, 0.004).scale(0.028, 8.0, 1.0) {
+        T.position(0.0, 0.0, 0.004).scale(0.028, laser_half_length, 1.0) {
             R.square() {
                 C.rgba(1.0, 0.88, 0.58, 1.0)
                 Opacity.opacity(0.88)
@@ -235,10 +242,10 @@ ED.active() {
     let laser_shot = Animation.paused().length(0.22) {
         Keyframe.at(0.0) {
             muzzle_flash.update_transform(
-                [0.0, 3.15, -4.25], [0.0, 0.0, 0.0], [0.48, 0.48, 0.48]
+                [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.48, 0.48, 0.48]
             )
             laser_beam_glow.update_transform(
-                [0.0, 3.15, -12.25], [-1.5708, 0.0, 0.0], [1.0, 1.0, 1.0]
+                [0.0, 0.0, -laser_half_length], [-1.5708, 0.0, 0.0], [1.0, 1.0, 1.0]
             )
             muzzle_flash_emissive.set_intensity(8.0)
             laser_outer_emissive.set_intensity(3.0)
@@ -247,10 +254,10 @@ ED.active() {
         }
         Keyframe.at(0.10) {
             muzzle_flash.update_transform(
-                [0.0, 3.15, -4.25], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]
+                [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]
             )
             laser_beam_glow.update_transform(
-                [0.0, 3.15, -12.25], [-1.5708, 0.0, 0.0], [0.0, 0.0, 0.0]
+                [0.0, 0.0, -laser_half_length], [-1.5708, 0.0, 0.0], [0.0, 0.0, 0.0]
             )
             muzzle_flash_emissive.off()
             laser_outer_emissive.off()
@@ -260,7 +267,13 @@ ED.active() {
     }
 
     fn fire_laser() {
-        laser_shot.play()
+        if laser_placement.ready { laser_shot.play() }
+    }
+
+    let laser_origin = T {
+        name = "car_laser_origin"
+        muzzle_flash
+        laser_beam_glow
     }
 
     let car_root = T.position(-19.0, -0.75, -1.5).rotation(0.0, 0.30, 0.0) {
@@ -286,11 +299,14 @@ ED.active() {
             name = "left_display_car_dismount"
         }
 
-        GLTF.new("assets/models/car.glb") {
-            bisket_anime_shading()
+        // Isolate imported geometry from effects and mounting/entry helpers.
+        T {
+            name = "left_display_car_model"
+            GLTF.new("assets/models/car.glb") {
+                bisket_anime_shading()
+            }
         }
-        muzzle_flash
-        laser_beam_glow
+        laser_origin
         laser_shot
     }
     car_root
@@ -328,7 +344,21 @@ ED.active() {
         }
     })
 
+    let car_model = car_root.query("#left_display_car_model")
+    let muzzle_origin = car_root.query("#car_laser_origin")
     on_global("FrameTick", fn(event) {
+        if !laser_placement.ready {
+            let model_box = car_model.local_bounds()
+            if model_box {
+                let x = (model_box["min"][0] + model_box["max"][0]) * 0.5
+                let y = model_box["min"][1] + (model_box["max"][1] - model_box["min"][1]) * muzzle_height_fraction
+                let front_z = model_box["min"][2] - muzzle_clearance
+                muzzle_origin.update_transform(
+                    [x, y, front_z], [0.0, 0.0, 0.0], [1.0, 1.0, 1.0],
+                )
+                laser_placement.ready = true
+            }
+        }
         if vehicle_state.mounted {
             let steering = vehicle_state.left_stick[0]
             let throttle = vehicle_state.left_stick[1]

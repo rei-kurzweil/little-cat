@@ -18,7 +18,7 @@ pub(crate) fn legacy_supports_component_method(component_type: &str, method: &st
     ) || (matches!(component_type, "T" | "Transform" | "transform")
         && matches!(
             method,
-            "update_transform" | "look_at" | "translation" | "trs"
+            "update_transform" | "look_at" | "translation" | "trs" | "local_bounds"
         ))
         || (component_type == "TransformWorld" && method == "trs")
         || (matches!(component_type, "PoseCapturePose" | "pose_capture_pose")
@@ -65,6 +65,62 @@ pub(crate) fn invoke_component_method(
     mut emit_intent: impl FnMut(IntentValue),
 ) -> Result<Value, String> {
     match (component_type, method) {
+        ("T" | "Transform" | "transform", "local_bounds") => {
+            if !args.is_empty() {
+                return Err("local_bounds(): expected no arguments".into());
+            }
+            world
+                .get_component_by_id_as::<TransformComponent>(id)
+                .ok_or_else(|| "local_bounds(): not a TransformComponent".to_string())?;
+            use crate::engine::ecs::component::{
+                BoundsComponent, GLTFComponent, RenderableComponent,
+            };
+            use crate::engine::ecs::system::bounds_system::BoundsSystem;
+            // Never return a partial box while an import or mesh upload is pending.
+            let mut pending = vec![id];
+            while let Some(node) = pending.pop() {
+                if world
+                    .get_component_by_id_as::<GLTFComponent>(node)
+                    .is_some_and(|gltf| !gltf.spawned)
+                {
+                    return Ok(Value::Null);
+                }
+                if world
+                    .get_component_by_id_as::<RenderableComponent>(node)
+                    .is_some()
+                    && !world.children_of(node).iter().any(|&child| {
+                        world
+                            .get_component_by_id_as::<BoundsComponent>(child)
+                            .is_some()
+                    })
+                {
+                    return Ok(Value::Null);
+                }
+                pending.extend(world.children_of(node).iter().copied());
+            }
+            let Some(bounds) = BoundsSystem::measure_cached_renderable_subtree_bounds(
+                world, id, |_| false,
+            ) else {
+                return Ok(Value::Null);
+            };
+            let vector = |values: [f32; 3]| {
+                Value::Array(
+                    values
+                        .into_iter()
+                        .map(|v| Value::Number(v as f64))
+                        .collect(),
+                )
+            };
+            Ok(Value::Map(
+                [
+                    ("min".to_string(), vector(bounds.min)),
+                    ("max".to_string(), vector(bounds.max)),
+                ]
+                .into_iter()
+                .collect(),
+            ))
+        }
+
         ("A" | "Animation" | "animation", method @ ("play" | "loop_anim" | "pause")) => {
             if !args.is_empty() {
                 return Err(format!("{method}(): expected no arguments, got {args:?}"));
@@ -683,6 +739,63 @@ mod tests {
     use crate::engine::ecs::component::{
         AudioBandPassFilterComponent, ColorComponent, RayCastComponent, TransformComponent,
     };
+
+    #[test]
+    fn transform_local_bounds_waits_for_complete_geometry_and_uses_root_local_space() {
+        use crate::engine::ecs::component::{BoundsComponent, GLTFComponent, RenderableComponent};
+        use crate::engine::graphics::bounds::Aabb;
+        let mut world = World::default();
+        let root = world.add_component(
+            TransformComponent::new()
+                .with_position(100.0, 0.0, 0.0)
+                .with_scale(5.0, 5.0, 5.0),
+        );
+        let child = world.add_component(
+            TransformComponent::new()
+                .with_position(2.0, 3.0, -4.0)
+                .with_scale(2.0, 1.0, 3.0),
+        );
+        world.add_child(root, child).unwrap();
+        let mesh = world.add_component(RenderableComponent::cube());
+        world.add_child(child, mesh).unwrap();
+        let read = |world: &mut World| {
+            invoke_component_method(world, root, "Transform", "local_bounds", &[], |_| {
+                panic!("read-only query")
+            })
+        };
+        assert_eq!(read(&mut world).unwrap(), Value::Null);
+        let bounds = world.add_component(BoundsComponent::new(Aabb {
+            min: [-1.0, 0.0, -1.0],
+            max: [1.0, 2.0, 1.0],
+        }));
+        world.add_child(mesh, bounds).unwrap();
+        let Value::Map(measured) = read(&mut world).unwrap() else {
+            panic!("bounds map expected")
+        };
+        assert_eq!(
+            measured["min"],
+            Value::Array(vec![
+                Value::Number(0.0),
+                Value::Number(3.0),
+                Value::Number(-7.0)
+            ])
+        );
+        assert_eq!(
+            measured["max"],
+            Value::Array(vec![
+                Value::Number(4.0),
+                Value::Number(5.0),
+                Value::Number(-1.0)
+            ])
+        );
+        let loading = world.add_component(GLTFComponent::new("pending.glb"));
+        world.add_child(root, loading).unwrap();
+        assert_eq!(
+            read(&mut world).unwrap(),
+            Value::Null,
+            "never return partial import bounds"
+        );
+    }
 
     #[test]
     fn anime_shading_live_api_normalizes_reads_back_and_rejects_wrong_models() {
