@@ -12,6 +12,12 @@ must not alias `[T]`.
 
 ## Records and named structs
 
+Named structs use a shared declaration-defined slot layout, not per-instance
+maps. Statically resolved member access uses slot offsets, and construction
+checks required fields and known field types before execution. See the
+[fixed-layout structs task](../../../../docs/task/mms-fixed-layout-structs.md)
+for runtime identity, dynamic-boundary checks, and the first verifiable slice.
+
 `{ field: Type }` is an explicit structural anonymous-record type. Anonymous
 table and named allocation values both use equals-style fields:
 
@@ -42,4 +48,3 @@ expression parser. Smoke test: validate a fixed pair, a variable sequence, a
 record intersection, a nullable, and a union at annotated boundaries. Exit
 gate: validation is recursive, length-aware, cycle-safe, and reports the
 failing path such as `cup.additives[1]`.
-

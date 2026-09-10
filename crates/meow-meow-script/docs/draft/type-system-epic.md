@@ -43,7 +43,12 @@ commas.
    unparse the source contract above. Exit gate: all four annotation sites
    retain spans and optional annotations without changing untyped programs.
 3. **Nominal structs and modules.** Add declarations, imports, allocations,
-   and declaration identity retained by instances. Dependency: slice 2 plus
+   and declaration identity retained by instances. Use shared fixed field
+   layouts and resolved slot access, with construction-shape and known-type
+   diagnostics before evaluation; see the
+   [first local struct slice](../../../../docs/task/mms-fixed-layout-structs.md).
+   This requires focused static checks here even though general inference and
+   strict mode remain in slice 5. Dependency: slice 2 plus
    the existing module/table runtime. Smoke test: import `coffee`, allocate it,
    and observe that a same-shaped declaration is not interchangeable. Exit
    gate: exported type bindings resolve to one declaration identity across a
@@ -64,4 +69,3 @@ The syntax details are in [type-expressions.md](type-expressions.md),
 [typed-declarations-and-functions.md](typed-declarations-and-functions.md),
 [compound-types.md](compound-types.md), and
 [checker-and-registry.md](checker-and-registry.md).
-

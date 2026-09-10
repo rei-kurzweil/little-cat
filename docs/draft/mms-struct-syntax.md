@@ -3,6 +3,8 @@
 > Canonical typed syntax and nominal-identity decisions now live in the
 > [crate-local type-system epic](../../crates/meow-meow-script/docs/draft/type-system-epic.md).
 > This earlier task remains implementation history for the table runtime.
+> The former typed-table representation is superseded by
+> [fixed-layout structs](../task/mms-fixed-layout-structs.md).
 
 ## Goal
 

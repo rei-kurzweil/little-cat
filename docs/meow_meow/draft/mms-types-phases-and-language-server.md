@@ -2,6 +2,11 @@
 
 Status: draft
 
+> 2026-09-09: Statements below that structs must reuse the table runtime
+> representation are superseded by
+> [fixed-layout structs](../../task/mms-fixed-layout-structs.md). Named structs
+> use shared schemas and fixed field slots; anonymous tables remain maps.
+
 ## Why this doc exists
 
 There are several related MMS efforts in flight:

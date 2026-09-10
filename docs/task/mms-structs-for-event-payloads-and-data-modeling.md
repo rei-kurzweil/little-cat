@@ -4,6 +4,12 @@ Date: 2026-06-29
 
 Status: active design task
 
+> 2026-09-09: The named-struct runtime direction below is superseded by
+> [MMS fixed-layout structs](mms-fixed-layout-structs.md). Named structs will
+> share declaration-defined field slots and validate construction; they are
+> not per-instance maps with type sugar. This document retains the earlier
+> table/event motivation and staging history.
+
 ## Why this task exists
 
 The immediate symptom is ugly XR handler payloads in MMS:
