@@ -288,6 +288,7 @@ fn main() {
             &mut universe.world,
             &mut universe.visuals,
             &mut systems.skinned_mesh,
+            &mut systems.renderable,
             &mut universe.command_queue,
             0.0,
         );
@@ -692,6 +693,7 @@ fn collect_joint_transforms(
 ) -> Vec<(usize, engine::ecs::ComponentId)> {
     fn find_first_skin_id_in_subtree(
         world: &engine::ecs::World,
+        skinned_mesh: &engine::ecs::system::SkinnedMeshSystem,
         root: engine::ecs::ComponentId,
     ) -> Option<engine::graphics::SkinId> {
         let mut stack = vec![root];
@@ -711,7 +713,7 @@ fn collect_joint_transforms(
         None
     }
 
-    let Some(skin_id) = find_first_skin_id_in_subtree(world, root) else {
+    let Some(skin_id) = find_first_skin_id_in_subtree(world, skinned_mesh, root) else {
         return Vec::new();
     };
     let Some(skin) = visuals.skin(skin_id) else {

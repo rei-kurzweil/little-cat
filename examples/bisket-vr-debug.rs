@@ -1101,6 +1101,7 @@ fn tick_gltf(universe: &mut engine::Universe) {
         &mut universe.world,
         &mut universe.visuals,
         &mut systems.skinned_mesh,
+        &mut systems.renderable,
         &mut universe.command_queue,
         0.0,
     );
