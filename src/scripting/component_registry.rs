@@ -2819,6 +2819,9 @@ fn apply_call(
     if let Some(tracker) = world.get_component_by_id_as_mut::<XREyeTrackingComponent>(id) {
         match method {
             "priority" => tracker.priority = eye_tracking_priority_arg(args)?,
+            "enable_pupil_direction_tracking" => {
+                tracker.enable_pupil_direction_tracking = arg_bool(args, 0)?;
+            }
             "head_rotation_compensation" => {
                 tracker.head_rotation_compensation =
                     crate::engine::ecs::component::HeadRotationCompensation::parse(arg_str(
@@ -2844,6 +2847,9 @@ fn apply_call(
     }
     if let Some(tracker) = world.get_component_by_id_as_mut::<VRChatOSCEyeTrackingComponent>(id) {
         match method {
+            "enable_pupil_direction_tracking" => {
+                tracker.enable_pupil_direction_tracking = arg_bool(args, 0)?;
+            }
             "head_rotation_compensation" => {
                 tracker.head_rotation_compensation =
                     crate::engine::ecs::component::HeadRotationCompensation::parse(arg_str(
@@ -2870,6 +2876,9 @@ fn apply_call(
     }
     if let Some(tracker) = world.get_component_by_id_as_mut::<XREyeTrackingHtcComponent>(id) {
         match method {
+            "enable_pupil_direction_tracking" => {
+                tracker.enable_pupil_direction_tracking = arg_bool(args, 0)?;
+            }
             "head_rotation_compensation" => {
                 tracker.head_rotation_compensation =
                     crate::engine::ecs::component::HeadRotationCompensation::parse(arg_str(
@@ -4461,6 +4470,35 @@ mod tests {
                 .head_rotation_compensation,
             crate::engine::ecs::component::HeadRotationCompensation::CancelHeadRotation,
         );
+    }
+
+    #[test]
+    fn pupil_direction_tracking_builder_is_shared_by_generic_and_direct_trackers() {
+        let mut world = World::default();
+        for component in ["XREyeTracking", "VRChatOSCEyeTracking", "HTCEyeTracking"] {
+            let id = create_component(&mut world, component, Some("on"), &[]).unwrap();
+            apply_call(
+                &mut world,
+                id,
+                "enable_pupil_direction_tracking",
+                &[Value::Bool(true)],
+            )
+            .unwrap();
+            let enabled = world
+                .get_component_by_id_as::<XREyeTrackingComponent>(id)
+                .map(|tracker| tracker.enable_pupil_direction_tracking)
+                .or_else(|| {
+                    world
+                        .get_component_by_id_as::<VRChatOSCEyeTrackingComponent>(id)
+                        .map(|tracker| tracker.enable_pupil_direction_tracking)
+                })
+                .or_else(|| {
+                    world
+                        .get_component_by_id_as::<HTCEyeTrackingComponent>(id)
+                        .map(|tracker| tracker.enable_pupil_direction_tracking)
+                });
+            assert_eq!(enabled, Some(true), "{component}");
+        }
     }
 
     #[test]

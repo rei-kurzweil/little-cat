@@ -124,6 +124,13 @@ pub fn combined_eye_rotation_limits(
 #[derive(Debug, Clone)]
 pub struct XREyeTrackingComponent {
     pub priority: Vec<EyeTrackingSource>,
+    /// Whether retained gaze samples may rotate mapped avatar eye bones.
+    ///
+    /// This deliberately does not affect transport polling, samples, events,
+    /// or closure-driven blink morphs.  "Pupil direction" is the historical
+    /// user-facing name for the mapped-eye-bone rotation path; it is not the
+    /// HTC 2D pupil-position signal.
+    pub enable_pupil_direction_tracking: bool,
     pub head_rotation_compensation: HeadRotationCompensation,
     pub rotation_limits: Option<EyeRotationLimits>,
     pub rotation_limits_per_eye: [Option<EyeRotationLimits>; 2],
@@ -138,6 +145,7 @@ impl XREyeTrackingComponent {
     pub fn on() -> Self {
         Self {
             priority: EyeTrackingSource::DEFAULT_PRIORITY.to_vec(),
+            enable_pupil_direction_tracking: true,
             head_rotation_compensation: HeadRotationCompensation::Off,
             rotation_limits: None,
             rotation_limits_per_eye: [None; 2],
@@ -159,6 +167,11 @@ impl XREyeTrackingComponent {
 
     pub fn with_priority(mut self, priority: Vec<EyeTrackingSource>) -> Self {
         self.priority = priority;
+        self
+    }
+
+    pub fn with_enable_pupil_direction_tracking(mut self, enabled: bool) -> Self {
+        self.enable_pupil_direction_tracking = enabled;
         self
     }
 
@@ -218,12 +231,38 @@ impl Component for XREyeTrackingComponent {
             },
         );
     }
+
+    fn to_mms_ast(
+        &self,
+        _world: &crate::engine::ecs::World,
+    ) -> crate::scripting::ast::ComponentExpression {
+        use crate::engine::ecs::component::ce_helpers::*;
+        let mut ce = ce_call("XREyeTracking", "on", vec![]);
+        if self.priority != EyeTrackingSource::DEFAULT_PRIORITY {
+            let priority = self
+                .priority
+                .iter()
+                .map(|source| match source {
+                    EyeTrackingSource::Htc => s("htc"),
+                    EyeTrackingSource::VrChatOsc => s("vrchat_osc"),
+                    EyeTrackingSource::MediaPipe => s("mediapipe"),
+                })
+                .collect();
+            ce = ce.with_call("priority", vec![array(priority)]);
+        }
+        if !self.enable_pupil_direction_tracking {
+            ce = ce.with_call("enable_pupil_direction_tracking", vec![b(false)]);
+        }
+        ce
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct VRChatOSCEyeTrackingComponent {
     pub host: String,
     pub port: u16,
+    /// See [`XREyeTrackingComponent::enable_pupil_direction_tracking`].
+    pub enable_pupil_direction_tracking: bool,
     pub head_rotation_compensation: HeadRotationCompensation,
     pub rotation_limits: Option<EyeRotationLimits>,
     pub rotation_limits_per_eye: [Option<EyeRotationLimits>; 2],
@@ -235,6 +274,7 @@ impl VRChatOSCEyeTrackingComponent {
         Self {
             host: "127.0.0.1".into(),
             port: 9000,
+            enable_pupil_direction_tracking: true,
             head_rotation_compensation: HeadRotationCompensation::Off,
             rotation_limits: None,
             rotation_limits_per_eye: [None; 2],
@@ -246,6 +286,7 @@ impl VRChatOSCEyeTrackingComponent {
         Self {
             host: host.into(),
             port,
+            enable_pupil_direction_tracking: true,
             head_rotation_compensation: HeadRotationCompensation::Off,
             rotation_limits: None,
             rotation_limits_per_eye: [None; 2],
@@ -255,6 +296,10 @@ impl VRChatOSCEyeTrackingComponent {
     }
     pub fn with_head_rotation_compensation(mut self, value: HeadRotationCompensation) -> Self {
         self.head_rotation_compensation = value;
+        self
+    }
+    pub fn with_enable_pupil_direction_tracking(mut self, enabled: bool) -> Self {
+        self.enable_pupil_direction_tracking = enabled;
         self
     }
     pub fn with_rotation_limits(mut self, values: [f32; 4]) -> Self {
@@ -305,12 +350,34 @@ impl Component for VRChatOSCEyeTrackingComponent {
             },
         );
     }
+
+    fn to_mms_ast(
+        &self,
+        _world: &crate::engine::ecs::World,
+    ) -> crate::scripting::ast::ComponentExpression {
+        use crate::engine::ecs::component::ce_helpers::*;
+        let mut ce = if self.host == "127.0.0.1" && self.port == 9000 {
+            ce_call("VRChatOSCEyeTracking", "on", vec![])
+        } else {
+            ce_call(
+                "VRChatOSCEyeTracking",
+                "listen",
+                vec![s(&self.host), num(self.port as f64)],
+            )
+        };
+        if !self.enable_pupil_direction_tracking {
+            ce = ce.with_call("enable_pupil_direction_tracking", vec![b(false)]);
+        }
+        ce
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct HTCEyeTrackingComponent {
     pub host: String,
     pub port: u16,
+    /// See [`XREyeTrackingComponent::enable_pupil_direction_tracking`].
+    pub enable_pupil_direction_tracking: bool,
     pub head_rotation_compensation: HeadRotationCompensation,
     pub rotation_limits: Option<EyeRotationLimits>,
     pub rotation_limits_per_eye: [Option<EyeRotationLimits>; 2],
@@ -322,6 +389,7 @@ impl HTCEyeTrackingComponent {
         Self {
             host: "127.0.0.1".into(),
             port: 9002,
+            enable_pupil_direction_tracking: true,
             head_rotation_compensation: HeadRotationCompensation::Off,
             rotation_limits: None,
             rotation_limits_per_eye: [None; 2],
@@ -333,6 +401,7 @@ impl HTCEyeTrackingComponent {
         Self {
             host: host.into(),
             port,
+            enable_pupil_direction_tracking: true,
             head_rotation_compensation: HeadRotationCompensation::Off,
             rotation_limits: None,
             rotation_limits_per_eye: [None; 2],
@@ -342,6 +411,10 @@ impl HTCEyeTrackingComponent {
     }
     pub fn with_head_rotation_compensation(mut self, value: HeadRotationCompensation) -> Self {
         self.head_rotation_compensation = value;
+        self
+    }
+    pub fn with_enable_pupil_direction_tracking(mut self, enabled: bool) -> Self {
+        self.enable_pupil_direction_tracking = enabled;
         self
     }
     pub fn with_rotation_limits(mut self, values: [f32; 4]) -> Self {
@@ -391,6 +464,26 @@ impl Component for HTCEyeTrackingComponent {
                 component_id: component,
             },
         );
+    }
+
+    fn to_mms_ast(
+        &self,
+        _world: &crate::engine::ecs::World,
+    ) -> crate::scripting::ast::ComponentExpression {
+        use crate::engine::ecs::component::ce_helpers::*;
+        let mut ce = if self.host == "127.0.0.1" && self.port == 9002 {
+            ce_call("HTCEyeTracking", "on", vec![])
+        } else {
+            ce_call(
+                "HTCEyeTracking",
+                "listen",
+                vec![s(&self.host), num(self.port as f64)],
+            )
+        };
+        if !self.enable_pupil_direction_tracking {
+            ce = ce.with_call("enable_pupil_direction_tracking", vec![b(false)]);
+        }
+        ce
     }
 }
 
@@ -460,7 +553,10 @@ pub type XREyeTrackingHtcComponent = HTCEyeTrackingComponent;
 
 #[cfg(test)]
 mod tests {
-    use super::EyeTrackingSource;
+    use super::{
+        EyeTrackingSource, HTCEyeTrackingComponent, VRChatOSCEyeTrackingComponent,
+        XREyeTrackingComponent,
+    };
 
     #[test]
     fn eye_tracking_source_names_and_default_priority_are_stable() {
@@ -485,5 +581,41 @@ mod tests {
                 EyeTrackingSource::MediaPipe,
             ]
         );
+    }
+
+    #[test]
+    fn pupil_direction_tracking_defaults_on_and_can_be_disabled_per_tracker() {
+        assert!(XREyeTrackingComponent::on().enable_pupil_direction_tracking);
+        assert!(VRChatOSCEyeTrackingComponent::on().enable_pupil_direction_tracking);
+        assert!(HTCEyeTrackingComponent::on().enable_pupil_direction_tracking);
+        assert!(
+            !XREyeTrackingComponent::on()
+                .with_enable_pupil_direction_tracking(false)
+                .enable_pupil_direction_tracking
+        );
+    }
+
+    #[test]
+    fn disabled_pupil_direction_tracking_serializes_explicitly() {
+        use crate::engine::ecs::component::Component;
+
+        let world = crate::engine::ecs::World::default();
+        for text in [
+            crate::scripting::unparser::unparse_component(
+                &XREyeTrackingComponent::on()
+                    .with_enable_pupil_direction_tracking(false)
+                    .to_mms_ast(&world),
+            ),
+            crate::scripting::unparser::unparse_component(
+                &HTCEyeTrackingComponent::on()
+                    .with_enable_pupil_direction_tracking(false)
+                    .to_mms_ast(&world),
+            ),
+        ] {
+            assert!(
+                text.contains("enable_pupil_direction_tracking(false)"),
+                "{text}"
+            );
+        }
     }
 }

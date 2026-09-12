@@ -11,6 +11,8 @@ import { truss } from "../assets/components/truss.mms"
 import { bisket_anime_shading } from "../assets/components/materials/bisket_anime_shading.mms"
 import { bisket_shirt_physics } from "../assets/components/secondary_motion/bisket-shirt-physics.mms"
 import { bisket_colliders } from "../assets/components/colliders/bisket.mms"
+import { bisket_humanoid_bone_map } from "../assets/components/humanoid_bone_maps/bisket.mms"
+import { ambient_eye_saccades } from "../assets/components/animations/ambient_eye_saccades.mms"
 import { suspended_platform } from "../assets/components/platforms/suspended_platform.mms"
 
 // Optional sources stay neutral when the runtime or hardware is unavailable.
@@ -20,6 +22,9 @@ let voice_level = Amplitude.rolling_window(0.080).from(microphone) {}
 RendererSettings { window_size(1440, 810) }
 BGC.rgba(0.055, 0.055, 0.060, 1.0)
 AL.rgb(0.13, 0.13, 0.15)
+// The default engine clock is 120 BPM, i.e. two beats per second. Keep this
+// explicit because ambient_eye_saccades authors its keyframe times in seconds.
+Clock.bpm(120.0)
 
 RenderGraph {
     EmissivePass { BlurPass { radius_ndc(0.025) half_res(true) } }
@@ -129,7 +134,19 @@ ED.active() {
 
             T {
                 name = "bisket_xr_driver"
-                AVC {
+                let bisket_avatar = GLTF.new("assets/models/bisket.glb") {
+                    bisket_anime_shading()
+                    bisket_humanoid_bone_map()
+                    MorphTargetMap.new()
+                        .slot("left_eye_blink", "Fcl_EYE_Close_L")
+                        .slot("right_eye_blink", "Fcl_EYE_Close_R")
+                        .slot("viseme_aa", "Fcl_MTH_A")
+                    EM.on()
+                    PoseCapture { label("Bisket") asset_name("bisket") }
+                    bisket_colliders()
+                    bisket_shirt_physics(false)
+                }
+                let bisket_avatar_control = AVC {
                     mouth_open_from_amplitude(voice_level)
                     mouth_open_rms_floor(0.005)
                     mouth_open_rms_ceiling(0.09)
@@ -142,17 +159,7 @@ ED.active() {
                     hand_rotation_smoothing(220.0)
 
                     T {
-                        GLTF.new("assets/models/bisket.glb") {
-                            bisket_anime_shading()
-                            MorphTargetMap.new()
-                                .slot("left_eye_blink", "Fcl_EYE_Close_L")
-                                .slot("right_eye_blink", "Fcl_EYE_Close_R")
-                                .slot("viseme_aa", "Fcl_MTH_A")
-                            EM.on()
-                            PoseCapture { label("Bisket") asset_name("bisket") }
-                            bisket_colliders()
-                            bisket_shirt_physics(false)
-                        }
+                        bisket_avatar
                     }
 
                     // Rider-side anchor. AVC reparents this wrapper beneath the
@@ -161,7 +168,9 @@ ED.active() {
                         name = "bisket_rider_cxr_anchor"
                         CXR { Pointer {} }
                     }
-                    XREyeTracking.on()
+                    // HTC eye tracking retains closure samples for blink morphs,
+                    // while authored animation owns the eye-bone direction.
+                    HTCEyeTracking.on().enable_pupil_direction_tracking(false)
 
                     XRHand.new(true, "Left", "GripAim").laser() {
                         T {
@@ -178,6 +187,20 @@ ED.active() {
                         }
                     }
                 }
+                bisket_avatar_control
+
+                // The explicit Bisket humanoid map above declares these two
+                // skin-joint targets. Query only this GLTF instance after it
+                // finishes importing, so another avatar cannot be animated.
+                on(bisket_avatar, "GLTFInitialized", fn(event) {
+                    let left_eye = event.gltf.query("[name='J_Adj_L_FaceEye']")
+                    let right_eye = event.gltf.query("[name='J_Adj_R_FaceEye']")
+                    if left_eye && right_eye {
+                        bisket_avatar_control.attach(ambient_eye_saccades(left_eye, right_eye, 2.0))
+                    } else {
+                        print("GLTFInitialized: Bisket mapped eye bones were not found; ambient eye animation was not attached")
+                    }
+                })
             }
         }
     }

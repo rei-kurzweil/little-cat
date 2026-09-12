@@ -253,6 +253,12 @@ pub fn build_mittens_runtime() -> Result<MittensRuntime, mms::RuntimeSpecError> 
                     host_method(
                         component,
                         canonical,
+                        "rest_relative_rotation",
+                        method(vec![mms::ValueType::Array], mms::ValueType::Null),
+                    );
+                    host_method(
+                        component,
+                        canonical,
                         "look_at",
                         method(vec![mms::ValueType::Array], mms::ValueType::Null),
                     );
@@ -604,6 +610,7 @@ pub fn build_mittens_runtime() -> Result<MittensRuntime, mms::RuntimeSpecError> 
                         component_signature([mms::ValueType::String, mms::ValueType::U16]),
                     );
                     component.builder_call("priority", any(1));
+                    component.builder_call("enable_pupil_direction_tracking", booleans(1));
                     component.builder_call("head_rotation_compensation", strings(1));
                     component.builder_call("rotation_limits", floats(4));
                     component.builder_call("rotation_limits_per_eye", any(2));
@@ -614,6 +621,7 @@ pub fn build_mittens_runtime() -> Result<MittensRuntime, mms::RuntimeSpecError> 
                         "listen",
                         component_signature([mms::ValueType::String, mms::ValueType::U16]),
                     );
+                    component.builder_call("enable_pupil_direction_tracking", booleans(1));
                     component.builder_call("head_rotation_compensation", strings(1));
                     component.builder_call("rotation_limits", floats(4));
                     component.builder_call("rotation_limits_per_eye", any(2));

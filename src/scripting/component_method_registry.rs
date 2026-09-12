@@ -1,8 +1,8 @@
 use crate::engine::ecs::component::{
     AnimationComponent, AnimationState, AnimationStepDirection, AudioBandPassFilterComponent,
-    AudioInputComponent, EmissiveComponent, InputComponent, InputXRGamepadComponent,
-    RayCastComponent, ShadingComponent, ShadingModel, SliderComponent, TextComponent,
-    TransformComponent, TransitionComponent,
+    AudioInputComponent, BoneRestPoseComponent, EmissiveComponent, InputComponent,
+    InputXRGamepadComponent, RayCastComponent, ShadingComponent, ShadingModel, SliderComponent,
+    TextComponent, TransformComponent, TransitionComponent,
 };
 use crate::engine::ecs::{ComponentId, IntentValue, PoseApplyMode, World};
 use crate::engine::transform::TransformSpace;
@@ -18,7 +18,12 @@ pub(crate) fn legacy_supports_component_method(component_type: &str, method: &st
     ) || (matches!(component_type, "T" | "Transform" | "transform")
         && matches!(
             method,
-            "update_transform" | "look_at" | "translation" | "trs" | "local_bounds"
+            "update_transform"
+                | "rest_relative_rotation"
+                | "look_at"
+                | "translation"
+                | "trs"
+                | "local_bounds"
         ))
         || (component_type == "TransformWorld" && method == "trs")
         || (matches!(component_type, "PoseCapturePose" | "pose_capture_pose")
@@ -110,9 +115,9 @@ pub(crate) fn invoke_component_method(
                 }
                 pending.extend(world.children_of(node).iter().copied());
             }
-            let Some(bounds) = BoundsSystem::measure_cached_renderable_subtree_bounds(
-                world, id, |_| false,
-            ) else {
+            let Some(bounds) =
+                BoundsSystem::measure_cached_renderable_subtree_bounds(world, id, |_| false)
+            else {
                 return Ok(Value::Null);
             };
             let vector = |values: [f32; 3]| {
@@ -527,6 +532,40 @@ pub(crate) fn invoke_component_method(
                     .with_rotation_euler(rotation_euler[0], rotation_euler[1], rotation_euler[2])
                     .transform
                     .rotation,
+                scale,
+            });
+            Ok(Value::Null)
+        }
+        ("T" | "Transform" | "transform", "rest_relative_rotation") => {
+            let [pitch, yaw, roll] = match args {
+                [rotation] => value_as_f32_array::<3>(rotation)?,
+                other => {
+                    return Err(format!(
+                        "rest_relative_rotation: expected one vec3 Euler-radians argument, got {other:?}"
+                    ));
+                }
+            };
+            let current = world
+                .get_component_by_id_as::<TransformComponent>(id)
+                .ok_or_else(|| "rest_relative_rotation(): not a TransformComponent".to_string())?
+                .transform;
+            let rest = world.children_of(id).iter().find_map(|child| {
+                world
+                    .get_component_by_id_as::<BoneRestPoseComponent>(*child)
+                    .copied()
+            });
+            let (translation, rotation, scale) = rest.map_or(
+                (current.translation, current.rotation, current.scale),
+                |rest| (rest.translation, rest.rotation, rest.scale),
+            );
+            let offset = TransformComponent::new()
+                .with_rotation_euler(pitch, yaw, roll)
+                .transform
+                .rotation;
+            emit_intent(IntentValue::UpdateTransform {
+                component_id: id,
+                translation,
+                rotation_quat_xyzw: crate::utils::math::quat_mul(offset, rotation),
                 scale,
             });
             Ok(Value::Null)

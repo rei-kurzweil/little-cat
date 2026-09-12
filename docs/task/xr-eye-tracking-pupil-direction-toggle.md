@@ -12,7 +12,7 @@ XREyeTracking.on().enable_pupil_direction_tracking(false)
 XREyeTrackingHTC.on().enable_pupil_direction_tracking(false)
 ```
 
-The setting defaults to `false`. Disabling direction tracking must not disable
+The setting defaults to `true` to preserve existing scene behavior. Disabling direction tracking must not disable
 the transport, event emission, retained samples, or eye-open amount tracking.
 In particular, mapped left/right blink morphs must continue to follow retained
 closure/openness samples.
@@ -38,7 +38,7 @@ therefore need consistent serialization and builder behavior.
 
 1. Add `enable_pupil_direction_tracking: bool` to
    `XREyeTrackingComponent` and `HTCEyeTrackingComponent`, initialized to
-   `false` by `on()`, `listen(...)`, and `Default`.
+   `true` by `on()`, `listen(...)`, and `Default`.
 2. Add Rust builders and MMS method dispatch for
    `.enable_pupil_direction_tracking(bool)` on `XREyeTracking` and
    `XREyeTrackingHTC`. Apply the same behavior to compatibility names that map
@@ -57,8 +57,8 @@ therefore need consistent serialization and builder behavior.
 
 ## Tests
 
-- Constructors and deserialization default the flag to false.
-- MMS round-trip preserves `true` for both component spellings.
+- Constructors and deserialization default the flag to true.
+- MMS round-trip preserves the non-default `false` for both component spellings.
 - With the flag false and both gaze and closure samples present, eye bones stay
   at rest while blink morph drivers update.
 - With the flag true, current per-eye gaze rotation behavior remains intact.
@@ -70,7 +70,7 @@ therefore need consistent serialization and builder behavior.
 
 ## Acceptance criteria
 
-- Pupil/eye-bone direction tracking is opt-in and defaults off.
+- Pupil/eye-bone direction tracking remains enabled by default and can be disabled per tracker.
 - Eye-open amount tracking remains active when direction tracking is off.
 - Disabling direction never leaves stale eye-bone rotation behind.
 - Generic and HTC tracker APIs behave consistently and round-trip through MMS.
@@ -84,4 +84,3 @@ therefore need consistent serialization and builder behavior.
 - `src/scripting/runtime_config.rs`
 - `src/scripting/tests.rs`
 - `docs/how_to/guide/components.md`
-

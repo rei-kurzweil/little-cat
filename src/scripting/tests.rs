@@ -1478,6 +1478,41 @@ fn live_eval_imported_factory_component_supports_top_level_update_transform() {
 }
 
 #[test]
+fn ambient_eye_saccade_factory_materializes_a_32_keyframe_loop() {
+    let src = r##"
+        import { ambient_eye_saccades } from "../assets/components/animations/ambient_eye_saccades.mms"
+
+        let left_eye = T { name = "left_eye" }
+        let right_eye = T { name = "right_eye" }
+        left_eye
+        right_eye
+        ambient_eye_saccades(left_eye, right_eye, 1.0)
+    "##;
+
+    let mut world = World::default();
+    let mut rx = RxWorld::default();
+    let mut emit = CommandQueue::new();
+    let out = MeowMeowRunner::eval_with_world_at_path(
+        src,
+        Some("examples/_mms_test_ambient_eye_saccades.mms"),
+        &mut world,
+        &mut rx,
+        &mut emit,
+    );
+    assert!(out.errors.is_empty(), "errors: {:?}", out.errors);
+
+    let animation = world
+        .all_components()
+        .find(|id| {
+            world
+                .get_component_by_id_as::<crate::engine::ecs::component::AnimationComponent>(*id)
+                .is_some()
+        })
+        .expect("ambient eye factory should return an Animation");
+    assert_eq!(world.children_of(animation).len(), 32);
+}
+
+#[test]
 fn live_eval_local_trs_value_round_trip_is_copied_and_quaternion_preserving() {
     let src = r##"
         let source = T.position(1.0, 2.0, 3.0)
@@ -8854,14 +8889,188 @@ fn draggable_plane_builder_accepts_object_camera_and_world_axes() {
 }
 
 #[test]
+fn mittens_corp_desktop_evaluates_with_a_desktop_camera_and_no_xr_player_components() {
+    use crate::engine::ecs::component::{
+        AvatarControlComponent, Camera3DComponent, CameraXRComponent, ControllerXRComponent,
+        GLTFComponent, HTCEyeTrackingComponent, HumanoidBoneMapComponent, InputComponent,
+        InputXRComponent, InputXRGamepadComponent, MountableComponent, RiderComponent,
+        VRChatOSCEyeTrackingComponent, XREyeTrackingComponent, XrComponent,
+    };
+
+    let mut world = World::default();
+    let mut rx = RxWorld::default();
+    let mut queue = CommandQueue::new();
+    let mut assets = RenderAssets::new();
+    let (_session, output) = RuntimeSpecSession::start_at_path(
+        include_str!("../../examples/mittens-corp-desktop.mms"),
+        "examples/mittens-corp-desktop.mms",
+        &mut world,
+        &mut rx,
+        Some(&mut assets),
+        &mut queue,
+    )
+    .expect("mittens-corp desktop scene should start");
+    assert!(output.errors.is_empty(), "{:?}", output.errors);
+
+    let count = |predicate: &dyn Fn(crate::engine::ecs::ComponentId) -> bool| {
+        world.all_components().filter(|id| predicate(*id)).count()
+    };
+    assert_eq!(
+        count(&|id| world.get_component_by_id_as::<InputComponent>(id).is_some()),
+        1
+    );
+    assert_eq!(
+        count(&|id| world
+            .get_component_by_id_as::<Camera3DComponent>(id)
+            .is_some()),
+        1
+    );
+    assert!(world.all_components().any(|id| {
+        world
+            .get_component_by_id_as::<AvatarControlComponent>(id)
+            .is_some()
+    }));
+    for absent in [
+        count(&|id| world.get_component_by_id_as::<XrComponent>(id).is_some()),
+        count(&|id| {
+            world
+                .get_component_by_id_as::<InputXRComponent>(id)
+                .is_some()
+        }),
+        count(&|id| {
+            world
+                .get_component_by_id_as::<InputXRGamepadComponent>(id)
+                .is_some()
+        }),
+        count(&|id| {
+            world
+                .get_component_by_id_as::<CameraXRComponent>(id)
+                .is_some()
+        }),
+        count(&|id| {
+            world
+                .get_component_by_id_as::<ControllerXRComponent>(id)
+                .is_some()
+        }),
+        count(&|id| {
+            world
+                .get_component_by_id_as::<XREyeTrackingComponent>(id)
+                .is_some()
+        }),
+        count(&|id| {
+            world
+                .get_component_by_id_as::<VRChatOSCEyeTrackingComponent>(id)
+                .is_some()
+        }),
+        count(&|id| {
+            world
+                .get_component_by_id_as::<HTCEyeTrackingComponent>(id)
+                .is_some()
+        }),
+    ] {
+        assert_eq!(absent, 0);
+    }
+    assert_eq!(
+        count(&|id| world.get_component_by_id_as::<RiderComponent>(id).is_some()),
+        1
+    );
+    assert_eq!(
+        count(&|id| {
+            world
+                .get_component_by_id_as::<MountableComponent>(id)
+                .is_some()
+        }),
+        1
+    );
+
+    let bisket = world
+        .all_components()
+        .find(|&id| {
+            world
+                .get_component_by_id_as::<GLTFComponent>(id)
+                .is_some_and(|gltf| gltf.uri == "assets/models/bisket.glb")
+        })
+        .expect("desktop scene should load Bisket");
+    assert!(world.children_of(bisket).iter().any(|id| {
+        world
+            .get_component_by_id_as::<HumanoidBoneMapComponent>(*id)
+            .is_some()
+    }));
+    assert!(world.all_components().any(|id| {
+        world
+            .get_component_by_id_as::<GLTFComponent>(id)
+            .is_some_and(|gltf| gltf.uri == "assets/models/car.glb")
+    }));
+}
+
+#[test]
+fn mittens_corp_desktop_wasd_moves_its_input_driver() {
+    use crate::engine::ecs::component::{InputComponent, TransformComponent};
+    use winit::keyboard::Key;
+
+    let mut world = World::default();
+    let mut systems = crate::engine::ecs::system::SystemWorld::default();
+    let mut visuals = VisualWorld::default();
+    let mut assets = RenderAssets::new();
+    let mut queue = CommandQueue::new();
+    let output = MeowMeowRunner::eval_with_world_and_assets_at_path(
+        include_str!("../../examples/mittens-corp-desktop.mms"),
+        Some("examples/mittens-corp-desktop.mms"),
+        &mut world,
+        &mut systems.rx,
+        Some(&mut assets),
+        &mut queue,
+    );
+    assert!(output.errors.is_empty(), "{:?}", output.errors);
+    for intent in output.intents {
+        queue.push_intent_now(ComponentId::default(), intent);
+    }
+    let desktop_input = world
+        .all_components()
+        .find(|&id| world.get_component_by_id_as::<InputComponent>(id).is_some())
+        .expect("desktop scene should create Input");
+    world.init_component_tree(desktop_input, &mut queue);
+    systems.process_commands(&mut world, &mut visuals, &mut assets, &mut queue);
+
+    let driver = world
+        .all_components()
+        .find(|&id| world.component_label(id) == Some("bisket_desktop_driver"))
+        .expect("desktop scene should expose an Input-controlled driver");
+    assert_eq!(
+        world.parent_of(driver),
+        Some(desktop_input),
+        "Input must directly own the transform it drives; input children: {:?}",
+        world.children_of(desktop_input)
+    );
+    let before = world
+        .get_component_by_id_as::<TransformComponent>(driver)
+        .expect("desktop driver transform")
+        .transform
+        .translation;
+    let mut input = InputState::default();
+    input.keys_down.insert(Key::Character("w".into()));
+    systems
+        .input
+        .process_input(&mut world, &input, &mut queue, 1.0);
+    queue.flush(&mut world, &mut systems, &mut visuals, &mut assets);
+    let after = world
+        .get_component_by_id_as::<TransformComponent>(driver)
+        .expect("desktop driver transform after WASD")
+        .transform
+        .translation;
+    assert_ne!(after, before, "WASD should move the desktop driver");
+}
+
+#[test]
 fn mittens_corp_evaluates_with_bisket_player_and_car_mount_fixture() {
     use crate::engine::ecs::component::{
         AmplitudeComponent, AudioInputComponent, AvatarControlComponent, CameraXRComponent,
         CollisionShape, ComponentRef, ControllerXRComponent, EditorComponent, EditorPanel,
-        EditorUIComponent, GLTFComponent, InputXRComponent, InputXRGamepadComponent,
-        MountableComponent, PointerComponent, PoseCaptureComponent, RiderComponent,
-        SecondaryMotionComponent, ShadingComponent, ShadingModel, SpringColliderComponent,
-        TransformComponent, XREyeTrackingComponent, XrAxisControl, XrButtonControl, ZoneComponent,
+        EditorUIComponent, GLTFComponent, HTCEyeTrackingComponent, HumanoidBoneMapComponent,
+        InputXRComponent, InputXRGamepadComponent, MountableComponent, PointerComponent,
+        PoseCaptureComponent, RiderComponent, SecondaryMotionComponent, ShadingComponent,
+        ShadingModel, SpringColliderComponent, TransformComponent, XrAxisControl, XrButtonControl,
+        ZoneComponent,
     };
 
     let mut world = World::default();
@@ -9068,9 +9277,21 @@ fn mittens_corp_evaluates_with_bisket_player_and_car_mount_fixture() {
             .get_component_by_id_as::<AvatarControlComponent>(id)
             .is_some()
     }));
-    assert!(world.all_components().any(|id| {
+    let eye_tracker = world
+        .all_components()
+        .find_map(|id| {
+            world
+                .get_component_by_id_as::<HTCEyeTrackingComponent>(id)
+                .map(|tracker| (id, tracker))
+        })
+        .expect("mittens-corp should retain HTC eye tracking for blink closure");
+    assert!(
+        !eye_tracker.1.enable_pupil_direction_tracking,
+        "the ambient animation, not live gaze, should own Bisket eye direction"
+    );
+    assert!(world.children_of(bisket).iter().any(|id| {
         world
-            .get_component_by_id_as::<XREyeTrackingComponent>(id)
+            .get_component_by_id_as::<HumanoidBoneMapComponent>(*id)
             .is_some()
     }));
     assert!(world.all_components().any(|id| {
@@ -9406,7 +9627,6 @@ fn mittens_corp_evaluates_with_bisket_player_and_car_mount_fixture() {
         }
     )));
 }
-
 
 #[test]
 fn xr_grab_demo_evaluates_with_editor_settings_and_grabbable_playground() {

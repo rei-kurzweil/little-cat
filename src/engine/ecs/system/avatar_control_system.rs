@@ -525,6 +525,7 @@ fn newest_direct_eye_gaze(
             .get_component_by_id_as::<XREyeTrackingComponent>(child)
             .map(|tracker| {
                 (
+                    tracker.enable_pupil_direction_tracking,
                     tracker.gaze_sample,
                     tracker.head_rotation_compensation,
                     tracker.rotation_limits,
@@ -536,6 +537,7 @@ fn newest_direct_eye_gaze(
                     .get_component_by_id_as::<VRChatOSCEyeTrackingComponent>(child)
                     .map(|tracker| {
                         (
+                            tracker.enable_pupil_direction_tracking,
                             tracker.gaze_sample,
                             tracker.head_rotation_compensation,
                             tracker.rotation_limits,
@@ -548,6 +550,7 @@ fn newest_direct_eye_gaze(
                     .get_component_by_id_as::<XREyeTrackingHtcComponent>(child)
                     .map(|tracker| {
                         (
+                            tracker.enable_pupil_direction_tracking,
                             tracker.gaze_sample,
                             tracker.head_rotation_compensation,
                             tracker.rotation_limits,
@@ -555,9 +558,14 @@ fn newest_direct_eye_gaze(
                         )
                     })
             });
-        let Some((sample, compensation, shared_limits, per_eye_limits)) = sample else {
+        let Some((enabled, sample, compensation, shared_limits, per_eye_limits)) = sample else {
             continue;
         };
+        // This gates only AVC's eye-bone ownership. Closure samples remain
+        // independently available to `update_eye_blink` above.
+        if !enabled {
+            continue;
+        }
         if let Some(gaze) = sample.left.filter(valid_gaze) {
             if left.is_none_or(|current| sample.sequence > current.sequence) {
                 left = Some(ResolvedEyeGaze {
@@ -2158,11 +2166,48 @@ mod hand_pose_correction_tests {
     }
 
     #[test]
+    fn disabled_newer_gaze_does_not_suppress_an_enabled_direct_tracker() {
+        let mut world = World::default();
+        let avc = world.add_component(AvatarControlComponent::new());
+        let enabled = world
+            .add_component(XREyeTrackingComponent::on().with_enable_pupil_direction_tracking(true));
+        let disabled = world.add_component(
+            XREyeTrackingHtcComponent::on().with_enable_pupil_direction_tracking(false),
+        );
+        world.add_child(avc, enabled).unwrap();
+        world.add_child(avc, disabled).unwrap();
+        world
+            .get_component_by_id_as_mut::<XREyeTrackingComponent>(enabled)
+            .unwrap()
+            .gaze_sample = EyeGazeSample {
+            left: Some([0.0, 0.0, -1.0]),
+            right: Some([0.0, 0.0, -1.0]),
+            sequence: 1,
+        };
+        world
+            .get_component_by_id_as_mut::<XREyeTrackingHtcComponent>(disabled)
+            .unwrap()
+            .gaze_sample = EyeGazeSample {
+            left: Some([1.0, 0.0, 0.0]),
+            right: Some([1.0, 0.0, 0.0]),
+            sequence: 2,
+        };
+
+        let (left, right) = newest_direct_eye_gaze(&mut world, avc);
+        assert_eq!(left.unwrap().sequence, 1);
+        assert_eq!(right.unwrap().sequence, 1);
+    }
+
+    #[test]
     fn blink_routing_chooses_each_eye_and_drives_its_morph_independently() {
         let mut world = World::default();
         let avc = world.add_component(AvatarControlComponent::new());
-        let standard = world.add_component(XREyeTrackingComponent::on());
-        let htc = world.add_component(XREyeTrackingHtcComponent::on());
+        let standard = world.add_component(
+            XREyeTrackingComponent::on().with_enable_pupil_direction_tracking(false),
+        );
+        let htc = world.add_component(
+            XREyeTrackingHtcComponent::on().with_enable_pupil_direction_tracking(false),
+        );
         let descendant = world.add_component(XREyeTrackingComponent::on());
         world.add_child(avc, standard).unwrap();
         world.add_child(avc, htc).unwrap();
