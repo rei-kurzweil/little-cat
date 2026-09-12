@@ -169,7 +169,9 @@ synchronization, render ordering, or public interfaces.
 
 ### Resource and descriptor work
 
-- Measure material descriptor-set cache hit rates and allocation churn.
+- [Material descriptor caching for stable and frequently updated inputs](../material-descriptor-cache-update-frequency.md):
+  measure hit rates and allocation churn, then separate stable descriptor identity from
+  high-frequency parameter storage.
 - Batch mesh and texture uploads and keep synchronous upload waits out of active frame rendering.
 - Audit transient uniform, storage, and instance buffers for safe per-frame reuse.
 

@@ -9760,6 +9760,100 @@ fn anime_shading_controls_live_runtime_reaches_gltf_visuals_and_restores() {
             0.23
         );
     }
+    let shade_threshold_slider = label(&world, "anime_shade_threshold_slider");
+    systems.rx.dispatch_event_handlers(
+        &mut world,
+        &Signal::event(
+            shade_threshold_slider,
+            EventSignal::SliderChanged {
+                slider: shade_threshold_slider,
+                value: 1.2,
+            },
+        ),
+    );
+    assert_eq!(
+        service(
+            &mut session,
+            &mut world,
+            &mut systems,
+            &mut visuals,
+            &mut assets,
+            &mut queue
+        ),
+        1
+    );
+    let shading = world
+        .get_component_by_id_as::<ShadingComponent>(source_id)
+        .unwrap();
+    assert!((shading.shade_threshold - 1.2).abs() < 1e-6);
+    assert!((shading.lit_threshold - 1.2).abs() < 1e-6);
+    let lit_threshold_slider = label(&world, "anime_lit_threshold_slider");
+    assert!(
+        (world
+            .get_component_by_id_as::<SliderComponent>(lit_threshold_slider)
+            .unwrap()
+            .value()
+            - 1.2)
+            .abs()
+            < 1e-6
+    );
+    systems.rx.dispatch_event_handlers(
+        &mut world,
+        &Signal::event(
+            lit_threshold_slider,
+            EventSignal::SliderChanged {
+                slider: lit_threshold_slider,
+                value: 0.25,
+            },
+        ),
+    );
+    assert_eq!(
+        service(
+            &mut session,
+            &mut world,
+            &mut systems,
+            &mut visuals,
+            &mut assets,
+            &mut queue
+        ),
+        1
+    );
+    let shading = world
+        .get_component_by_id_as::<ShadingComponent>(source_id)
+        .unwrap();
+    assert!((shading.shade_threshold - 0.25).abs() < 1e-6);
+    assert!((shading.lit_threshold - 0.25).abs() < 1e-6);
+    for &h in &handles {
+        assert_eq!(
+            visuals.instance(h).unwrap().anime_shading.controls[0..2],
+            [0.25, 0.25]
+        );
+    }
+    let rim_power_slider = label(&world, "anime_rim_power_slider");
+    systems.rx.dispatch_event_handlers(
+        &mut world,
+        &Signal::event(
+            rim_power_slider,
+            EventSignal::SliderChanged {
+                slider: rim_power_slider,
+                value: 9.5,
+            },
+        ),
+    );
+    assert_eq!(
+        service(
+            &mut session,
+            &mut world,
+            &mut systems,
+            &mut visuals,
+            &mut assets,
+            &mut queue
+        ),
+        1
+    );
+    for &h in &handles {
+        assert_eq!(visuals.instance(h).unwrap().anime_shading.controls[3], 9.5);
+    }
     let readout = label(&world, "anime_shade_strength_readout");
     assert_eq!(
         world
@@ -9843,7 +9937,7 @@ fn anime_shading_controls_live_runtime_reaches_gltf_visuals_and_restores() {
             &mut assets,
             &mut queue
         ),
-        1
+        5
     );
     assert_eq!(
         world
@@ -9852,15 +9946,17 @@ fn anime_shading_controls_live_runtime_reaches_gltf_visuals_and_restores() {
             .shade_strength,
         0.5
     );
+    let reset_shading = world
+        .get_component_by_id_as::<ShadingComponent>(source_id)
+        .unwrap();
+    assert_eq!(reset_shading.shade_threshold, 0.4);
+    assert_eq!(reset_shading.lit_threshold, 0.55);
+    assert_eq!(reset_shading.rim_strength, 0.38);
+    assert_eq!(reset_shading.rim_power, 4.0);
     for &h in &handles {
-        assert_eq!(
-            visuals
-                .instance(h)
-                .unwrap()
-                .anime_shading
-                .shade_color_strength[3],
-            0.5
-        );
+        let gpu = visuals.instance(h).unwrap().anime_shading;
+        assert_eq!(gpu.shade_color_strength[3], 0.5);
+        assert_eq!(gpu.controls, [0.4, 0.55, 0.38, 4.0]);
     }
 }
 
@@ -9899,7 +9995,7 @@ fn anime_shading_xr_fixture_materializes_shared_source_and_controls() {
                 .get_component_by_id_as::<SliderComponent>(id)
                 .is_some())
             .count(),
-        1
+        5
     );
     let anime = world
         .all_components()

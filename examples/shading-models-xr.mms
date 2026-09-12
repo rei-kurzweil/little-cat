@@ -22,7 +22,13 @@ T {
 XR.on()
 
 let anime_target = bisket_anime_shading()
-let reset_values = { shade_strength = anime_target.get_shade_strength() }
+let reset_values = {
+    shade_strength = anime_target.get_shade_strength()
+    shade_threshold = anime_target.get_shade_threshold()
+    lit_threshold = anime_target.get_lit_threshold()
+    rim_strength = anime_target.get_rim_strength()
+    rim_power = anime_target.get_rim_power()
+}
 T.position(1.1, 0.0, -3.5) {
     anime_target
     GLTF.new("assets/models/bisket.glb") { pose() }

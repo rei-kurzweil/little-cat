@@ -1,8 +1,9 @@
 # Anime shading: first live slider slice and parameter panel
 
-Status: phase 1a implemented. User verified Anime rim lighting and two-step shading
-in winit and OpenXR on 2026-09-08. Detailed live-control interaction checks and
-GPU allocation/frame-cost measurements remain open. Phases 1b–3 are planned.
+Status: phase 1b implemented on 2026-09-11; live visual acceptance remains open.
+User verified Anime rim lighting and two-step shading in winit and OpenXR on
+2026-09-08. Detailed five-control interaction checks and GPU allocation/frame-cost
+measurements remain open. Phases 2–3 are planned.
 
 ## Implemented slice and manual verification (2026-09-08)
 
@@ -22,11 +23,13 @@ environment; it is not recorded as passing.
 
 - `Shading.anime()` / `.toon()` share one `ShadingComponent`; the old
   `AnimeShading` constructor and Rust alias remain temporarily compatible.
-- `get_shade_strength()` and `set_shade_strength(value)` expose normalized Anime
-  state to MMS. The setter emits the existing registration intent; generated
+- Getter/setter pairs for shade strength, shade threshold, lit threshold, rim
+  strength, and rim power expose normalized Anime state to MMS. Each setter
+  emits the existing registration intent; generated
   projections and render parameter records update without a model reload.
 - [anime_shading_controls.mms](../../assets/components/ui/anime_shading_controls.mms)
-  supplies one Slider, an effective-value readout, and Reset as content for the
+  supplies five Sliders, effective-value readouts, coupled threshold
+  synchronization, and Reset as content for the
   existing `info_panel`. Its callbacks capture queried live control references.
   Track/thumb hit targets use priority 120 above the panel shell's priority 100.
 - `info_panel_body(options)` rebuilds the existing panel's padded body consistently
@@ -44,8 +47,8 @@ cargo run --release -- load examples/shading-models.mms
 Drag the shade-strength slider in the panel above the right model from 0 to 1.
 Its shaded regions should visibly change while the explicit Toon model on the
 left stays unchanged. Confirm the readout, Reset to 0.50, minimize/restore, and
-drag release when the controls are removed. Other Anime inputs remain at the
-Bisket preset; they are not yet exposed as live methods.
+drag release when the controls are removed. Shade and rim colors remain at the
+Bisket preset; they are phase 2 work.
 
 Run the separate XR acceptance fixture:
 
@@ -315,9 +318,9 @@ parameters coherently.
 
 ### Pre-implementation baseline and remaining expansion work (2026-09-07 audit)
 
-The implementation summary above supersedes this baseline for shade-strength
-read/write and bounded descriptor retention. The remaining scalar methods are
-still phase 1b work.
+The implementation summary above supersedes this pre-implementation baseline:
+all five scalar getter/setter pairs, panel rows, coupled threshold readback, and
+bounded descriptor retention are implemented.
 
 - `src/scripting/runtime_config.rs` registers AnimeShading constructors and
   builders, but no live methods. Add five typed scalar setters and dispatch in

@@ -408,10 +408,12 @@ Shading.anime().shade_strength(0.5).rim_strength(0.38) {
 
 Anime builders accept `shade_color`, `shade_strength`, `shade_threshold`,
 `lit_threshold`, `rim_color`, `rim_strength`, and `rim_power`. A retained Anime
-reference supports `set_shade_strength(value)` and `get_shade_strength()` for
-live controls. The setter uses builder normalization and updates source-linked
-GLTF primitives; the getter returns effective state immediately. These live
-methods reject a Toon target. Other live parameters are planned.
+reference supports getter/setter pairs for `shade_strength`, `shade_threshold`,
+`lit_threshold`, `rim_strength`, and `rim_power` (for example,
+`set_shade_strength(value)` and `get_shade_strength()`). Setters use builder
+normalization and update source-linked GLTF primitives; getters return effective
+state immediately. These live methods reject a Toon target. Live color inputs
+remain planned.
 
 ### `LightQuantizationComponent`
 <!-- catalog:component source="LightQuantizationComponent" mms="direct" names="LightQuantization" -->

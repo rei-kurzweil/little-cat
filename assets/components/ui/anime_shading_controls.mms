@@ -9,26 +9,47 @@ fn fixed_2(value) {
     return "" + whole + "." + padding + fraction
 }
 
-export fn anime_shading_controls(target, reset_values) {
-    let initial = target.get_shade_strength()
-    let track = T.scale(8.0, 0.10, 0.10) { R.cube() { C.rgba(0.24, 0.45, 0.65, 1.0) Raycastable.enabled() { interaction_priority(120.0) } } }
-    let thumb = T.scale(0.45, 0.90, 0.30) { R.sphere() { C.rgba(1.0, 0.46, 0.64, 1.0) Raycastable.enabled() { interaction_priority(120.0) } } }
-    let slider = Slider.range(0.0, 1.0).step(0.01).value(initial).width(16.0)
+fn anime_slider(slider_name, initial, minimum, maximum) {
+    let track = T.scale(2.0, 0.025, 0.10) { R.cube() { C.rgba(0.24, 0.45, 0.65, 1.0) Raycastable.enabled() { interaction_priority(120.0) } } }
+    let thumb = T.scale(0.1125, 0.225, 0.30) { R.sphere() { C.rgba(1.0, 0.46, 0.64, 1.0) Raycastable.enabled() { interaction_priority(120.0) } } }
+    return Slider.range(minimum, maximum).step(0.01).value(initial).width(4.0)
         .track(track)
-        .thumb(thumb) {
-            name = "anime_shade_strength_slider"
-        }
-    let readout = Text { name = "anime_shade_strength_readout" fixed_2(initial) }
-    let reset = T {
-        name = "anime_shading_reset"
-        Raycastable.enabled() { interaction_priority(120.0) }
+        .thumb(thumb) { name = slider_name }
+}
+
+fn anime_slider_row(label, slider, readout_name, initial) {
+    return T {
         Style {
-            display("flex") width(8.0) height(2.0)
-            align_items("center") justify_content("center")
-            background_color([0.35, 0.20, 0.30, 1.0]) background_z(-0.02)
+            display("flex") flex_direction("row") width(100%) height(3.0)
+            align_items("center") gap(0.5)
         }
-        T.position(0.0, 0.0, 0.03) { Text { "Reset" } }
+        T {
+            Style { display("flex") width(11.0) height(3.0) align_items("center") }
+            T.position(0.0, 0.0, 0.03) { Text { label } }
+        }
+        T {
+            Style {
+                display("flex") width(18.0) height(3.0) flex_grow(1.0)
+                align_items("center") justify_content("center")
+            }
+            slider
+        }
+        T {
+            Style {
+                display("flex") width(4.0) height(3.0)
+                align_items("center") justify_content("center")
+            }
+            T.position(0.0, 0.0, 0.03) { Text { name = readout_name fixed_2(initial) } }
+        }
     }
+}
+
+export fn anime_shading_controls(target, reset_values) {
+    let shade_strength = target.get_shade_strength()
+    let shade_threshold = target.get_shade_threshold()
+    let lit_threshold = target.get_lit_threshold()
+    let rim_strength = target.get_rim_strength()
+    let rim_power = target.get_rim_power()
     let content = T {
         name = "anime_shading_controls"
         Style {
@@ -36,54 +57,97 @@ export fn anime_shading_controls(target, reset_values) {
             font_size(0.8) color([0.96, 0.96, 0.98, 1.0])
             background_color([0.075, 0.075, 0.09, 0.96]) background_z(-0.01)
         }
-        T {
-            Style {
-                display("flex") flex_direction("row") width(100%) height(3.0)
-                align_items("center") gap(0.5)
-            }
-            T {
-                Style { display("flex") width(11.0) height(3.0) align_items("center") }
-                T.position(0.0, 0.0, 0.03) { Text { "Shade strength" } }
-            }
-            T {
-                Style {
-                    display("flex") width(18.0) height(3.0) flex_grow(1.0)
-                    align_items("center") justify_content("center")
-                }
-                slider
-            }
-            T {
-                Style {
-                    display("flex") width(4.0) height(3.0)
-                    align_items("center") justify_content("center")
-                }
-                T.position(0.0, 0.0, 0.03) { readout }
-            }
-        }
+        anime_slider_row("Shade strength", anime_slider("anime_shade_strength_slider", shade_strength, 0.0, 1.0), "anime_shade_strength_readout", shade_strength)
+        anime_slider_row("Shade threshold", anime_slider("anime_shade_threshold_slider", shade_threshold, 0.0, 2.0), "anime_shade_threshold_readout", shade_threshold)
+        anime_slider_row("Lit threshold", anime_slider("anime_lit_threshold_slider", lit_threshold, 0.0, 2.0), "anime_lit_threshold_readout", lit_threshold)
+        anime_slider_row("Rim strength", anime_slider("anime_rim_strength_slider", rim_strength, 0.0, 1.0), "anime_rim_strength_readout", rim_strength)
+        anime_slider_row("Rim power", anime_slider("anime_rim_power_slider", rim_power, 0.01, 16.0), "anime_rim_power_readout", rim_power)
         T {
             Style {
                 display("flex") width(100%) height(2.5)
                 align_items("center") justify_content("flex-end")
             }
-            reset
+            T {
+                name = "anime_shading_reset"
+                Raycastable.enabled() { interaction_priority(120.0) }
+                Style {
+                    display("flex") width(8.0) height(2.0)
+                    align_items("center") justify_content("center")
+                    background_color([0.35, 0.20, 0.30, 1.0]) background_z(-0.02)
+                }
+                T.position(0.0, 0.0, 0.03) { Text { "Reset" } }
+            }
         }
     }
-    // Resolve live controls from the materialized subtree before capturing them
-    // in callbacks; local component expressions are otherwise reusable templates.
-    let live_slider = content.query("#anime_shade_strength_slider")
-    let live_readout = content.query("#anime_shade_strength_readout")
-    let live_reset = content.query("#anime_shading_reset")
-    on(live_slider, "SliderChanged", fn(event) {
+    // Threshold callbacks refresh both rows because Shading maintains shade <= lit.
+    let shade_strength_slider = content.query("#anime_shade_strength_slider")
+    let shade_strength_readout = content.query("#anime_shade_strength_readout")
+    let shade_threshold_slider = content.query("#anime_shade_threshold_slider")
+    let shade_threshold_readout = content.query("#anime_shade_threshold_readout")
+    let lit_threshold_slider = content.query("#anime_lit_threshold_slider")
+    let lit_threshold_readout = content.query("#anime_lit_threshold_readout")
+    let rim_strength_slider = content.query("#anime_rim_strength_slider")
+    let rim_strength_readout = content.query("#anime_rim_strength_readout")
+    let rim_power_slider = content.query("#anime_rim_power_slider")
+    let rim_power_readout = content.query("#anime_rim_power_readout")
+    let reset = content.query("#anime_shading_reset")
+    on(shade_strength_slider, "SliderChanged", fn(event) {
         target.set_shade_strength(event["value"])
         let effective = target.get_shade_strength()
-        live_slider.sync_value(effective)
-        live_readout.set_text(fixed_2(effective))
+        shade_strength_slider.sync_value(effective)
+        shade_strength_readout.set_text(fixed_2(effective))
     })
-    on(live_reset, "Click", fn(event) {
+    on(shade_threshold_slider, "SliderChanged", fn(event) {
+        target.set_shade_threshold(event["value"])
+        let shade = target.get_shade_threshold()
+        let lit = target.get_lit_threshold()
+        shade_threshold_slider.sync_value(shade)
+        shade_threshold_readout.set_text(fixed_2(shade))
+        lit_threshold_slider.sync_value(lit)
+        lit_threshold_readout.set_text(fixed_2(lit))
+    })
+    on(lit_threshold_slider, "SliderChanged", fn(event) {
+        target.set_lit_threshold(event["value"])
+        let shade = target.get_shade_threshold()
+        let lit = target.get_lit_threshold()
+        shade_threshold_slider.sync_value(shade)
+        shade_threshold_readout.set_text(fixed_2(shade))
+        lit_threshold_slider.sync_value(lit)
+        lit_threshold_readout.set_text(fixed_2(lit))
+    })
+    on(rim_strength_slider, "SliderChanged", fn(event) {
+        target.set_rim_strength(event["value"])
+        let effective = target.get_rim_strength()
+        rim_strength_slider.sync_value(effective)
+        rim_strength_readout.set_text(fixed_2(effective))
+    })
+    on(rim_power_slider, "SliderChanged", fn(event) {
+        target.set_rim_power(event["value"])
+        let effective = target.get_rim_power()
+        rim_power_slider.sync_value(effective)
+        rim_power_readout.set_text(fixed_2(effective))
+    })
+    on(reset, "Click", fn(event) {
         target.set_shade_strength(reset_values.shade_strength)
-        let effective = target.get_shade_strength()
-        live_slider.sync_value(effective)
-        live_readout.set_text(fixed_2(effective))
+        target.set_shade_threshold(reset_values.shade_threshold)
+        target.set_lit_threshold(reset_values.lit_threshold)
+        target.set_rim_strength(reset_values.rim_strength)
+        target.set_rim_power(reset_values.rim_power)
+        let shade_strength_value = target.get_shade_strength()
+        let shade_threshold_value = target.get_shade_threshold()
+        let lit_threshold_value = target.get_lit_threshold()
+        let rim_strength_value = target.get_rim_strength()
+        let rim_power_value = target.get_rim_power()
+        shade_strength_slider.sync_value(shade_strength_value)
+        shade_strength_readout.set_text(fixed_2(shade_strength_value))
+        shade_threshold_slider.sync_value(shade_threshold_value)
+        shade_threshold_readout.set_text(fixed_2(shade_threshold_value))
+        lit_threshold_slider.sync_value(lit_threshold_value)
+        lit_threshold_readout.set_text(fixed_2(lit_threshold_value))
+        rim_strength_slider.sync_value(rim_strength_value)
+        rim_strength_readout.set_text(fixed_2(rim_strength_value))
+        rim_power_slider.sync_value(rim_power_value)
+        rim_power_readout.set_text(fixed_2(rim_power_value))
     })
     return content
 }

@@ -1085,18 +1085,26 @@ pub fn build_mittens_runtime() -> Result<MittensRuntime, mms::RuntimeSpecError> 
                 "AnimeShading" | "Shading" => {
                     if canonical == "Shading" {
                         no_arg_constructors(component, &["anime", "toon"]);
-                        host_method(
-                            component,
-                            canonical,
-                            "get_shade_strength",
-                            method(vec![], mms::ValueType::F32),
-                        );
-                        host_method(
-                            component,
-                            canonical,
-                            "set_shade_strength",
-                            method(vec![mms::ValueType::F32], mms::ValueType::Null),
-                        );
+                        for (getter, setter) in [
+                            ("get_shade_strength", "set_shade_strength"),
+                            ("get_shade_threshold", "set_shade_threshold"),
+                            ("get_lit_threshold", "set_lit_threshold"),
+                            ("get_rim_strength", "set_rim_strength"),
+                            ("get_rim_power", "set_rim_power"),
+                        ] {
+                            host_method(
+                                component,
+                                canonical,
+                                getter,
+                                method(vec![], mms::ValueType::F32),
+                            );
+                            host_method(
+                                component,
+                                canonical,
+                                setter,
+                                method(vec![mms::ValueType::F32], mms::ValueType::Null),
+                            );
+                        }
                     }
                     for method in [
                         "shade_color",

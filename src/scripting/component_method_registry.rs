@@ -26,7 +26,19 @@ pub(crate) fn legacy_supports_component_method(component_type: &str, method: &st
         || (matches!(component_type, "EM" | "Emissive" | "emissive")
             && matches!(method, "set_intensity" | "on" | "off"))
         || (matches!(component_type, "Shading" | "shading")
-            && matches!(method, "get_shade_strength" | "set_shade_strength"))
+            && matches!(
+                method,
+                "get_shade_strength"
+                    | "set_shade_strength"
+                    | "get_shade_threshold"
+                    | "set_shade_threshold"
+                    | "get_lit_threshold"
+                    | "set_lit_threshold"
+                    | "get_rim_strength"
+                    | "set_rim_strength"
+                    | "get_rim_power"
+                    | "set_rim_power"
+            ))
         || (matches!(component_type, "Slider" | "slider")
             && matches!(
                 method,
@@ -183,23 +195,50 @@ pub(crate) fn invoke_component_method(
             input.locomotion = method == "enable";
             Ok(Value::Null)
         }
-        ("Shading" | "shading", "get_shade_strength" | "set_shade_strength") => {
+        (
+            "Shading" | "shading",
+            method @ ("get_shade_strength"
+            | "set_shade_strength"
+            | "get_shade_threshold"
+            | "set_shade_threshold"
+            | "get_lit_threshold"
+            | "set_lit_threshold"
+            | "get_rim_strength"
+            | "set_rim_strength"
+            | "get_rim_power"
+            | "set_rim_power"),
+        ) => {
             let shading = world
                 .get_component_by_id_as_mut::<ShadingComponent>(id)
                 .ok_or_else(|| format!("{method}(): not a ShadingComponent"))?;
             if shading.model != ShadingModel::Anime {
                 return Err(format!("{method}(): requires the Anime shading model"));
             }
-            if method == "get_shade_strength" {
+            if method.starts_with("get_") {
                 if !args.is_empty() {
                     return Err(format!("{method}(): expected no arguments"));
                 }
-                return Ok(Value::Number(shading.shade_strength as f64));
+                let value = match method {
+                    "get_shade_strength" => shading.shade_strength,
+                    "get_shade_threshold" => shading.shade_threshold,
+                    "get_lit_threshold" => shading.lit_threshold,
+                    "get_rim_strength" => shading.rim_strength,
+                    "get_rim_power" => shading.rim_power,
+                    _ => unreachable!(),
+                };
+                return Ok(Value::Number(value as f64));
             }
             let [Value::Number(value)] = args else {
                 return Err(format!("{method}(): expected one number"));
             };
-            *shading = shading.with_shade_strength(*value as f32);
+            *shading = match method {
+                "set_shade_strength" => shading.with_shade_strength(*value as f32),
+                "set_shade_threshold" => shading.with_shade_threshold(*value as f32),
+                "set_lit_threshold" => shading.with_lit_threshold(*value as f32),
+                "set_rim_strength" => shading.with_rim_strength(*value as f32),
+                "set_rim_power" => shading.with_rim_power(*value as f32),
+                _ => unreachable!(),
+            };
             emit_intent(IntentValue::RegisterAnimeShading { component_id: id });
             Ok(Value::Null)
         }
@@ -834,7 +873,53 @@ mod tests {
                 matches!(intents.as_slice(), [IntentValue::RegisterAnimeShading { component_id }] if *component_id == anime)
             );
         }
-        for method in ["get_shade_strength", "set_shade_strength"] {
+        for (setter, getter, value, expected) in [
+            ("set_shade_threshold", "get_shade_threshold", 0.8, 0.8),
+            ("set_lit_threshold", "get_lit_threshold", 0.4, 0.4),
+            ("set_rim_strength", "get_rim_strength", 2.0, 1.0),
+            ("set_rim_power", "get_rim_power", 200.0, 128.0),
+        ] {
+            let mut intents = Vec::new();
+            invoke_component_method(
+                &mut world,
+                anime,
+                "Shading",
+                setter,
+                &[Value::Number(value)],
+                |intent| intents.push(intent),
+            )
+            .unwrap();
+            let Value::Number(effective) =
+                invoke_component_method(&mut world, anime, "Shading", getter, &[], |_| {}).unwrap()
+            else {
+                panic!("{getter}() should return a number")
+            };
+            assert!((effective - expected).abs() < 1e-6);
+            assert!(matches!(
+                intents.as_slice(),
+                [IntentValue::RegisterAnimeShading { component_id }] if *component_id == anime
+            ));
+        }
+        assert_eq!(
+            world
+                .get_component_by_id_as::<ShadingComponent>(anime)
+                .unwrap()
+                .shade_threshold,
+            0.4,
+            "lowering lit threshold also lowers shade threshold"
+        );
+        for method in [
+            "get_shade_strength",
+            "set_shade_strength",
+            "get_shade_threshold",
+            "set_shade_threshold",
+            "get_lit_threshold",
+            "set_lit_threshold",
+            "get_rim_strength",
+            "set_rim_strength",
+            "get_rim_power",
+            "set_rim_power",
+        ] {
             let error = invoke_component_method(
                 &mut world,
                 toon,

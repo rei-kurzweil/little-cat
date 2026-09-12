@@ -64,7 +64,13 @@ T.position(left_model_x, 0.0, 0.0) {
 }
 
 let anime_target = bisket_anime_shading()
-let anime_reset_values = { shade_strength = anime_target.get_shade_strength() }
+let anime_reset_values = {
+    shade_strength = anime_target.get_shade_strength()
+    shade_threshold = anime_target.get_shade_threshold()
+    lit_threshold = anime_target.get_lit_threshold()
+    rim_strength = anime_target.get_rim_strength()
+    rim_power = anime_target.get_rim_power()
+}
 
 // Albedo-derived anime shading model with a two-state light ramp and rim light.
 T.position(right_model_x, 0.0, 0.0) {
