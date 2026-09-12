@@ -58,7 +58,11 @@ ED {
                 // In desktop mode, we want this T to move the camera relative
                 // to the head bone, NOT move the head relative to the camera.
                 T.position(0.0, 0.08, 0.12) {
-                    C3D { Pointer {} }
+                    C3D {
+                        // This is a head-origin pointer, not a tracked hand.
+                        // Tune this clearance to the avatar's local presentation geometry.
+                        Pointer { Raycast.event_driven().min_distance(0.75) {} }
+                    }
                 }
             }
         }

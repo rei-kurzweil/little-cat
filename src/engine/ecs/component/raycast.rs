@@ -18,6 +18,11 @@ pub enum RayCastMode {
 pub struct RayCastComponent {
     pub mode: RayCastMode,
 
+    /// Minimum ray distance in world units. Hits closer than this are ignored.
+    ///
+    /// The distance is measured from the ray origin emitted by `RayCastSystem`.
+    pub min_distance: f32,
+
     /// Max ray distance in world units.
     pub max_distance: f32,
 
@@ -33,6 +38,7 @@ impl RayCastComponent {
     pub fn new(mode: RayCastMode) -> Self {
         Self {
             mode,
+            min_distance: 0.0,
             max_distance: 200.0,
             cast_requests: 0,
             component: None,
@@ -47,9 +53,30 @@ impl RayCastComponent {
         Self::new(RayCastMode::EventDriven)
     }
 
+    /// Set the lower bound of this raycaster's accepted hit interval.
+    pub fn with_min_distance(mut self, min_distance: f32) -> Self {
+        assert!(
+            Self::valid_distance_interval(min_distance, self.max_distance),
+            "raycast distance interval requires finite non-negative bounds with min_distance <= max_distance"
+        );
+        self.min_distance = min_distance;
+        self
+    }
+
     pub fn with_max_distance(mut self, max_distance: f32) -> Self {
+        assert!(
+            Self::valid_distance_interval(self.min_distance, max_distance),
+            "raycast distance interval requires finite non-negative bounds with min_distance <= max_distance"
+        );
         self.max_distance = max_distance;
         self
+    }
+
+    pub fn valid_distance_interval(min_distance: f32, max_distance: f32) -> bool {
+        min_distance.is_finite()
+            && max_distance.is_finite()
+            && min_distance >= 0.0
+            && min_distance <= max_distance
     }
 }
 
@@ -109,6 +136,7 @@ impl Component for RayCastComponent {
             RayCastMode::EventDriven => "event_driven",
         };
         ce_call("Raycast", ctor, vec![])
+            .with_call("min_distance", vec![num(self.min_distance as f64)])
             .with_call("max_distance", vec![num(self.max_distance as f64)])
     }
 }

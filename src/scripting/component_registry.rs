@@ -3542,8 +3542,28 @@ fn apply_call(
         return Ok(());
     }
     if let Some(rc) = world.get_component_by_id_as_mut::<RayCastComponent>(id) {
-        if method == "max_distance" {
-            *rc = rc.with_max_distance(arg_f32(args, 0)?);
+        match method {
+            "min_distance" => {
+                let value = arg_f32(args, 0)?;
+                if !RayCastComponent::valid_distance_interval(value, rc.max_distance) {
+                    return Err(
+                        "Raycast.min_distance requires a finite non-negative value no greater than max_distance"
+                            .into(),
+                    );
+                }
+                rc.min_distance = value;
+            }
+            "max_distance" => {
+                let value = arg_f32(args, 0)?;
+                if !RayCastComponent::valid_distance_interval(rc.min_distance, value) {
+                    return Err(
+                        "Raycast.max_distance requires a finite non-negative value no less than min_distance"
+                            .into(),
+                    );
+                }
+                rc.max_distance = value;
+            }
+            _ => {}
         }
         return Ok(());
     }
@@ -4410,6 +4430,7 @@ fn apply_layout_bounds_ctor(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::ecs::component::RayCastComponent;
     use crate::scripting::ast::BlockStatement;
     use crate::scripting::object::RuntimeClosure;
     use std::collections::HashMap;
@@ -4442,6 +4463,33 @@ mod tests {
             .get_component_by_id_as::<KeyframeComponent>(id)
             .expect("spawned keyframe exists");
         assert!(keyframe.callback.is_some());
+    }
+
+    #[test]
+    fn raycast_distance_builders_require_a_valid_interval() {
+        let mut world = World::default();
+        let raycast = world.add_component(RayCastComponent::event_driven());
+
+        apply_call(&mut world, raycast, "min_distance", &[Value::Number(0.75)]).unwrap();
+        assert_eq!(
+            world
+                .get_component_by_id_as::<RayCastComponent>(raycast)
+                .unwrap()
+                .min_distance,
+            0.75
+        );
+
+        for (method, value) in [
+            ("min_distance", -0.1),
+            ("min_distance", 201.0),
+            ("max_distance", 0.5),
+            ("max_distance", f64::NAN),
+        ] {
+            assert!(
+                apply_call(&mut world, raycast, method, &[Value::Number(value)]).is_err(),
+                "{method}({value}) should be rejected"
+            );
+        }
     }
 
     #[test]

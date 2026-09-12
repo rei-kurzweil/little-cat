@@ -832,6 +832,7 @@ impl RayCastSystem {
         world: &World,
         origin: [f32; 3],
         dir: [f32; 3],
+        min_distance: f32,
         max_distance: f32,
     ) -> Vec<(ComponentId, f32)> {
         let mut hits: Vec<(ComponentId, f32)> = Vec::new();
@@ -861,7 +862,9 @@ impl RayCastSystem {
             let Some(t2) = Self::narrow_phase_accept(world, cid, origin, dir, t) else {
                 continue;
             };
-            if t2 < 0.0 || t2 > max_distance {
+            // The lower bound deliberately applies only after narrow phase: an AABB entry
+            // can be near while the actual shape's surface is farther along the same ray.
+            if !Self::distance_in_interval(t2, min_distance, max_distance) {
                 continue;
             }
 
@@ -880,9 +883,12 @@ impl RayCastSystem {
         bvh: &BvhSystem,
         origin: [f32; 3],
         dir: [f32; 3],
+        min_distance: f32,
         max_distance: f32,
     ) -> Vec<(ComponentId, f32)> {
-        let candidates = bvh.raycast_renderables_candidates(origin, dir, max_distance, 64);
+        // Do not cap candidates here: a rejected near hit must never prevent a farther valid
+        // surface from being considered.
+        let candidates = bvh.raycast_renderables_candidates(origin, dir, max_distance, 0);
 
         let mut hits: Vec<(ComponentId, f32)> = Vec::new();
         for (cid, t_aabb) in candidates {
@@ -896,7 +902,9 @@ impl RayCastSystem {
             let Some(t2) = Self::narrow_phase_accept(world, cid, origin, dir, t_aabb) else {
                 continue;
             };
-            if t2 < 0.0 || t2 > max_distance {
+            // See the fallback path: filter the final narrow-phase distance, not its AABB
+            // candidate, so rejecting a near candidate never terminates traversal.
+            if !Self::distance_in_interval(t2, min_distance, max_distance) {
                 continue;
             }
 
@@ -906,17 +914,106 @@ impl RayCastSystem {
         Self::sort_hits_by_priority(world, &mut hits);
         hits
     }
+
+    fn distance_in_interval(t: f32, min_distance: f32, max_distance: f32) -> bool {
+        RayCastComponent::valid_distance_interval(min_distance, max_distance)
+            && t.is_finite()
+            && (min_distance..=max_distance).contains(&t)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::RayCastSystem;
-    use crate::engine::ecs::component::{CameraXRComponent, PointerComponent, TransformComponent};
+    use crate::engine::ecs::component::{
+        CameraXRComponent, PointerComponent, RaycastableComponent, RenderableComponent,
+        TransformComponent,
+    };
     use crate::engine::ecs::system::BvhSystem;
     use crate::engine::ecs::system::pointer_system::{PointerActivations, PointerSystem};
     use crate::engine::ecs::{RxWorld, World};
     use crate::engine::graphics::VisualWorld;
     use crate::engine::user_input::InputState;
+
+    fn add_raycastable_cube(world: &mut World, z: f32) -> crate::engine::ecs::ComponentId {
+        let mut transform = TransformComponent::new().with_position(0.0, 0.0, z);
+        // This focused query test bypasses TransformSystem's normal frame update.
+        transform.transform.matrix_world = transform.transform.model;
+        let transform = world.add_component(transform);
+        let renderable = world.add_component(RenderableComponent::cube());
+        let raycastable = world.add_component(RaycastableComponent::enabled());
+        world.add_child(transform, renderable).unwrap();
+        world.add_child(renderable, raycastable).unwrap();
+        renderable
+    }
+
+    #[test]
+    fn fallback_raycasts_skip_near_hits_and_keep_far_hits() {
+        let mut world = World::default();
+        let near = add_raycastable_cube(&mut world, -1.0);
+        let far = add_raycastable_cube(&mut world, -3.0);
+        let mut raycasts = RayCastSystem::default();
+        raycasts.notify_renderable_added(&world, near);
+        raycasts.notify_renderable_added(&world, far);
+
+        assert_eq!(
+            raycasts
+                .cast_against_renderables(&world, [0.0, 0.0, 0.0], [0.0, 0.0, -1.0], 0.0, 10.0,),
+            vec![(near, 0.5), (far, 2.5)],
+            "the default zero minimum must preserve close-range interaction"
+        );
+
+        let hits =
+            raycasts.cast_against_renderables(&world, [0.0, 0.0, 0.0], [0.0, 0.0, -1.0], 1.0, 10.0);
+
+        assert_eq!(hits, vec![(far, 2.5)]);
+    }
+
+    #[test]
+    fn bvh_raycasts_skip_near_hits_and_keep_far_hits() {
+        let mut world = World::default();
+        let near = add_raycastable_cube(&mut world, -1.0);
+        let far = add_raycastable_cube(&mut world, -3.0);
+        let mut bvh = BvhSystem::default();
+        bvh.queue_renderable_added(near);
+        bvh.queue_renderable_added(far);
+        bvh.flush_pending(&world);
+
+        let hits = RayCastSystem::default().cast_against_renderables_bvh(
+            &world,
+            &bvh,
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, -1.0],
+            1.0,
+            10.0,
+        );
+
+        assert_eq!(hits, vec![(far, 2.5)]);
+    }
+
+    #[test]
+    fn bvh_near_filter_does_not_truncate_far_candidates() {
+        let mut world = World::default();
+        let mut bvh = BvhSystem::default();
+        for _ in 0..65 {
+            let near = add_raycastable_cube(&mut world, -0.75);
+            bvh.queue_renderable_added(near);
+        }
+        let far = add_raycastable_cube(&mut world, -3.0);
+        bvh.queue_renderable_added(far);
+        bvh.flush_pending(&world);
+
+        let hits = RayCastSystem::default().cast_against_renderables_bvh(
+            &world,
+            &bvh,
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, -1.0],
+            1.0,
+            10.0,
+        );
+
+        assert_eq!(hits, vec![(far, 2.5)]);
+    }
 
     #[test]
     fn active_spatial_pointer_retains_current_ray_without_hits() {
@@ -1024,7 +1121,8 @@ impl System for RayCastSystem {
                 },
             );
 
-            let hits = self.cast_against_renderables(world, origin, dir, rc.max_distance);
+            let hits =
+                self.cast_against_renderables(world, origin, dir, rc.min_distance, rc.max_distance);
             let best = hits.first().copied();
 
             match rc.mode {
@@ -1076,6 +1174,7 @@ impl RayCastSystem {
 
                 // Copy out what we need so we can mutably borrow `world` later.
                 let mode = rc.mode;
+                let min_distance = rc.min_distance;
                 let max_distance = rc.max_distance;
                 let cast_requested = rc.cast_requests > 0;
 
@@ -1117,14 +1216,26 @@ impl RayCastSystem {
                 );
 
                 let query_started = profile.then(Instant::now);
-                let mut hits =
-                    self.cast_against_renderables_bvh(world, bvh, origin, dir, max_distance);
+                let mut hits = self.cast_against_renderables_bvh(
+                    world,
+                    bvh,
+                    origin,
+                    dir,
+                    min_distance,
+                    max_distance,
+                );
                 if profile {
                     self.profile_rays += 1;
                     self.profile_bvh_hits += hits.len() as u64;
                 }
                 if hits.is_empty() && !bvh.has_index() {
-                    hits = self.cast_against_renderables(world, origin, dir, max_distance);
+                    hits = self.cast_against_renderables(
+                        world,
+                        origin,
+                        dir,
+                        min_distance,
+                        max_distance,
+                    );
                     if profile {
                         self.profile_fallbacks += 1;
                         self.profile_fallback_candidates += self.eligible_renderables.len() as u64;
@@ -1161,7 +1272,7 @@ impl RayCastSystem {
                         })
                         .collect();
                     eprintln!(
-                        "[raycast] rc={:?} source={:?} origin=[{:+.3},{:+.3},{:+.3}] dir=[{:+.3},{:+.3},{:+.3}] hits={}",
+                        "[raycast] rc={:?} source={:?} origin=[{:+.3},{:+.3},{:+.3}] dir=[{:+.3},{:+.3},{:+.3}] interval=[{:.3},{:.3}] hits={}",
                         rcid,
                         source,
                         origin[0],
@@ -1170,6 +1281,8 @@ impl RayCastSystem {
                         dir[0],
                         dir[1],
                         dir[2],
+                        min_distance,
+                        max_distance,
                         if summary.is_empty() {
                             "<none>".to_string()
                         } else {

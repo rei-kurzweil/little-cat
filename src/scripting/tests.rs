@@ -8566,12 +8566,15 @@ fn roundtrip_avatar_body_yaw() {
 #[test]
 fn roundtrip_raycast() {
     use crate::engine::ecs::component::{RayCastComponent, RayCastMode};
-    let original = RayCastComponent::continuous().with_max_distance(75.0);
+    let original = RayCastComponent::continuous()
+        .with_min_distance(0.75)
+        .with_max_distance(75.0);
     let (world, id) = roundtrip_component(original);
     let got = world
         .get_component_by_id_as::<RayCastComponent>(id)
         .unwrap();
     assert_eq!(got.mode, RayCastMode::Continuous);
+    assert!((got.min_distance - 0.75).abs() < 1e-6);
     assert!((got.max_distance - 75.0).abs() < 1e-6);
 }
 
@@ -8901,8 +8904,8 @@ fn mittens_corp_desktop_evaluates_with_a_desktop_camera_and_no_xr_player_compone
     use crate::engine::ecs::component::{
         AvatarControlComponent, Camera3DComponent, CameraXRComponent, ControllerXRComponent,
         GLTFComponent, HTCEyeTrackingComponent, HumanoidBoneMapComponent, InputComponent,
-        InputXRComponent, InputXRGamepadComponent, MountableComponent, RiderComponent,
-        VRChatOSCEyeTrackingComponent, XREyeTrackingComponent, XrComponent,
+        InputXRComponent, InputXRGamepadComponent, MountableComponent, RayCastComponent,
+        RiderComponent, VRChatOSCEyeTrackingComponent, XREyeTrackingComponent, XrComponent,
     };
 
     let mut world = World::default();
@@ -9008,6 +9011,11 @@ fn mittens_corp_desktop_evaluates_with_a_desktop_camera_and_no_xr_player_compone
         world
             .get_component_by_id_as::<GLTFComponent>(id)
             .is_some_and(|gltf| gltf.uri == "assets/models/car.glb")
+    }));
+    assert!(world.all_components().any(|id| {
+        world
+            .get_component_by_id_as::<RayCastComponent>(id)
+            .is_some_and(|raycast| (raycast.min_distance - 0.75).abs() < 1e-6)
     }));
 }
 

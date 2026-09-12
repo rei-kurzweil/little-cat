@@ -55,7 +55,9 @@ InputXR.on() {
     }
     T.position(0.0, 1.55, 0.0) {
         xr_cam {
-            Pointer {}
+            // This headset-only scene aims through the head camera. Set an
+            // authored clearance when its local presentation can cross the ray.
+            Pointer { Raycast.event_driven().min_distance(0.75) {} }
         }
     }
 }

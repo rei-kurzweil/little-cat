@@ -1208,6 +1208,7 @@ pub fn build_mittens_runtime() -> Result<MittensRuntime, mms::RuntimeSpecError> 
                 }
                 "Raycast" => {
                     no_arg_constructors(component, &["continuous", "event_driven"]);
+                    component.builder_call("min_distance", floats(1));
                     component.builder_call("max_distance", floats(1));
                 }
                 "AudioOutput" => {

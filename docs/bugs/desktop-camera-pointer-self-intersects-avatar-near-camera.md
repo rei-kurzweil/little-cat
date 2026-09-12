@@ -1,6 +1,10 @@
 # Desktop camera pointer hits the local avatar before distant scene geometry
 
-Status: open, reproduced by user in 3D Cursor mode on 2026-09-12.
+Status: the minimum-distance slice is implemented on 2026-09-12.
+`Raycast.min_distance` filters the final narrow-phase hit distance in both BVH
+and fallback queries. Choosing a non-zero value remains an authored policy: it
+is not inferred from avatar or controller topology. Per-raycaster local-avatar
+exclusion remains future work.
 
 ## Observed behavior
 
@@ -41,10 +45,9 @@ outside the avatar. Its normalized direction runs toward the far point.
 
 ### All accepted hits remain available, but there is no near bound
 
-`RayCastComponent` currently exposes only `max_distance`, defaulting to 200
-world units. Both BVH and fallback raycast paths collect every candidate that
-passes narrow phase within `[0, max_distance]`. They do not have a configurable
-positive minimum distance.
+`RayCastComponent` exposes `min_distance` (default `0.0`) and `max_distance`
+(default `200.0`) in world units. Both BVH and fallback paths filter the final
+narrow-phase hit distance to that interval.
 
 Hits are ordered by interaction priority first and ray distance second.
 `GestureSystem` then chooses the first hit that captures the relevant gesture.
@@ -80,7 +83,7 @@ also be excludable from that pointer's interaction query without making the
 avatar globally invisible or non-interactable to other pointers and editor
 views.
 
-## Proposed generic ray interval
+## Ray interval API
 
 Add a lower bound alongside the existing upper bound:
 
@@ -146,16 +149,7 @@ unrelated near geometry and gives authored tools a predictable near bound.
    direction, ordered candidate labels, priorities, `t`, and final cursor hit.
 2. Confirm whether the winning renderables are face/hair/avatar geometry and
    identify the raycastable scope that made them eligible.
-3. Add and test `RayCastComponent.min_distance`, including serialization and MMS
-   authoring.
-4. Test two same-priority surfaces on one ray: the near one below the threshold
-   must be skipped and the farther one selected.
-5. Cover both BVH and brute-force fallback paths and interval validation
-   (`finite`, `>= 0`, and `min_distance <= max_distance`).
-6. Add explicit local-avatar exclusion for the desktop fixture or design the
-   bounded per-raycaster exclusion mechanism if the fixture cannot express it
-   safely today.
-7. Re-test 3D Cursor, selection, mount clicks, grabbing, close UI, desktop
+3. Re-test 3D Cursor, selection, mount clicks, grabbing, close UI, desktop
    camera aim, and XR controller rays.
 
 ## Acceptance criteria

@@ -104,7 +104,11 @@ tripod_light(
 // movement driver.
 let desktop_camera_rig = T {
     name = "bisket_desktop_camera_rig"
-    C3D { Pointer {} }
+    C3D {
+        // This camera is mounted at Bisket's head, so its pointer must skip
+        // the local face/hair before searching the scene behind it.
+        Pointer { Raycast.event_driven().min_distance(0.75) {} }
+    }
 }
 let bisket_first_person_camera_slot = T.position(0.0, 0.08, 0.12).rotation(0.0, 3.14159, 0.0) {
     name = "bisket_first_person_camera_slot"
