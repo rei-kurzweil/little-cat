@@ -38,6 +38,41 @@ eligibility `Zone`.  Attachment valence belongs to the mount point/endpoint
 role; the associated zone describes where an attempted attachment is allowed
 and does not independently acquire that valence.
 
+## Geometric alignment and follow policy
+
+Valence is not a geometric transform.  A mount point is an oriented coordinate
+frame, and its authored rotation carries the desired facing and angular offset.
+If an endpoint must face the other way, author that rotation into its mount
+point rather than adding a parallel `Same`/`Opposed` policy that can contradict
+the frame.
+
+That edge policy needs to distinguish at least:
+
+```text
+initial translation: none | selected axes | full
+initial rotation:    none | yaw | full
+ongoing translation: none | selected axes | full
+ongoing rotation:    none | yaw | full
+offset behavior:     snap | preserve
+```
+
+The two selected mount points supply coordinate frames.  A higher-level policy
+such as occupancy, holding, or wearing selects and validates the geometric
+relationship between those frames.  The resolved active attachment edge owns
+the selected channels, follow behavior, and any captured offset.  The mount
+points themselves own the authored frames.  Neither valence nor the edge adds
+an implicit 180-degree facing correction.
+
+For the current desktop car fixture, the destination mount point is oriented
+toward the desired seated view, while the Rider-side camera slot contains the
+avatar-to-camera basis correction.  Horizontal alignment must solve from both
+frames rather than assuming the source frame has identity rotation.  Ongoing
+follow policy is a separate choice: an upright seat may follow vehicle
+translation plus yaw, while an aircraft or broom may intentionally carry the
+Rider through full pitch and roll.  In both cases, local player/head look
+remains a descendant pose capability rather than being baked into the
+mount-point alignment.
+
 ## Existing vocabulary
 
 Keep the present terms narrow:
@@ -195,4 +230,4 @@ change input-routing behavior.
 - [Rider + Mountable attachment-system first slice](rider-mountable-attachment-system-first-slice.md)
 - [Interaction zones, sockets, and vehicle mounting](release-zones-sockets-and-vehicle-mounting.md)
 - [Grab hand-relative bounds placement](grab-hand-relative-bounds-placement.md)
-- [Desktop mount-point yaw is not applied](../bugs/mittens-corp-desktop-mount-point-yaw-is-not-applied.md)
+- [Desktop mounted facing is reversed](../bugs/mittens-corp-desktop-mounted-facing-is-reversed.md)

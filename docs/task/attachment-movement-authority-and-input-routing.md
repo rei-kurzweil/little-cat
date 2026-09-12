@@ -169,6 +169,7 @@ must not suppress locomotion or capture vehicle controls.
 
 ## Related work
 
+- [Desktop occupancy mount pose and input-authority first slice](desktop-occupancy-mount-pose-and-input-authority-first-slice.md)
 - [Attachment valence and Grabbable unification](attachment-valence-and-grabbable-unification.md)
 - [Rider + Mountable attachment-system first slice](rider-mountable-attachment-system-first-slice.md)
 - [Interaction zones, sockets, and vehicle mounting](release-zones-sockets-and-vehicle-mounting.md)

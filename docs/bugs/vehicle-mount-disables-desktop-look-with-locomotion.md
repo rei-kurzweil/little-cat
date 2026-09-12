@@ -161,8 +161,9 @@ with an intentional authored yaw snap; that is tracked separately.
 
 ## Related work
 
+- [Desktop occupancy mount pose and input-authority first slice](../task/desktop-occupancy-mount-pose-and-input-authority-first-slice.md)
 - [Default desktop Input arrow-key camera look](../task/desktop-input-default-arrow-camera-look.md)
-- [`mittens-corp-desktop` preserves camera yaw when entering the vehicle](mittens-corp-desktop-mount-point-yaw-is-not-applied.md)
+- [`mittens-corp-desktop` mounted facing is reversed](mittens-corp-desktop-mounted-facing-is-reversed.md)
 - [Rider + Mountable attachment-system first slice](../task/rider-mountable-attachment-system-first-slice.md)
 - [`mittens-corp` mounted vehicle controls and laser first slice](../task/mittens-corp-mounted-vehicle-controls-and-laser-first-slice.md)
 - [Input translation basis source for pose-driven locomotion](../task/input-translation-basis-source-for-pose-driven-locomotion.md)

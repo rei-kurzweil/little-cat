@@ -126,4 +126,4 @@ silently consuming all arrow events.
 - [MMS keyboard and regular gamepad events](mms-keyboard-and-gamepad-events.md)
 - [Input translation basis source for pose-driven locomotion](input-translation-basis-source-for-pose-driven-locomotion.md)
 - [Avatar control desktop vs VR divergence](avatar-control-desktop-vs-vr-divergence.md)
-- [Desktop mount-point yaw is not applied](../bugs/mittens-corp-desktop-mount-point-yaw-is-not-applied.md)
+- [Desktop mounted facing is reversed](../bugs/mittens-corp-desktop-mounted-facing-is-reversed.md)
