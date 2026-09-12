@@ -9313,7 +9313,7 @@ fn mittens_corp_evaluates_with_bisket_player_and_car_mount_fixture() {
             .into_iter()
             .filter_map(|signal| signal.intent.map(|intent| intent.value)),
     );
-    for (name, offset) in [("car_laser_muzzle_flash", 0.0), ("laser_beam_glow", -8.0)] {
+    for (name, offset) in [("car_laser_muzzle_flash", 0.0), ("laser_beam_glow", -40.0)] {
         let effect = world
             .all_components()
             .find(|&id| world.component_label(id) == Some(name))

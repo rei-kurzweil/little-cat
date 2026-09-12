@@ -193,22 +193,38 @@ ED.active() {
     // Measure once after import; animate within a positioned muzzle frame so
     // keyframe closures do not need to capture late-loaded placement values.
     let laser_placement = { ready = false }
-    let laser_half_length = 8.0
+    let laser_half_length = 40.0
     let muzzle_clearance = 0.10
     let muzzle_height_fraction = 0.56
 
-    let muzzle_flash_emissive = Emissive.off()
+    let muzzle_flash_0_emissive = Emissive.off()
+    let muzzle_flash_1_emissive = Emissive.off()
     let laser_outer_emissive = Emissive.off()
     let laser_middle_emissive = Emissive.off()
     let laser_core_emissive = Emissive.off()
 
-    let muzzle_flash = T.position(0.0, 0.0, 0.0).scale(0.0, 0.0, 0.0) {
-        name = "car_laser_muzzle_flash"
-        R.sphere() {
-            C.rgba(1.0, 0.22, 0.08, 1.0)
-            Opacity.opacity(0.72)
-            muzzle_flash_emissive
+    let muzzle_flash_0 = T.position(0.0, 0.0, 0.0).scale(0.0, 0.0, 0.0) {
+        name = "car_laser_muzzle_flash_0"
+        R.square() {
+            C.rgba(1.0, 1.0, 1.0, 1.0)
+            Texture.with_uri("assets/images/flash_red_0.png")
+            TextureFiltering.linear()
+            muzzle_flash_0_emissive
         }
+    }
+    let muzzle_flash_1 = T.position(0.0, 0.0, 0.002).scale(0.0, 0.0, 0.0) {
+        name = "car_laser_muzzle_flash_1"
+        R.square() {
+            C.rgba(1.0, 1.0, 1.0, 1.0)
+            Texture.with_uri("assets/images/flash_red_1.png")
+            TextureFiltering.linear()
+            muzzle_flash_1_emissive
+        }
+    }
+    let muzzle_flash = T.position(0.0, 0.0, 0.0) {
+        name = "car_laser_muzzle_flash"
+        muzzle_flash_0
+        muzzle_flash_1
     }
 
     // The beam extends along the car's semantic local -Z axis. Nested widths
@@ -242,24 +258,45 @@ ED.active() {
     let laser_shot = Animation.paused().length(0.22) {
         Keyframe.at(0.0) {
             muzzle_flash.update_transform(
-                [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.48, 0.48, 0.48]
+                [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]
+            )
+            muzzle_flash_0.update_transform(
+                [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.90, 0.90, 0.90]
+            )
+            muzzle_flash_1.update_transform(
+                [0.0, 0.0, 0.002], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]
             )
             laser_beam_glow.update_transform(
                 [0.0, 0.0, -laser_half_length], [-1.5708, 0.0, 0.0], [1.0, 1.0, 1.0]
             )
-            muzzle_flash_emissive.set_intensity(8.0)
+            muzzle_flash_0_emissive.set_intensity(8.0)
+            muzzle_flash_1_emissive.off()
             laser_outer_emissive.set_intensity(3.0)
             laser_middle_emissive.set_intensity(6.0)
             laser_core_emissive.set_intensity(12.0)
         }
-        Keyframe.at(0.10) {
-            muzzle_flash.update_transform(
+        Keyframe.at(0.05) {
+            muzzle_flash_0.update_transform(
                 [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]
+            )
+            muzzle_flash_1.update_transform(
+                [0.0, 0.0, 0.002], [0.0, 0.0, 0.0], [0.90, 0.90, 0.90]
+            )
+            muzzle_flash_0_emissive.off()
+            muzzle_flash_1_emissive.set_intensity(8.0)
+        }
+        Keyframe.at(0.10) {
+            muzzle_flash_0.update_transform(
+                [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]
+            )
+            muzzle_flash_1.update_transform(
+                [0.0, 0.0, 0.002], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]
             )
             laser_beam_glow.update_transform(
                 [0.0, 0.0, -laser_half_length], [-1.5708, 0.0, 0.0], [0.0, 0.0, 0.0]
             )
-            muzzle_flash_emissive.off()
+            muzzle_flash_0_emissive.off()
+            muzzle_flash_1_emissive.off()
             laser_outer_emissive.off()
             laser_middle_emissive.off()
             laser_core_emissive.off()
