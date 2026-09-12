@@ -9,25 +9,41 @@ making humanoids the root concept:
 
 | Valence | Role | Meaning | Default movement authority |
 | --- | --- | --- | --- |
-| -1 | carried/equipped item | a held prop, wearable, hat, glasses, tool, or gear rigidly following a controlled frame/socket | none |
+| -1 | carried/equipped item | a held prop, wearable, hat, glasses, tool, or gear rigidly following a compatible mount point | none |
 | 0 | user-controlled frame | an avatar body, creature rig, camera rig, or another transform basis a user directly controls | owns pedestrian control |
 | +1 | mount | a vehicle, broom, mech, platform, or carrier that the controlled frame can enter/follow | may offer the next control layer |
 
 Attachment valence describes an individual edge, not an object's fixed global
-type, scene depth, or number of sockets.  A vehicle at `+1` can itself become the controlled participant
-for a carrier at `+2`; an equipped item can have its own rigid children.  A
-level-`-1` holdable or wearable may attach to any compatible anchor, including
-one owned by a level-0 controlled frame, a level-`+1` mount, or another item
-when that policy permits it.  A humanoid is one possible level-0 frame, not a
-requirement: any user-controlled transform tree can expose named or authored
-anchors.
+type, scene depth, or number of sockets.  A vehicle at `+1` can itself become
+the controlled participant for a carrier at `+2`; an equipped item can have
+its own rigid children.  A level-`-1` holdable or wearable may attach to any
+compatible mount point, including one owned by a level-0 controlled frame, a
+level-`+1` mount, or another item when that policy permits it.  A humanoid is
+one possible level-0 frame, not a requirement: any user-controlled transform
+tree can expose named or authored mount points.
+
+Valence belongs to the selected role/endpoint for an edge, not to the entire
+owner object.  One owner may expose several mount points with different roles
+at the same time.  For example, a car can expose a `+1` occupant mount, a neutral
+dashboard mount point for equipment, and a rider-side mount point used when
+that car enters an outer carrier.  Attachment eligibility must evaluate the
+chosen points and their capabilities; it must not assign one permanent integer
+to the car.
+
+Use **mount point** for the specific authored attachment endpoint whose
+position and orientation participate in alignment.  A mount point is a type of
+socket in the broader attachment terminology.  Prefer the more specific term
+in this work because it distinguishes the alignment endpoint from its optional
+eligibility `Zone`.  Attachment valence belongs to the mount point/endpoint
+role; the associated zone describes where an attempted attachment is allowed
+and does not independently acquire that valence.
 
 ## Existing vocabulary
 
 Keep the present terms narrow:
 
 - `Rider` is the level-0 occupancy participant.  It is an attachment-system
-  role and supplies the movement root/placement anchor needed by the
+  role and supplies the movement root/rider-side mount point needed by the
   movement-authority handoff.  It does not mean every attachable object.
 - `Mountable` is a level-+1 attachment-system destination.  Its general job is
   accepting a rider relationship; a vehicle is only one implementation.  A
@@ -39,13 +55,14 @@ Keep the present terms narrow:
 common attachment-item foundation, but remain separate semantic policies:
 
 - `Holdable` supplies grab pose, release/throw behavior, pointer eligibility,
-  and a temporary attachment to a compatible hand, handle, or other anchor.
-- `Wearable` supplies equip/unequip policy, target-anchor eligibility, and a
+  and a temporary attachment to a compatible hand, handle, or other mount point.
+- `Wearable` supplies equip/unequip policy, target-mount-point eligibility, and a
   persistent rigid attachment.
 
 An item may offer both roles: glasses can be grabbed, then equipped to a head
-socket; a tool can be held, then placed in a belt socket; a mounted vehicle can
-offer compatible sockets for equipment, dashboard items, handles, or cargo.
+mount point; a tool can be held, then placed at a belt mount point; a mounted
+vehicle can offer compatible mount points for equipment, dashboard items,
+handles, or cargo.
 Do not use `Rider` for any of those cases, and do not make them transfer
 pedestrian movement authority merely because a transform was parented.
 
@@ -67,13 +84,13 @@ different, but their retained attachment edge should not be implemented twice.
 
 Create one low-level, directionally generic attachment-edge foundation used by
 grab/hold, equip/wear, and ride/mount.  It must describe parent/child or
-follow-anchor relations without assuming a humanoid, a vehicle, a pointer, or
+follow-mount-point relations without assuming a humanoid, a vehicle, a pointer, or
 movement authority.
 
-Targets must be expressed as generic authored attachment anchors.  `Mountable`
-owners may expose such anchors just as a user-controlled frame can; attaching
-an item to one does not turn that item into a rider or activate the mount's
-movement controls.
+Targets must be expressed as generic authored mount points.  `Mountable` owners
+may expose such points just as a user-controlled frame can; attaching an item
+to one does not turn that item into a rider or activate the mount's movement
+controls.
 
 Higher-level systems remain responsible for their own policies:
 
@@ -97,29 +114,70 @@ runtime mechanism while preserving the same relationship semantics.
 
 ## Implementation slices
 
-1. Inventory the exact invariants shared by `GrabbableSystem` and
-   `AttachmentSystem`: atomicity, cycle checks, original-parent restoration,
-   world-pose preservation, single-owner policy, removal cleanup, and
-   lifecycle events.
-2. Introduce a generic active attachment-edge representation and a public
-   query/cleanup boundary.  Do not migrate behavior by exposing one system's
-   private maps to another.
-3. Rebuild current temporary grabs on that edge while retaining their existing
-   ray clearance, smoothing, release, and interaction-priority semantics.
-4. Define `Holdable` as the policy layer above the retained grab edge.  Decide
-   whether `Grabbable` becomes that role, remains the activation marker, or
-   composes with it; preserve existing MMS scenes during migration.
-5. Add rigid `Wearable`/equip-to-socket behavior.  Support arbitrary named,
-   authored anchors first; defer skinning/deformation attachment.
-6. Rebuild the Rider-to-Mountable path on the same foundation, then allow the
-   movement-authority system to react only to the occupancy capability.
-7. Add nesting, ownership, save/load, removal, and conflict rules across held,
-   worn, and mounted relationships.
+### Slice 1: make AttachmentSystem valence-aware without changing behavior
+
+- Define a validated attachment-valence/endpoint representation.  Prefer an
+  enum or constrained type over arbitrary scene-authored integers.
+- Map the current `Rider` endpoint to neutral/`0` and the current `Mountable`
+  occupant endpoint to positive/`+1`.
+- Record both selected endpoints, their valences, and the semantic relationship
+  kind on every active mount edge.
+- Make mount eligibility reject an incompatible direction or role pairing in
+  addition to its existing zone, occupancy, reference, transform, and cycle
+  checks.
+- Preserve the present Rider-to-Mountable result exactly and add focused tests
+  proving `0 -> +1` succeeds while a reversed or incompatible pairing fails.
+
+This slice establishes vocabulary and evidence in the existing system.  It
+must not yet rename `Rider`/`Mountable`, migrate grabbing, add wearables, or
+change input-routing behavior.
+
+### Slice 2: generic retained attachment edges
+
+- Inventory the exact invariants shared by `GrabbableSystem` and
+  `AttachmentSystem`: atomicity, cycle checks, original-parent restoration,
+  world-pose preservation, single-owner policy, removal cleanup, and lifecycle
+  events.
+- Introduce a generic active attachment-edge representation and public
+  query/cleanup boundary.  Do not expose one system's private maps to another.
+- Rebuild Rider-to-Mountable commits on that edge while preserving its current
+  activation and alignment behavior.
+
+### Slice 3: separate movement authority
+
+- Move input suspension/restoration out of attachment as specified by
+  [the movement-authority task](attachment-movement-authority-and-input-routing.md).
+- Let only an occupancy edge with the appropriate capability request a
+  movement-authority layer.  Numeric valence alone must never cause an input
+  handoff.
+
+### Slice 4: migrate held grabs
+
+- Rebuild current temporary grabs on the generic edge while retaining their
+  existing ray clearance, smoothing, release, and interaction-priority
+  semantics.
+- Define `Holdable` as the policy above the retained grab edge.  Decide whether
+  `Grabbable` becomes that role, remains the activation marker, or composes
+  with it; preserve existing MMS scenes during migration.
+
+### Slice 5: rigid wearables and general mount points
+
+- Add rigid `Wearable`/equip-to-mount-point behavior with arbitrary authored
+  mount points first; defer skinning and deformation binding.
+- Prove a held/worn item can target a mount point owned by either a controlled
+  frame or a `Mountable` without activating movement authority.
+
+### Slice 6: composition and nesting
+
+- Add nesting, ownership, save/load, removal, and conflict rules across held,
+  worn, and mounted relationships.
+- Prove that one object may expose multiple endpoint roles and participate in
+  different-valence edges without acquiring one fixed global valence.
 
 ## Acceptance criteria
 
 - A non-humanoid user-controlled frame or a mount can hold or wear an item
-  through an authored compatible anchor without special-case humanoid code.
+  through an authored compatible mount point without special-case humanoid code.
 - A prop can be grabbed, released, equipped, unequipped, and grabbed again
   without orphaned parentage, transform jumps, or duplicate ownership.
 - A `Grabbable` item and a `Mountable` vehicle still compete deterministically
@@ -137,3 +195,4 @@ runtime mechanism while preserving the same relationship semantics.
 - [Rider + Mountable attachment-system first slice](rider-mountable-attachment-system-first-slice.md)
 - [Interaction zones, sockets, and vehicle mounting](release-zones-sockets-and-vehicle-mounting.md)
 - [Grab hand-relative bounds placement](grab-hand-relative-bounds-placement.md)
+- [Desktop mount-point yaw is not applied](../bugs/mittens-corp-desktop-mount-point-yaw-is-not-applied.md)

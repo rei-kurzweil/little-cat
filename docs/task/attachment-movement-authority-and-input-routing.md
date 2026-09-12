@@ -62,7 +62,7 @@ pedestrian / vehicle / carrier controller
 
 It must:
 
-- resolve the rider, mountable, anchors, entry eligibility, and cycles;
+- resolve the rider, mountable, mount points, entry eligibility, and cycles;
 - atomically establish or remove the transform-follow relationship;
 - retain the authoritative active attachment edge for validation and cleanup;
 - emit `MountStarted` only after commit and `MountEnded` after every normal or
@@ -101,8 +101,8 @@ controller can make the same choice without changing mounting.
 
 Keep `Rider` and `Mountable` as narrow semantic roles for an occupancy mount:
 
-- `Rider` means an occupant that contributes a movement root, a placement
-  anchor, and a pedestrian movement layer that can yield authority.
+- `Rider` means an occupant that contributes a movement root, a rider-side
+  mount point, and a pedestrian movement layer that can yield authority.
 - `Mountable` means a destination that can accept that occupant at an authored
   seat/entry/exit relationship and may offer the next movement layer.
 
@@ -118,12 +118,12 @@ of humanoids.  Later roles can build on it without pretending they are riders:
 | Relation | Initiator/child role | Target/parent role | Movement authority |
 | --- | --- | --- | --- |
 | Vehicle seat | `Rider` | `Mountable` | transfers to the mounted controller |
-| Held prop | future `Holdable`/`Grabbable` attachment | future hand/socket target | none by default |
-| Clothing/gear | future `Wearable` | future body/bone socket target | none by default |
+| Held prop | future `Holdable`/`Grabbable` attachment | future hand mount point | none by default |
+| Clothing/gear | future `Wearable` | future body/bone mount point | none by default |
 | Carrier/platform | a rider or other movement participant | movement-capable mount | may transfer |
 
-Humanoids are therefore providers of optional, authored attachment anchors
-(hand, head, torso, bone, or named socket), not a privileged global model.
+Humanoids are therefore providers of optional authored mount points (hand,
+head, torso, bone, or another named point), not a privileged global model.
 The first wearable pass may use rigid transform attachment only; skinning and
 deformation binding are separate later concerns.
 
@@ -142,7 +142,7 @@ must not suppress locomotion or capture vehicle controls.
 4. Migrate pedestrian `Input` and `InputXRGamepad.locomotion` to registered
    automatic movement layers.
 5. Define the generic attachment-role/capability boundary for later held,
-   worn, and socketed attachments; preserve `Rider`/`Mountable` as the first
+   worn, and mount-point attachments; preserve `Rider`/`Mountable` as the first
    occupancy-specific pair rather than overloading them.
 6. Add an authored or engine-owned vehicle-controller layer that becomes active
    only for its matching `Mountable` edge.
