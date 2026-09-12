@@ -41,10 +41,21 @@ invisible or visually detached.
 - The flash quads may be edge-on, back-face culled, behind the car, too small,
   or missing the transparent-material/cutout configuration required by the PNG
   alpha channel.
+- `R.square()` lies in its primitive-local plane, but the flash transforms have
+  no rotation. Confirm that this plane faces outward along the car's firing axis;
+  if its normal is not aligned with local `-Z`, rotate both flash quads at their
+  shared muzzle parent. Test both faces because back-face culling can make the
+  correct plane invisible from the firing-side viewpoint.
 - Zero-scale-at-rest transforms may interact poorly with transition capture or
   renderable bounds/culling when first made visible.
 - The imported car's visual front may not be `model_box.min.z`; an axis-aligned
   model bound is not a semantic muzzle marker.
+- `Transform.local_bounds()` does union descendant renderable bounds in the
+  queried transform's local frame, including nested transforms, and deliberately
+  returns `null` until the GLTF and cached renderable bounds are ready. The scene
+  is using that API as designed, but the resulting AABB describes all car
+  geometry, not the cannon barrel or a semantic front point. A correct aggregate
+  box can therefore still produce an incorrect muzzle location.
 - The beam's square primitive axis, post-rotation axis, root translation, and
   scale convention may not produce the assumed muzzle-to-tip segment.
 - A very long transparent quad may be clipped, culled, depth-sorted poorly, or
@@ -62,7 +73,8 @@ invisible or visually detached.
 ## Investigation plan
 
 1. Add temporary visible axis markers at the measured bounds minimum/maximum Z
-   and at `car_laser_origin`; confirm which direction is the car's front.
+   and at `car_laser_origin`; print the returned `local_bounds()` values and
+   confirm which direction is the car's front.
 2. Render each flash continuously at a large scale, without emissive or
    animation, and verify texture loading, alpha blending/cutout, UV orientation,
    face culling, and local facing from the expected camera positions.
@@ -94,4 +106,3 @@ invisible or visually detached.
 - `assets/images/flash_red_0.png`
 - `assets/images/flash_red_1.png`
 - `src/scripting/tests.rs`
-
