@@ -123,6 +123,7 @@ For the current car edge:
 
 ## Related work
 
+- [Vehicle mounting disables desktop look together with locomotion](vehicle-mount-disables-desktop-look-with-locomotion.md)
 - [Attachment valence and Grabbable unification](../task/attachment-valence-and-grabbable-unification.md)
 - [Rider + Mountable attachment-system first slice](../task/rider-mountable-attachment-system-first-slice.md)
 - [Default desktop Input arrow-key camera look](../task/desktop-input-default-arrow-camera-look.md)

@@ -8,7 +8,7 @@ use crate::engine::ecs::system::System;
 use crate::engine::graphics::VisualWorld;
 use crate::engine::user_input::InputState;
 use crate::utils::math;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use winit::event::MouseButton;
 use winit::keyboard::{Key, NamedKey};
 
@@ -20,6 +20,11 @@ use winit::keyboard::{Key, NamedKey};
 pub struct InputSystem {
     inputs: Vec<ComponentId>,
 
+    // Arrow keys are latched per InputComponent from fresh key transitions. Keeping
+    // this state here (rather than consulting `keys_down` alone) means an input that
+    // is disabled, replaced, or UI-captured cannot resume from a stale held key.
+    held_arrows: HashMap<ComponentId, HashSet<NamedKey>>,
+
     // FPS mode needs stable yaw/pitch/bank without per-frame extraction.
     // Keyed by the controlled TransformComponent id.
     fps_yaw_pitch_roll: HashMap<ComponentId, (f32, f32, f32)>,
@@ -29,15 +34,66 @@ impl InputSystem {
     pub fn new() -> Self {
         Self {
             inputs: Vec::new(),
+            held_arrows: HashMap::new(),
             fps_yaw_pitch_roll: HashMap::new(),
         }
     }
 
+    fn arrow_rotation_delta(
+        &mut self,
+        input_cid: ComponentId,
+        input: &InputState,
+        captured_by_ui: bool,
+        dt_sec: f32,
+    ) -> (f32, f32) {
+        if captured_by_ui {
+            self.held_arrows.remove(&input_cid);
+            return (0.0, 0.0);
+        }
+
+        let held = self.held_arrows.entry(input_cid).or_default();
+        for key in [
+            NamedKey::ArrowLeft,
+            NamedKey::ArrowRight,
+            NamedKey::ArrowUp,
+            NamedKey::ArrowDown,
+        ] {
+            let logical = Key::Named(key);
+            if input.key_released(&logical) {
+                held.remove(&key);
+            }
+            if input.key_pressed(&logical) {
+                held.insert(key);
+            }
+        }
+
+        const ARROW_LOOK_SPEED_RAD_PER_SEC: f32 = 1.5;
+        let yaw_direction = (held.contains(&NamedKey::ArrowLeft) as i32
+            - held.contains(&NamedKey::ArrowRight) as i32) as f32;
+        let pitch_direction = (held.contains(&NamedKey::ArrowUp) as i32
+            - held.contains(&NamedKey::ArrowDown) as i32) as f32;
+        let safe_dt = if dt_sec.is_finite() {
+            dt_sec.max(0.0)
+        } else {
+            0.0
+        };
+        let frame_scale = ARROW_LOOK_SPEED_RAD_PER_SEC * safe_dt;
+        (yaw_direction * frame_scale, pitch_direction * frame_scale)
+    }
+
     /// Register an InputComponent.
     pub fn register_input(&mut self, component: ComponentId) {
+        // Registration also represents replacement/reinitialization of the input.
+        self.held_arrows.remove(&component);
         if !self.inputs.iter().any(|c| *c == component) {
             self.inputs.push(component);
         }
+    }
+
+    /// Remove all retained state owned by an InputComponent.
+    pub fn remove_input(&mut self, component: ComponentId) {
+        self.inputs.retain(|candidate| *candidate != component);
+        self.held_arrows.remove(&component);
     }
 
     fn compute_rotation(
@@ -45,6 +101,8 @@ impl InputSystem {
         roll_axis: RollAxis,
         input: &InputState,
         dt_sec: f32,
+        arrow_yaw_delta: f32,
+        arrow_pitch_delta: f32,
         rotation: &mut [f32; 4],
     ) {
         // Roll keys.
@@ -56,8 +114,8 @@ impl InputSystem {
 
         // Sensitivity is radians per pixel.
         const MOUSE_SENS_RAD_PER_PX: f32 = 0.003;
-        let yaw_delta = drag_dx * MOUSE_SENS_RAD_PER_PX;
-        let pitch_delta = drag_dy * MOUSE_SENS_RAD_PER_PX;
+        let yaw_delta = drag_dx * MOUSE_SENS_RAD_PER_PX + arrow_yaw_delta;
+        let pitch_delta = drag_dy * MOUSE_SENS_RAD_PER_PX + arrow_pitch_delta;
 
         // Relative/flight-style semantics: apply local incremental rotations.
         if yaw_delta != 0.0 {
@@ -89,6 +147,8 @@ impl InputSystem {
         roll_axis: RollAxis,
         input: &InputState,
         dt_sec: f32,
+        arrow_yaw_delta: f32,
+        arrow_pitch_delta: f32,
         rotation: &mut [f32; 4],
     ) {
         // Roll keys.
@@ -100,8 +160,8 @@ impl InputSystem {
 
         // Sensitivity is radians per pixel.
         const MOUSE_SENS_RAD_PER_PX: f32 = 0.003;
-        let yaw_delta = drag_dx * MOUSE_SENS_RAD_PER_PX;
-        let pitch_delta = drag_dy * MOUSE_SENS_RAD_PER_PX;
+        let yaw_delta = drag_dx * MOUSE_SENS_RAD_PER_PX + arrow_yaw_delta;
+        let pitch_delta = drag_dy * MOUSE_SENS_RAD_PER_PX + arrow_pitch_delta;
 
         // Allow Q/E rotation even without mouse drag.
         let qe_delta = if q || e {
@@ -147,6 +207,7 @@ impl InputSystem {
         }
 
         const MAX_PITCH: f32 = 1.55; // ~88.8deg
+        yaw = (yaw + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
         pitch = pitch.clamp(-MAX_PITCH, MAX_PITCH);
 
         // Persist state.
@@ -326,7 +387,18 @@ impl InputSystem {
         emit: &mut dyn crate::engine::ecs::SignalEmitter,
         dt_sec: f32,
     ) {
-        // We gate early to avoid scanning inputs if nothing relevant is pressed.
+        self.process_input_with_capture(world, input, emit, dt_sec, false);
+    }
+
+    /// Process input while allowing a focused UI control to reserve arrow keys.
+    pub fn process_input_with_capture(
+        &mut self,
+        world: &mut World,
+        input: &InputState,
+        emit: &mut dyn crate::engine::ecs::SignalEmitter,
+        dt_sec: f32,
+        arrows_captured_by_ui: bool,
+    ) {
         let any_move = input.key_down(&Key::Character("w".into()))
             || input.key_down(&Key::Character("a".into()))
             || input.key_down(&Key::Character("s".into()))
@@ -338,17 +410,19 @@ impl InputSystem {
 
         let any_drag = input.mouse_dragging_button(MouseButton::Right);
 
-        if !any_move && !any_drag {
-            return;
-        }
-
         let inputs = self.inputs.clone();
         for input_cid in inputs {
             let speed_units_per_sec =
                 match world.get_component_by_id_as::<InputComponent>(input_cid) {
                     Some(input_comp) if input_comp.enabled => input_comp.speed,
-                    Some(_) => continue,
-                    None => continue,
+                    Some(_) => {
+                        self.held_arrows.remove(&input_cid);
+                        continue;
+                    }
+                    None => {
+                        self.held_arrows.remove(&input_cid);
+                        continue;
+                    }
                 };
 
             // Find TransformComponent child. If absent, we don't compute.
@@ -386,6 +460,17 @@ impl InputSystem {
                 })
                 .unwrap_or((None, ForwardAxis::Y, RollAxis::Z, true, false, None));
 
+            let (arrow_yaw_delta, arrow_pitch_delta) = if rotation_enabled {
+                self.arrow_rotation_delta(input_cid, input, arrows_captured_by_ui, dt_sec)
+            } else {
+                self.held_arrows.remove(&input_cid);
+                (0.0, 0.0)
+            };
+            let any_arrow = arrow_yaw_delta != 0.0 || arrow_pitch_delta != 0.0;
+            if !any_move && !any_drag && !any_arrow {
+                continue;
+            }
+
             let Some(transform_cid) = transform_child else {
                 continue;
             };
@@ -408,6 +493,8 @@ impl InputSystem {
                         roll_axis,
                         input,
                         dt_sec,
+                        arrow_yaw_delta,
+                        arrow_pitch_delta,
                         &mut transform_comp_mut.transform.rotation,
                     );
                 } else if rotation_enabled {
@@ -415,6 +502,8 @@ impl InputSystem {
                         roll_axis,
                         input,
                         dt_sec,
+                        arrow_yaw_delta,
+                        arrow_pitch_delta,
                         &mut transform_comp_mut.transform.rotation,
                     );
                 }
@@ -462,5 +551,184 @@ impl System for InputSystem {
         _dt_sec: f32,
     ) {
         // InputSystem is driven by SystemWorld::tick calling process_input with a CommandQueue.
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::ecs::CommandQueue;
+
+    fn rig(
+        mode: Option<InputTransformModeComponent>,
+    ) -> (World, InputSystem, ComponentId, ComponentId) {
+        let mut world = World::default();
+        let input_id = world.add_component(InputComponent::new().with_speed(1.0));
+        if let Some(mode) = mode {
+            let mode_id = world.add_component(mode);
+            world.add_child(input_id, mode_id).unwrap();
+        }
+        let transform_id = world.add_component(TransformComponent::new());
+        world.add_child(input_id, transform_id).unwrap();
+
+        let mut system = InputSystem::new();
+        system.register_input(input_id);
+        (world, system, input_id, transform_id)
+    }
+
+    fn press(input: &mut InputState, key: NamedKey) {
+        let key = Key::Named(key);
+        input.keys_down.insert(key.clone());
+        input.keys_pressed.insert(key);
+    }
+
+    fn release(input: &mut InputState, key: NamedKey) {
+        let key = Key::Named(key);
+        input.keys_down.remove(&key);
+        input.keys_pressed.remove(&key);
+        input.keys_released.insert(key);
+    }
+
+    fn rotation(world: &World, transform: ComponentId) -> [f32; 4] {
+        world
+            .get_component_by_id_as::<TransformComponent>(transform)
+            .unwrap()
+            .transform
+            .rotation
+    }
+
+    fn assert_quat_near(actual: [f32; 4], expected: [f32; 4]) {
+        for (actual, expected) in actual.into_iter().zip(expected) {
+            assert!((actual - expected).abs() < 1.0e-5, "{actual} != {expected}");
+        }
+    }
+
+    #[test]
+    fn held_arrows_apply_dt_scaled_local_yaw_and_pitch() {
+        let (mut world, mut system, _, transform) = rig(None);
+        let mut input = InputState::default();
+        press(&mut input, NamedKey::ArrowLeft);
+        press(&mut input, NamedKey::ArrowUp);
+
+        system.process_input_with_capture(&mut world, &input, &mut CommandQueue::new(), 0.5, false);
+
+        let yaw = math::quat_from_axis_angle([0.0, 1.0, 0.0], 0.75);
+        let pitch = math::quat_from_axis_angle([1.0, 0.0, 0.0], 0.75);
+        assert_quat_near(rotation(&world, transform), math::quat_mul(yaw, pitch));
+    }
+
+    #[test]
+    fn fps_arrows_share_retained_state_wrap_yaw_and_clamp_pitch() {
+        let (mut world, mut system, _, transform) = rig(Some(
+            InputTransformModeComponent::forward_z().with_fps_rotation(),
+        ));
+        let mut input = InputState::default();
+        press(&mut input, NamedKey::ArrowLeft);
+        press(&mut input, NamedKey::ArrowUp);
+
+        system.process_input_with_capture(
+            &mut world,
+            &input,
+            &mut CommandQueue::new(),
+            10.0,
+            false,
+        );
+
+        let (yaw, pitch, roll) = system.fps_yaw_pitch_roll[&transform];
+        assert!((-std::f32::consts::PI..std::f32::consts::PI).contains(&yaw));
+        assert_eq!(pitch, 1.55);
+        assert_eq!(roll, 0.0);
+        assert!(rotation(&world, transform).into_iter().all(f32::is_finite));
+    }
+
+    #[test]
+    fn fps_mouse_and_arrow_deltas_are_additive() {
+        let (mut world, mut system, _, transform) = rig(Some(
+            InputTransformModeComponent::forward_z().with_fps_rotation(),
+        ));
+        let mut input = InputState::default();
+        input.cursor_pos = Some((0.0, 0.0));
+        input.start_frame();
+        input.cursor_pos = Some((10.0, 20.0));
+        input.mouse_down.insert(MouseButton::Right);
+        input.start_frame();
+        press(&mut input, NamedKey::ArrowLeft);
+        press(&mut input, NamedKey::ArrowUp);
+
+        system.process_input_with_capture(&mut world, &input, &mut CommandQueue::new(), 0.1, false);
+
+        let (yaw, pitch, _) = system.fps_yaw_pitch_roll[&transform];
+        assert!((yaw - 0.18).abs() < 1.0e-5);
+        assert!((pitch - 0.21).abs() < 1.0e-5);
+    }
+
+    #[test]
+    fn rotation_disabled_keeps_translation_but_ignores_arrows() {
+        let (mut world, mut system, input_id, transform) = rig(Some(
+            InputTransformModeComponent::forward_z().with_rotation_disabled(),
+        ));
+        let mut input = InputState::default();
+        press(&mut input, NamedKey::ArrowLeft);
+        input.keys_down.insert(Key::Character("w".into()));
+
+        system.process_input_with_capture(&mut world, &input, &mut CommandQueue::new(), 1.0, false);
+
+        let transform_component = world
+            .get_component_by_id_as::<TransformComponent>(transform)
+            .unwrap();
+        assert_eq!(transform_component.transform.rotation, [0.0, 0.0, 0.0, 1.0]);
+        assert_eq!(transform_component.transform.translation, [0.0, 0.0, -1.0]);
+
+        let mode_id = world
+            .children_of(input_id)
+            .iter()
+            .copied()
+            .find(|child| {
+                world
+                    .get_component_by_id_as::<InputTransformModeComponent>(*child)
+                    .is_some()
+            })
+            .unwrap();
+        world
+            .get_component_by_id_as_mut::<InputTransformModeComponent>(mode_id)
+            .unwrap()
+            .rotation_enabled = true;
+        input.keys_pressed.clear();
+        input.keys_down.remove(&Key::Character("w".into()));
+        system.process_input_with_capture(&mut world, &input, &mut CommandQueue::new(), 1.0, false);
+        assert_eq!(rotation(&world, transform), [0.0, 0.0, 0.0, 1.0]);
+    }
+
+    #[test]
+    fn ui_capture_and_disable_require_a_fresh_arrow_press() {
+        let (mut world, mut system, input_id, transform) = rig(None);
+        let mut input = InputState::default();
+        press(&mut input, NamedKey::ArrowLeft);
+        system.process_input_with_capture(&mut world, &input, &mut CommandQueue::new(), 0.1, false);
+        let first = rotation(&world, transform);
+
+        input.keys_pressed.clear();
+        system.process_input_with_capture(&mut world, &input, &mut CommandQueue::new(), 0.1, true);
+        system.process_input_with_capture(&mut world, &input, &mut CommandQueue::new(), 0.1, false);
+        assert_quat_near(rotation(&world, transform), first);
+
+        world
+            .get_component_by_id_as_mut::<InputComponent>(input_id)
+            .unwrap()
+            .enabled = false;
+        system.process_input_with_capture(&mut world, &input, &mut CommandQueue::new(), 0.1, false);
+        world
+            .get_component_by_id_as_mut::<InputComponent>(input_id)
+            .unwrap()
+            .enabled = true;
+        system.process_input_with_capture(&mut world, &input, &mut CommandQueue::new(), 0.1, false);
+        assert_quat_near(rotation(&world, transform), first);
+
+        release(&mut input, NamedKey::ArrowLeft);
+        system.process_input_with_capture(&mut world, &input, &mut CommandQueue::new(), 0.1, false);
+        input.keys_released.clear();
+        press(&mut input, NamedKey::ArrowLeft);
+        system.process_input_with_capture(&mut world, &input, &mut CommandQueue::new(), 0.1, false);
+        assert_ne!(rotation(&world, transform), first);
     }
 }

@@ -31,6 +31,16 @@ pub struct SliderSystem {
 }
 
 impl SliderSystem {
+    /// Whether the currently focused slider owns arrow-key navigation.
+    pub fn has_keyboard_focus(&self, world: &World) -> bool {
+        let focused = *self.focused.lock().expect("slider focus lock");
+        focused.is_some_and(|slider| {
+            world
+                .get_component_by_id_as::<SliderComponent>(slider)
+                .is_some_and(|component| !component.disabled())
+        })
+    }
+
     pub fn install_handlers(&mut self, rx: &mut RxWorld) {
         if self.handlers_installed {
             return;

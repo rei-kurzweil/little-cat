@@ -1024,8 +1024,8 @@ impl SystemWorld {
     ) {
         use crate::engine::ecs::component::{
             CollisionComponent, CollisionResponseComponent, ControllerXRComponent,
-            HttpClientComponent, HttpServerComponent, InputXRComponent, PointerComponent,
-            RayCastComponent, RenderableComponent, SignalRouteUpwardComponent,
+            HttpClientComponent, HttpServerComponent, InputComponent, InputXRComponent,
+            PointerComponent, RayCastComponent, RenderableComponent, SignalRouteUpwardComponent,
             StencilClipComponent, TransformComponent,
         };
 
@@ -1114,6 +1114,9 @@ impl SystemWorld {
                 .is_some()
             {
                 self.remove_input_xr(world, visuals, n);
+            }
+            if world.get_component_by_id_as::<InputComponent>(n).is_some() {
+                self.input.remove_input(n);
             }
             if world
                 .get_component_by_id_as::<ControllerXRComponent>(n)
@@ -2895,7 +2898,10 @@ impl SystemWorld {
         queue.flush(world, self, visuals, render_assets);
 
         // Process input first - it may queue commands
-        self.input.process_input(world, input, queue, dt_sec);
+        let arrows_captured_by_ui =
+            self.text_input.has_focus() || self.slider.has_keyboard_focus(world);
+        self.input
+            .process_input_with_capture(world, input, queue, dt_sec, arrows_captured_by_ui);
 
         // Spawn any GLTF component trees. This may queue component registrations.
         self.gltf.tick_with_queue(

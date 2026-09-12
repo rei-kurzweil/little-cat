@@ -1,6 +1,6 @@
 # Task: default desktop Input arrow-key rotation
 
-Status: planned, 2026-09-12.
+Status: implemented; manual desktop verification pending, 2026-09-12.
 
 ## Goal
 
@@ -121,6 +121,7 @@ silently consuming all arrow events.
 
 ## Related work
 
+- [Vehicle mounting disables desktop look together with locomotion](../bugs/vehicle-mount-disables-desktop-look-with-locomotion.md)
 - [MMS keyboard events first slice](mms-keyboard-events-first-slice.md)
 - [MMS keyboard and regular gamepad events](mms-keyboard-and-gamepad-events.md)
 - [Input translation basis source for pose-driven locomotion](input-translation-basis-source-for-pose-driven-locomotion.md)
