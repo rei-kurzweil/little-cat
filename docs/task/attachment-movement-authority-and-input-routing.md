@@ -33,6 +33,10 @@ The system must be generic: a car, broom, mech, or outer carrier may supply a
 movement layer.  It must not be a car-specific rule embedded in
 `AttachmentSystem`.
 
+It is also not a `VehicleSystem`.  Vehicle motion is only the first consumer
+of a generic movement-authority layer; a mech, moving platform, carrier, or
+future non-humanoid pilot can use the same handoff.
+
 ```text
 interaction activation
         |
@@ -93,6 +97,40 @@ Vehicle motion itself stays out of this system.  A vehicle controller consumes
 the routed action values and drives its own transform/velocity; a later physics
 controller can make the same choice without changing mounting.
 
+## Role vocabulary and attachment direction
+
+Keep `Rider` and `Mountable` as narrow semantic roles for an occupancy mount:
+
+- `Rider` means an occupant that contributes a movement root, a placement
+  anchor, and a pedestrian movement layer that can yield authority.
+- `Mountable` means a destination that can accept that occupant at an authored
+  seat/entry/exit relationship and may offer the next movement layer.
+
+They must not become generic names for “a thing which may be parented” and “a
+thing which may receive a child.”  A mug held by a hand, a hat placed on a
+head, a backpack worn on a torso, and a passenger entering a vehicle all use
+an attachment relation, but they do not have the same eligibility, placement,
+input, occupancy, or cleanup semantics.
+
+The attachment foundation should remain directionally generic and independent
+of humanoids.  Later roles can build on it without pretending they are riders:
+
+| Relation | Initiator/child role | Target/parent role | Movement authority |
+| --- | --- | --- | --- |
+| Vehicle seat | `Rider` | `Mountable` | transfers to the mounted controller |
+| Held prop | future `Holdable`/`Grabbable` attachment | future hand/socket target | none by default |
+| Clothing/gear | future `Wearable` | future body/bone socket target | none by default |
+| Carrier/platform | a rider or other movement participant | movement-capable mount | may transfer |
+
+Humanoids are therefore providers of optional, authored attachment anchors
+(hand, head, torso, bone, or named socket), not a privileged global model.
+The first wearable pass may use rigid transform attachment only; skinning and
+deformation binding are separate later concerns.
+
+An authority handoff must be requested by the role pair/capability, not by the
+mere fact that an attachment edge exists.  Holding a prop or wearing clothing
+must not suppress locomotion or capture vehicle controls.
+
 ## Suggested implementation slices
 
 1. Remove `snapshot_input`, `suspend_input`, and `restore_input` from
@@ -103,9 +141,12 @@ controller can make the same choice without changing mounting.
 3. Add a generic movement-authority stack with exact prior-state restoration.
 4. Migrate pedestrian `Input` and `InputXRGamepad.locomotion` to registered
    automatic movement layers.
-5. Add an authored or engine-owned vehicle-controller layer that becomes active
+5. Define the generic attachment-role/capability boundary for later held,
+   worn, and socketed attachments; preserve `Rider`/`Mountable` as the first
+   occupancy-specific pair rather than overloading them.
+6. Add an authored or engine-owned vehicle-controller layer that becomes active
    only for its matching `Mountable` edge.
-6. Migrate `mittens-corp` from manual mounted-state gating to that layer, while
+7. Migrate `mittens-corp` from manual mounted-state gating to that layer, while
    retaining its existing XR stick/laser bindings as the first controller
    consumer.
 
@@ -113,6 +154,8 @@ controller can make the same choice without changing mounting.
 
 - Mounting and dismounting succeed with no input components in the world.
 - Attachment code has no dependency on desktop or XR input component types.
+- A held or worn attachment can commit and unwind without receiving a movement
+  authority layer, and a non-humanoid can be an attachment endpoint.
 - Mounting a vehicle stops only the relevant pedestrian automatic movement;
   tracking and raw device observation remain live.
 - A mounted vehicle alone receives its routed movement actions; an unmounted
@@ -126,6 +169,7 @@ controller can make the same choice without changing mounting.
 
 ## Related work
 
+- [Attachment valence and Grabbable unification](attachment-valence-and-grabbable-unification.md)
 - [Rider + Mountable attachment-system first slice](rider-mountable-attachment-system-first-slice.md)
 - [Interaction zones, sockets, and vehicle mounting](release-zones-sockets-and-vehicle-mounting.md)
 - [Mittens-corp mounted vehicle controls and laser first slice](mittens-corp-mounted-vehicle-controls-and-laser-first-slice.md)
