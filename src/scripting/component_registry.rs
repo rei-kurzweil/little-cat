@@ -3754,6 +3754,8 @@ fn apply_call(
         match method {
             "speed" => inp.speed = arg_f32(args, 0)?,
             "enabled" => inp.enabled = arg_bool(args, 0)?,
+            "translation_enabled" => inp.translation_enabled = arg_bool(args, 0)?,
+            "rotation_enabled" => inp.rotation_enabled = arg_bool(args, 0)?,
             _ => {}
         }
         return Ok(());

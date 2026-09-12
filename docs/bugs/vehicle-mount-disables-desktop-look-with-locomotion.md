@@ -1,12 +1,12 @@
 # Vehicle mounting disables desktop look together with locomotion
 
-Status: open, identified during desktop vehicle validation on 2026-09-12.
+Status: interim fix implemented on 2026-09-12; manual desktop validation pending.
 
 ## Problem
 
-Mounting a vehicle currently disables the Rider's entire desktop `Input`
-component.  That correctly prevents pedestrian WASD translation from moving the
-player independently of the vehicle, but it also removes the player's ordinary
+Mounting a vehicle previously disabled the Rider's entire desktop `Input`
+component.  That prevented pedestrian WASD translation from moving the
+player independently of the vehicle, but it also removed the player's ordinary
 mouse and arrow-key rotation.  The mounted player consequently loses desktop
 look even though look ownership has not transferred to the vehicle.
 
@@ -21,11 +21,11 @@ These are separate control capabilities:
 therefore dirty that Transform's descendant pose.  Its master enabled state is
 too coarse to express a mount handoff that transfers only translation.
 
-## Current implementation evidence
+## Previous implementation evidence
 
-`AttachmentSystem::snapshot_input` records `InputComponent.enabled` and
-`AttachmentSystem::suspend_input` sets the field to `false`.  On dismount,
-`restore_input` restores the captured value.  `InputSystem` gates all built-in
+`AttachmentSystem::snapshot_input` recorded `InputComponent.enabled` and
+`AttachmentSystem::suspend_input` set the field to `false`.  On dismount,
+`restore_input` restored the captured value.  `InputSystem` gated all built-in
 desktop behavior on that single field, including:
 
 - WASD/R/F translation;
@@ -33,7 +33,7 @@ desktop behavior on that single field, including:
 - arrow-key yaw and pitch;
 - Q/E rotation on the configured roll axis.
 
-The XR path already has the required conceptual split.  Mounting sets
+The XR path already had the required conceptual split.  Mounting sets
 `InputXRGamepadComponent.locomotion = false` while leaving the component and
 raw XR input observation enabled.  Desktop input should have equivalent
 capability-level ownership instead of disabling the whole pose driver.
@@ -72,11 +72,26 @@ Existing `enable()` / `disable()` remains the master pose-driver operation; it
 must not be used as shorthand for a translation-only ownership transfer.
 
 `InputTransformMode.rotation_enabled` and `rotation_disabled()` already model
-part of the rotation gate.  The implementation must not leave two independent
-sources of truth.  Either move rotation capability ownership to `InputComponent`
-and retain the mode builder as a compatibility alias, or make the new live
-`Input` rotation API authoritatively update the existing mode-owned value.
-Serialization and MMS round-tripping must have one canonical representation.
+part of the rotation gate.  For this bounded compatibility slice they remain an
+additional authored restriction: effective rotation requires both the new
+`Input.rotation_enabled` gate and the mode gate.  Consolidating that older mode
+setting into one canonical representation is deferred to the subsequent input
+and attachment rewrite.
+
+## Implemented interim behavior
+
+- `InputComponent` now has master, translation, and rotation gates, all defaulting
+  to `true` and preserved by MMS serialization.
+- `InputSystem` evaluates translation and rotation independently.
+- Live MMS exposes `set_translation_enabled(bool)` and
+  `set_rotation_enabled(bool)`.
+- Desktop mount suspension snapshots and disables only
+  `Input.translation_enabled`, then restores that captured value on unwind.
+- `InputXRGamepad` retains its previous locomotion-only suspend/restore behavior.
+
+This slice intentionally does not change mount-point yaw alignment or redesign
+attachment authority. It exists so mounted desktop look can be exercised while
+those later changes are investigated.
 
 ## Mount handoff semantics
 
@@ -111,9 +126,10 @@ or equivalent ownership token rather than stacked booleans.
   activation state as defined by desktop input.
 - Translation handoff must not discard or fork the FPS yaw/pitch cache.  Mouse
   and arrow look must remain continuous across mount and dismount.
-- Define whether restoring translation while a movement key is physically held
-  requires a fresh key-down.  The choice must be deterministic and covered by
-  tests so a dismount cannot accidentally inherit a stale vehicle-control hold.
+- Restoring translation currently resumes from the ordinary physical key-down
+  state. Requiring a fresh movement-key press remains follow-up authority/input
+  routing work and should be made explicit before vehicle keyboard controls are
+  finalized.
 - UI keyboard capture remains authoritative for arrow look while mounted, just
   as it is while walking.
 
@@ -121,17 +137,17 @@ This capability split does not by itself solve mount-point yaw alignment.  A
 mount transition may still need to synchronize the retained FPS orientation
 with an intentional authored yaw snap; that is tracked separately.
 
-## Implementation outline
+## Implementation checklist
 
-1. Add canonical translation/rotation capability state to desktop `Input` and
+1. [x] Add translation/rotation capability state to desktop `Input` and
    expose builder, serialization, registry, and live component methods.
-2. Split `InputSystem`'s master early gate into independent translation and
+2. [x] Split `InputSystem`'s master early gate into independent translation and
    rotation gates while continuing to resolve one direct controlled Transform.
-3. Change `AttachmentSystem::SuspendedInput::Desktop` to snapshot and suspend
+3. [x] Change `AttachmentSystem::SuspendedInput::Desktop` to snapshot and suspend
    translation only.  Preserve exact restore behavior on every exit path.
-4. Keep the component registered and its FPS/look state live throughout the
+4. [x] Keep the component registered and its FPS/look state live throughout the
    mounted interval.
-5. Update API documentation and tests that currently describe desktop
+5. [x] Update API documentation and tests that currently describe desktop
    `disable()` as relinquishing automatic locomotion authority; it disables the
    entire desktop pose driver, while translation-specific relinquishment uses
    the new capability API.
@@ -148,8 +164,9 @@ with an intentional authored yaw snap; that is tracked separately.
 - A deliberately disabled rotation capability remains disabled while mounted,
   while a deliberately disabled translation capability is restored as disabled
   after dismount.
-- Dismount restores the exact pre-mount translation authority without a stale
-  held-key surprise.
+- Dismount restores the exact pre-mount translation authority. Fresh-press
+  behavior for a movement key held across dismount remains deferred as noted
+  above.
 - Mouse and arrow look share the existing FPS state before, during, and after
   the handoff, including pitch clamp and yaw wrapping.
 - Multiple Inputs retain their current per-component target ownership; mounting

@@ -643,12 +643,22 @@ pub fn build_mittens_runtime() -> Result<MittensRuntime, mms::RuntimeSpecError> 
                 "Input" => {
                     constructor_and_builder(component, "speed", floats(1));
                     component.builder_call("enabled", booleans(1));
+                    component.builder_call("translation_enabled", booleans(1));
+                    component.builder_call("rotation_enabled", booleans(1));
                     for method_name in ["enable", "disable"] {
                         host_method(
                             component,
                             canonical,
                             method_name,
                             method(vec![], mms::ValueType::Null),
+                        );
+                    }
+                    for method_name in ["set_translation_enabled", "set_rotation_enabled"] {
+                        host_method(
+                            component,
+                            canonical,
+                            method_name,
+                            method(vec![mms::ValueType::Bool], mms::ValueType::Null),
                         );
                     }
                 }

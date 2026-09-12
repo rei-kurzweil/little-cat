@@ -2,6 +2,13 @@
 
 Status: planned, 2026-09-12.
 
+Interim progress on 2026-09-12: desktop `Input` now exposes independent master,
+translation, and rotation gates, and the existing attachment transaction
+suspends/restores only desktop translation. XR gamepad suspension remains
+locomotion-only. Mount-frame alignment and the broader authority rewrite remain
+open; the compatibility `InputTransformMode.rotation_disabled()` gate has not
+yet been migrated.
+
 ## Goal
 
 Deliver one coherent desktop Rider-to-Mountable path in
@@ -146,13 +153,13 @@ set_rotation_enabled(bool)
 and corresponding reads/builders.  Existing `enable()` / `disable()` remains
 the master operation and must not be used for translation-only handoff.
 
-`InputTransformMode` should retain only transform interpretation choices such
-as forward axis, roll axis, translation basis, and FPS reconstruction.
-`rotation_enabled` must not remain as a second independent source of truth
-there.  Migrate `InputTransformMode.rotation_disabled()` usages to the
-canonical `Input` rotation gate during this breaking-change slice, or provide a
-strict one-way compatibility migration that serializes back to only the new
-canonical representation.
+`InputTransformMode` should eventually retain only transform interpretation
+choices such as forward axis, roll axis, translation basis, and FPS
+reconstruction. For the implemented interim slice,
+`InputTransformMode.rotation_disabled()` remains an additional compatibility
+restriction and effective rotation requires both gates. Migrating existing
+mode usages to the canonical `Input` rotation capability is deferred until the
+broader input/attachment rewrite.
 
 ## Mount input handoff
 
@@ -169,10 +176,10 @@ This is an interim ownership location.  The separate movement-authority task
 will later move the lease out of `AttachmentSystem`; the capability contract
 introduced here remains valid when that migration occurs.
 
-Restoring translation while a movement key is still physically held must have
-a deterministic policy.  For this slice, require a fresh movement-key press
-after restoration so a key held for vehicle control cannot immediately move
-the dismounted Rider.
+Restoring translation currently resumes from the ordinary physical key-down
+state. A fresh-press policy, so a key held for vehicle control cannot
+immediately move the dismounted Rider, is deferred to the broader input-routing
+work.
 
 ## FPS/look continuity
 
@@ -198,8 +205,8 @@ not reach into `InputSystem`'s private FPS map.
    serialization, MMS registry, component documentation, and live API.
 2. Make `InputSystem` evaluate translation and rotation independently while
    continuing to mutate only its existing direct controlled Transform.
-3. Migrate the existing mode-owned rotation-disable configuration without
-   retaining two writable authorities.
+3. Later, migrate the existing mode-owned rotation-disable compatibility gate
+   into the canonical Input capability during the broader rewrite.
 4. Change desktop mount suspension to snapshot and disable translation only;
    preserve the existing XR locomotion-only handoff.
 5. Update horizontal alignment to account for the Rider-side mount point's
@@ -227,8 +234,8 @@ not reach into `InputSystem`'s private FPS map.
   not implicitly become vehicle steering.
 - Moving and rotating the car carries the mounted Rider through the current
   retained follow relationship while local look remains usable.
-- Dismount restores the exact pre-mount translation capability and requires a
-  fresh movement-key press after a held vehicle-control key.
+- Dismount restores the exact pre-mount translation capability. Fresh-press
+  behavior for a held vehicle-control key remains deferred.
 - Master-disabled and rotation-disabled Inputs remain authoritative throughout
   mount and dismount.
 - Text fields and focused UI controls continue to capture arrow input.

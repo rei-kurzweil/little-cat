@@ -399,22 +399,26 @@ impl InputSystem {
         dt_sec: f32,
         arrows_captured_by_ui: bool,
     ) {
-        let any_move = input.key_down(&Key::Character("w".into()))
+        let any_translation = input.key_down(&Key::Character("w".into()))
             || input.key_down(&Key::Character("a".into()))
             || input.key_down(&Key::Character("s".into()))
             || input.key_down(&Key::Character("d".into()))
             || input.key_down(&Key::Character("r".into()))
-            || input.key_down(&Key::Character("f".into()))
-            || input.key_down(&Key::Character("q".into()))
+            || input.key_down(&Key::Character("f".into()));
+        let any_rotation_key = input.key_down(&Key::Character("q".into()))
             || input.key_down(&Key::Character("e".into()));
 
         let any_drag = input.mouse_dragging_button(MouseButton::Right);
 
         let inputs = self.inputs.clone();
         for input_cid in inputs {
-            let speed_units_per_sec =
+            let (speed_units_per_sec, translation_enabled, input_rotation_enabled) =
                 match world.get_component_by_id_as::<InputComponent>(input_cid) {
-                    Some(input_comp) if input_comp.enabled => input_comp.speed,
+                    Some(input_comp) if input_comp.enabled => (
+                        input_comp.speed,
+                        input_comp.translation_enabled,
+                        input_comp.rotation_enabled,
+                    ),
                     Some(_) => {
                         self.held_arrows.remove(&input_cid);
                         continue;
@@ -460,6 +464,7 @@ impl InputSystem {
                 })
                 .unwrap_or((None, ForwardAxis::Y, RollAxis::Z, true, false, None));
 
+            let rotation_enabled = input_rotation_enabled && rotation_enabled;
             let (arrow_yaw_delta, arrow_pitch_delta) = if rotation_enabled {
                 self.arrow_rotation_delta(input_cid, input, arrows_captured_by_ui, dt_sec)
             } else {
@@ -467,7 +472,9 @@ impl InputSystem {
                 (0.0, 0.0)
             };
             let any_arrow = arrow_yaw_delta != 0.0 || arrow_pitch_delta != 0.0;
-            if !any_move && !any_drag && !any_arrow {
+            let translation_active = translation_enabled && any_translation;
+            let rotation_active = rotation_enabled && (any_rotation_key || any_drag || any_arrow);
+            if !translation_active && !rotation_active {
                 continue;
             }
 
@@ -516,16 +523,18 @@ impl InputSystem {
                 };
                 let translation_basis_rotation =
                     external_basis_rotation.unwrap_or(transform_comp_mut.transform.rotation);
-                self.compute_translation(
-                    forward_axis,
-                    fps_rotation,
-                    fps_yaw,
-                    speed_units_per_sec,
-                    input,
-                    dt_sec,
-                    translation_basis_rotation,
-                    &mut transform_comp_mut.transform.translation,
-                );
+                if translation_enabled {
+                    self.compute_translation(
+                        forward_axis,
+                        fps_rotation,
+                        fps_yaw,
+                        speed_units_per_sec,
+                        input,
+                        dt_sec,
+                        translation_basis_rotation,
+                        &mut transform_comp_mut.transform.translation,
+                    );
+                }
 
                 transform_comp_mut.transform.recompute_model();
                 emit.push_intent_now(
@@ -697,6 +706,50 @@ mod tests {
         input.keys_down.remove(&Key::Character("w".into()));
         system.process_input_with_capture(&mut world, &input, &mut CommandQueue::new(), 1.0, false);
         assert_eq!(rotation(&world, transform), [0.0, 0.0, 0.0, 1.0]);
+    }
+
+    #[test]
+    fn translation_disabled_keeps_arrow_rotation_but_ignores_wasd() {
+        let (mut world, mut system, input_id, transform) = rig(Some(
+            InputTransformModeComponent::forward_z().with_fps_rotation(),
+        ));
+        world
+            .get_component_by_id_as_mut::<InputComponent>(input_id)
+            .unwrap()
+            .translation_enabled = false;
+
+        let mut input = InputState::default();
+        press(&mut input, NamedKey::ArrowLeft);
+        input.keys_down.insert(Key::Character("w".into()));
+        system.process_input_with_capture(&mut world, &input, &mut CommandQueue::new(), 1.0, false);
+
+        let transform_component = world
+            .get_component_by_id_as::<TransformComponent>(transform)
+            .unwrap();
+        assert_eq!(transform_component.transform.translation, [0.0, 0.0, 0.0]);
+        assert_ne!(transform_component.transform.rotation, [0.0, 0.0, 0.0, 1.0]);
+    }
+
+    #[test]
+    fn input_rotation_gate_keeps_translation_but_ignores_arrows() {
+        let (mut world, mut system, input_id, transform) = rig(Some(
+            InputTransformModeComponent::forward_z().with_fps_rotation(),
+        ));
+        world
+            .get_component_by_id_as_mut::<InputComponent>(input_id)
+            .unwrap()
+            .rotation_enabled = false;
+
+        let mut input = InputState::default();
+        press(&mut input, NamedKey::ArrowLeft);
+        input.keys_down.insert(Key::Character("w".into()));
+        system.process_input_with_capture(&mut world, &input, &mut CommandQueue::new(), 1.0, false);
+
+        let transform_component = world
+            .get_component_by_id_as::<TransformComponent>(transform)
+            .unwrap();
+        assert_eq!(transform_component.transform.translation, [0.0, 0.0, -1.0]);
+        assert_eq!(transform_component.transform.rotation, [0.0, 0.0, 0.0, 1.0]);
     }
 
     #[test]

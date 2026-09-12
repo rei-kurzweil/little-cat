@@ -15,7 +15,7 @@ use std::collections::{HashMap, HashSet};
 enum SuspendedInput {
     Desktop {
         component: ComponentId,
-        enabled: bool,
+        translation_enabled: bool,
     },
     XrGamepad {
         component: ComponentId,
@@ -535,7 +535,7 @@ fn snapshot_input(world: &World, component: ComponentId) -> Option<SuspendedInpu
     if let Some(input) = world.get_component_by_id_as::<InputComponent>(component) {
         return Some(SuspendedInput::Desktop {
             component,
-            enabled: input.enabled,
+            translation_enabled: input.translation_enabled,
         });
     }
     world
@@ -550,7 +550,7 @@ fn suspend_input(world: &mut World, input: SuspendedInput) {
     match input {
         SuspendedInput::Desktop { component, .. } => {
             if let Some(input) = world.get_component_by_id_as_mut::<InputComponent>(component) {
-                input.enabled = false;
+                input.translation_enabled = false;
             }
         }
         SuspendedInput::XrGamepad { component, .. } => {
@@ -565,9 +565,12 @@ fn suspend_input(world: &mut World, input: SuspendedInput) {
 
 fn restore_input(world: &mut World, input: SuspendedInput) {
     match input {
-        SuspendedInput::Desktop { component, enabled } => {
+        SuspendedInput::Desktop {
+            component,
+            translation_enabled,
+        } => {
             if let Some(input) = world.get_component_by_id_as_mut::<InputComponent>(component) {
-                input.enabled = enabled;
+                input.translation_enabled = translation_enabled;
             }
         }
         SuspendedInput::XrGamepad {
@@ -866,6 +869,52 @@ mod tests {
                 .locomotion
         );
         assert_eq!(fixture.world.parent_of(fixture.root), None);
+    }
+
+    #[test]
+    fn desktop_mount_suspends_only_translation_and_restores_it() {
+        let mut fixture = fixture([0.0, 0.0, 0.0]);
+        let desktop_input = fixture.world.add_component(InputComponent::new());
+        fixture
+            .world
+            .add_child(fixture.root, desktop_input)
+            .unwrap();
+        let desktop_input_ref = guid_ref(&fixture.world, desktop_input);
+        fixture
+            .world
+            .get_component_by_id_as_mut::<RiderComponent>(fixture.rider)
+            .unwrap()
+            .input = Some(desktop_input_ref);
+
+        let mut system = AttachmentSystem::default();
+        let mut emit = CommandQueue::new();
+        assert!(system.try_mount_from_hit(
+            &mut fixture.world,
+            fixture.pointer,
+            fixture.car,
+            &mut emit,
+        ));
+
+        let mounted_input = fixture
+            .world
+            .get_component_by_id_as::<InputComponent>(desktop_input)
+            .unwrap();
+        assert!(
+            mounted_input.enabled,
+            "master pose-driver gate remains enabled"
+        );
+        assert!(!mounted_input.translation_enabled);
+        assert!(mounted_input.rotation_enabled);
+
+        system.begin_frame();
+        assert!(system.try_dismount_for_pointer(&mut fixture.world, fixture.pointer, &mut emit,));
+        let restored_input = fixture
+            .world
+            .get_component_by_id_as::<InputComponent>(desktop_input)
+            .unwrap();
+        assert!(restored_input.enabled);
+        assert!(restored_input.translation_enabled);
+        assert!(restored_input.rotation_enabled);
     }
 
     #[test]

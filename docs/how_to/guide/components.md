@@ -435,10 +435,15 @@ GestureCoordType {}
 
 ### `InputComponent`
 <!-- catalog:component source="InputComponent" mms="direct" names="Input" -->
-Carries input state used when that engine feature is present in a component tree. Use it when a tree needs this state or behavior. The Input engine subsystem; its component lifecycle is processed at signal drain points.
+Drives a direct child Transform from desktop input. `enabled` is the master pose-driver gate;
+`translation_enabled` independently gates WASD/R/F locomotion, and `rotation_enabled`
+independently gates mouse, arrow, and Q/E rotation. Live scripts can call
+`set_translation_enabled(bool)` and `set_rotation_enabled(bool)` without disabling the other
+channel. The compatibility `InputTransformMode.rotation_disabled()` setting remains an additional
+rotation gate.
 **Directly constructible** as `Input`. Sources: [Rust implementation](../../../src/engine/ecs/component/input.rs) and [MMS registry](../../../src/scripting/component_registry.rs).
 ```mms parse-only
-Input {}
+Input.speed(2.0).translation_enabled(true).rotation_enabled(true) {}
 ```
 
 ### `InputTransformModeComponent`

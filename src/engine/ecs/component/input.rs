@@ -1,12 +1,16 @@
 use crate::engine::ecs::ComponentId;
 use crate::engine::ecs::component::Component;
 
-/// Input component that responds to keyboard input (WASD).
+/// Desktop pose driver for keyboard and mouse translation/rotation input.
 #[derive(Debug, Clone)]
 pub struct InputComponent {
     pub speed: f32,
-    /// Whether the built-in desktop locomotion mapping may drive its target.
+    /// Master lifecycle gate for every built-in desktop pose-driver channel.
     pub enabled: bool,
+    /// Whether WASD/R/F may translate the controlled transform.
+    pub translation_enabled: bool,
+    /// Whether mouse, arrow, and Q/E look may rotate the controlled transform.
+    pub rotation_enabled: bool,
 }
 
 impl InputComponent {
@@ -14,6 +18,8 @@ impl InputComponent {
         Self {
             speed: 0.02,
             enabled: true,
+            translation_enabled: true,
+            rotation_enabled: true,
         }
     }
 
@@ -24,6 +30,16 @@ impl InputComponent {
 
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
+        self
+    }
+
+    pub fn with_translation_enabled(mut self, enabled: bool) -> Self {
+        self.translation_enabled = enabled;
+        self
+    }
+
+    pub fn with_rotation_enabled(mut self, enabled: bool) -> Self {
+        self.rotation_enabled = enabled;
         self
     }
 }
@@ -64,6 +80,12 @@ impl Component for InputComponent {
         let mut ce = ce_call("Input", "speed", vec![num(self.speed as f64)]);
         if !self.enabled {
             ce = ce.with_call("enabled", vec![b(false)]);
+        }
+        if !self.translation_enabled {
+            ce = ce.with_call("translation_enabled", vec![b(false)]);
+        }
+        if !self.rotation_enabled {
+            ce = ce.with_call("rotation_enabled", vec![b(false)]);
         }
         ce
     }

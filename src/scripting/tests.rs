@@ -7161,10 +7161,18 @@ fn roundtrip_keyframe() {
 #[test]
 fn roundtrip_input_speed_and_mapping_state() {
     use crate::engine::ecs::component::InputComponent;
-    let (world, id) = roundtrip_component(InputComponent::new().with_speed(0.25).enabled(false));
+    let (world, id) = roundtrip_component(
+        InputComponent::new()
+            .with_speed(0.25)
+            .enabled(false)
+            .with_translation_enabled(false)
+            .with_rotation_enabled(false),
+    );
     let got = world.get_component_by_id_as::<InputComponent>(id).unwrap();
     assert!((got.speed - 0.25).abs() < 1e-6);
     assert!(!got.enabled);
+    assert!(!got.translation_enabled);
+    assert!(!got.rotation_enabled);
 }
 
 #[test]

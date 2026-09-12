@@ -185,6 +185,29 @@ pub(crate) fn invoke_component_method(
             Ok(Value::Null)
         }
         (
+            "I" | "Input" | "input",
+            method @ ("set_translation_enabled" | "set_rotation_enabled"),
+        ) => {
+            if args.len() != 1 {
+                return Err(format!(
+                    "{method}(): expected one boolean argument, got {args:?}"
+                ));
+            }
+            let enabled = match &args[0] {
+                Value::Bool(enabled) => *enabled,
+                value => return Err(format!("{method}(): expected boolean, got {value:?}")),
+            };
+            let input = world
+                .get_component_by_id_as_mut::<InputComponent>(id)
+                .ok_or_else(|| format!("{method}(): not an InputComponent"))?;
+            if method == "set_translation_enabled" {
+                input.translation_enabled = enabled;
+            } else {
+                input.rotation_enabled = enabled;
+            }
+            Ok(Value::Null)
+        }
+        (
             "InputXRGamepad" | "InputXrGamepad" | "InputVRGamepad" | "InputVrGamepad"
             | "input_vr_gamepad",
             "enable" | "disable",
@@ -980,7 +1003,7 @@ mod tests {
     }
 
     #[test]
-    fn input_live_enable_disable_transfers_only_automatic_locomotion_authority() {
+    fn input_live_master_gate_and_xr_locomotion_gate() {
         let mut world = World::default();
         let desktop = world.add_component(InputComponent::new());
         let xr_gamepad = world.add_component(InputXRGamepadComponent::new());
@@ -1031,6 +1054,44 @@ mod tests {
                 .unwrap()
                 .locomotion
         );
+    }
+
+    #[test]
+    fn input_live_translation_and_rotation_gates_are_independent() {
+        let mut world = World::default();
+        let input = world.add_component(InputComponent::new());
+
+        invoke_component_method(
+            &mut world,
+            input,
+            "Input",
+            "set_translation_enabled",
+            &[Value::Bool(false)],
+            |_| {},
+        )
+        .unwrap();
+        let state = world
+            .get_component_by_id_as::<InputComponent>(input)
+            .unwrap();
+        assert!(state.enabled);
+        assert!(!state.translation_enabled);
+        assert!(state.rotation_enabled);
+
+        invoke_component_method(
+            &mut world,
+            input,
+            "Input",
+            "set_rotation_enabled",
+            &[Value::Bool(false)],
+            |_| {},
+        )
+        .unwrap();
+        let state = world
+            .get_component_by_id_as::<InputComponent>(input)
+            .unwrap();
+        assert!(state.enabled);
+        assert!(!state.translation_enabled);
+        assert!(!state.rotation_enabled);
     }
 
     #[test]
