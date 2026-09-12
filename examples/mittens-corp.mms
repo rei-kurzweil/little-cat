@@ -193,7 +193,11 @@ ED.active() {
     // Measure once after import; animate within a positioned muzzle frame so
     // keyframe closures do not need to capture late-loaded placement values.
     let laser_placement = { ready = false }
-    let laser_half_length = 40.0
+    // `R.square()` is a unit XY quad. After the beam root's X rotation, the
+    // child Y scale is therefore the complete visible beam length, not its
+    // half-length. Keep the center one half-length down local -Z so its near
+    // edge stays exactly at the muzzle.
+    let laser_length = 40.0
     let muzzle_clearance = 0.10
     let muzzle_height_fraction = 0.56
 
@@ -209,6 +213,10 @@ ED.active() {
             C.rgba(1.0, 1.0, 1.0, 1.0)
             Texture.with_uri("assets/images/flash_red_0.png")
             TextureFiltering.linear()
+            // Texture alpha needs the blended pass. The slight reduction
+            // keeps this out of the opaque pass while preserving full visual
+            // intensity from the texture and emissive material.
+            Opacity.opacity(0.99)
             muzzle_flash_0_emissive
         }
     }
@@ -218,10 +226,13 @@ ED.active() {
             C.rgba(1.0, 1.0, 1.0, 1.0)
             Texture.with_uri("assets/images/flash_red_1.png")
             TextureFiltering.linear()
+            Opacity.opacity(0.99)
             muzzle_flash_1_emissive
         }
     }
-    let muzzle_flash = T.position(0.0, 0.0, 0.0) {
+    // Squares have a local +Z normal. The vehicle fires along local -Z, so
+    // turn the shared flash frame around to present its textured face outward.
+    let muzzle_flash = T.position(0.0, 0.0, 0.0).rotation(0.0, 3.14159, 0.0) {
         name = "car_laser_muzzle_flash"
         muzzle_flash_0
         muzzle_flash_1
@@ -232,21 +243,21 @@ ED.active() {
     let laser_beam_glow = T.position(0.0, 0.0, 0.0)
         .rotation(-1.5708, 0.0, 0.0).scale(0.0, 0.0, 0.0) {
         name = "laser_beam_glow"
-        T.scale(0.16, laser_half_length, 1.0) {
+        T.scale(0.16, laser_length, 1.0) {
             R.square() {
                 C.rgba(1.0, 0.06, 0.03, 1.0)
                 Opacity.opacity(0.18)
                 laser_outer_emissive
             }
         }
-        T.position(0.0, 0.0, 0.002).scale(0.08, laser_half_length, 1.0) {
+        T.position(0.0, 0.0, 0.002).scale(0.08, laser_length, 1.0) {
             R.square() {
                 C.rgba(1.0, 0.22, 0.08, 1.0)
                 Opacity.opacity(0.38)
                 laser_middle_emissive
             }
         }
-        T.position(0.0, 0.0, 0.004).scale(0.028, laser_half_length, 1.0) {
+        T.position(0.0, 0.0, 0.004).scale(0.028, laser_length, 1.0) {
             R.square() {
                 C.rgba(1.0, 0.88, 0.58, 1.0)
                 Opacity.opacity(0.88)
@@ -258,7 +269,7 @@ ED.active() {
     let laser_shot = Animation.paused().length(0.22) {
         Keyframe.at(0.0) {
             muzzle_flash.update_transform(
-                [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]
+                [0.0, 0.0, 0.0], [0.0, 3.14159, 0.0], [1.0, 1.0, 1.0]
             )
             muzzle_flash_0.update_transform(
                 [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.90, 0.90, 0.90]
@@ -267,7 +278,7 @@ ED.active() {
                 [0.0, 0.0, 0.002], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]
             )
             laser_beam_glow.update_transform(
-                [0.0, 0.0, -laser_half_length], [-1.5708, 0.0, 0.0], [1.0, 1.0, 1.0]
+                [0.0, 0.0, -laser_length * 0.5], [-1.5708, 0.0, 0.0], [1.0, 1.0, 1.0]
             )
             muzzle_flash_0_emissive.set_intensity(8.0)
             muzzle_flash_1_emissive.off()
@@ -293,7 +304,7 @@ ED.active() {
                 [0.0, 0.0, 0.002], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]
             )
             laser_beam_glow.update_transform(
-                [0.0, 0.0, -laser_half_length], [-1.5708, 0.0, 0.0], [0.0, 0.0, 0.0]
+                [0.0, 0.0, -laser_length * 0.5], [-1.5708, 0.0, 0.0], [0.0, 0.0, 0.0]
             )
             muzzle_flash_0_emissive.off()
             muzzle_flash_1_emissive.off()

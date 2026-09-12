@@ -9313,7 +9313,10 @@ fn mittens_corp_evaluates_with_bisket_player_and_car_mount_fixture() {
             .into_iter()
             .filter_map(|signal| signal.intent.map(|intent| intent.value)),
     );
-    for (name, offset) in [("car_laser_muzzle_flash", 0.0), ("laser_beam_glow", -40.0)] {
+    // A square is centered in its local XY plane. After the beam root rotates
+    // its Y axis onto local -Z, its 40-unit scale needs a -20-unit center
+    // offset for the near edge to coincide with the shared muzzle origin.
+    for (name, offset) in [("car_laser_muzzle_flash", 0.0), ("laser_beam_glow", -20.0)] {
         let effect = world
             .all_components()
             .find(|&id| world.component_label(id) == Some(name))
@@ -9335,6 +9338,26 @@ fn mittens_corp_evaluates_with_bisket_player_and_car_mount_fixture() {
         );
         assert_eq!(translation[1], 0.0);
     }
+
+    let flash = world
+        .all_components()
+        .find(|&id| world.component_label(id) == Some("car_laser_muzzle_flash"))
+        .unwrap();
+    let flash_rotation = shot_intents
+        .iter()
+        .find_map(|intent| match intent {
+            IntentValue::UpdateTransform {
+                component_id,
+                rotation_quat_xyzw,
+                ..
+            } if *component_id == flash => Some(*rotation_quat_xyzw),
+            _ => None,
+        })
+        .expect("shot should preserve the flash frame's firing-axis orientation");
+    assert!(flash_rotation[0].abs() < 1.0e-4);
+    assert!((flash_rotation[1] - 1.0).abs() < 1.0e-4);
+    assert!(flash_rotation[2].abs() < 1.0e-4);
+    assert!(flash_rotation[3].abs() < 1.0e-4);
 
     rx.dispatch_event_handlers(
         &mut world,

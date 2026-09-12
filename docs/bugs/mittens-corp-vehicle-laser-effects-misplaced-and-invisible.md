@@ -1,6 +1,37 @@
 # `mittens-corp` vehicle laser flash is invisible and the beam is misplaced
 
-Status: open / needs runtime visual diagnosis
+Status: partially fixed in source / needs desktop and XR visual acceptance
+
+## Confirmed findings (2026-09-11)
+
+- `R.square()` is a unit quad in the local XY plane, with a local `+Z`
+  normal. The beam's `-90°` X rotation maps its scaled local `+Y` direction
+  onto local `-Z`.
+- Consequently a Y scale of `40.0` produces a **40-unit total beam length**,
+  centered on its parent. The former `-40.0` parent translation put its
+  endpoints at local Z `-20` and `-60`, leaving a 20-unit muzzle gap. The
+  parent now sits at `-20.0`, producing endpoints at `0` and `-40` relative
+  to the shared muzzle frame.
+- The flash parent is now rotated 180° about Y so the square's `+Z` normal
+  faces the firing direction (`-Z`). The active keyframe retains that
+  rotation. Renderer defaults currently do not explicitly enable back-face
+  culling, but matching face/normal orientation remains correct for lighting
+  and makes the effect robust if culling is enabled later.
+- The flash PNGs are RGBA. They now use `Opacity.opacity(0.99)` to enter the
+  alpha-blended pass; without an opacity/color-alpha hint, the renderer routes
+  them through its opaque pass because it does not inspect texture alpha when
+  building draw lists.
+- The imported car's measured aggregate `local_bounds()` are
+  `min = [-4.3999033, 0.04635185, -1.7789365]` and
+  `max = [4.3999033, 5.566735, 2.745441]`. The present AABB-derived placement
+  therefore evaluates to approximately `[0.0, 3.137, -1.879]`. This is
+  telemetry for all renderable car geometry, not evidence of a real barrel or
+  muzzle point.
+
+The current script retains the `min.z` placement only as a calibrated interim
+assumption: the existing cockpit, entry zone, and initial driving convention
+all use local `-Z` as forward. It must be replaced with an authored muzzle
+marker or verified car-local offset once the model is inspected visually.
 
 ## Observed behavior
 
@@ -25,10 +56,11 @@ Both flashes are textured `R.square()` children whose transforms start at zero
 scale. The shot animation shows `_0` at `0.00s`, replaces it with `_1` at
 `0.05s`, then hides `_1` and the beam at `0.10s`.
 
-The beam is made from unit squares scaled by `laser_half_length`, rotated about
-X, while the beam root is translated by `-laser_half_length` on local Z. That
-placement assumes the rotated square spans two half-lengths from the muzzle and
-that the car's bounds-derived local `-Z` is its visible forward direction.
+The beam is made from unit squares whose Y scale is `laser_length`, rotated
+about X, while the beam root is translated by `-laser_length * 0.5` on local Z.
+This centers the 40-unit quad-derived beam over the muzzle-to-tip segment. The
+car's bounds-derived local `-Z` is still an interim forward-direction
+assumption, not a semantic muzzle definition.
 
 The scripting regression test only checks emitted transform intents and the
 bounds-derived arithmetic. It does not render the textures, validate alpha or
@@ -38,16 +70,11 @@ invisible or visually detached.
 
 ## Likely failure areas
 
-- The flash quads may be edge-on, back-face culled, behind the car, too small,
-  or missing the transparent-material/cutout configuration required by the PNG
-  alpha channel.
-- `R.square()` lies in its primitive-local plane, but the flash transforms have
-  no rotation. Confirm that this plane faces outward along the car's firing axis;
-  if its normal is not aligned with local `-Z`, rotate both flash quads at their
-  shared muzzle parent. Test both faces because back-face culling can make the
-  correct plane invisible from the firing-side viewpoint.
-- Zero-scale-at-rest transforms may interact poorly with transition capture or
-  renderable bounds/culling when first made visible.
+- The flash quads may still be behind the car, too small, or affected by
+  zero-scale-at-rest bounds/culling when first made visible.
+- The shared flash parent now faces local `-Z`, and the images enter the
+  alpha-blended pass. Confirm their appearance from the firing-side camera and
+  from oblique angles rather than assuming a successful script test proves it.
 - The imported car's visual front may not be `model_box.min.z`; an axis-aligned
   model bound is not a semantic muzzle marker.
 - `Transform.local_bounds()` does union descendant renderable bounds in the
@@ -81,8 +108,9 @@ invisible or visually detached.
 3. Replace zero-scale hiding temporarily with opacity or a small offscreen
    placement to determine whether first-frame bounds/culling is involved.
 4. Measure the beam's final world-space near and far endpoints after all parent
-   transforms. Assert that the near endpoint equals the muzzle position and the
-   far endpoint is five times the original distance away.
+   transforms. The local geometry regression now establishes `[0, -40]` on
+   local Z; extend it or add a render test to establish the equivalent
+   world-space result under translated and rotated cars.
 5. Prefer an authored muzzle marker in the car asset or a calibrated
    car-local muzzle offset over an AABB extremum once the correct position and
    direction are known.
